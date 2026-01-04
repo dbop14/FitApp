@@ -41,6 +41,15 @@ self.addEventListener('fetch', (event) => {
     return; // Let the request go through normally without caching
   }
   
+  // Redirect /home.html to /login for PWA compatibility
+  // This prevents users from getting stuck on the static home.html page
+  if (url.pathname === '/home.html' && request.mode === 'navigate') {
+    event.respondWith(
+      Response.redirect(new URL('/login', url.origin), 301)
+    );
+    return;
+  }
+  
   // Only cache GET requests
   if (request.method !== 'GET') return;
   

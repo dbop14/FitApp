@@ -6,11 +6,13 @@
     <title>FitApp - Fitness Challenge Application</title>
     <meta name="description" content="FitApp is a fitness challenge application that helps users track their fitness progress, participate in fitness competitions with friends, and stay motivated through social fitness challenges. The application automatically syncs with Google Fit to track daily steps and weight measurements." />
     <!-- Redirect to login page for users (preserve content for SEO crawlers) -->
+    <!-- Meta refresh for Safari PWA compatibility -->
+    <meta http-equiv="refresh" content="0;url=/login" />
     <script>
         // Only redirect if not a crawler/bot
         const isBot = /bot|crawler|spider|crawling/i.test(navigator.userAgent);
         if (!isBot) {
-            // Immediate redirect to login page
+            // Immediate redirect to login page (works in all browsers including Safari PWA)
             window.location.replace('/login');
         }
     </script>
