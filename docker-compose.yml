@@ -67,15 +67,15 @@ services:
     environment:
       - NODE_ENV=development
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
-      - GOOGLE_CLIENT_ID=200010665728-4s6dbvd4aopi1lre28k6av1n9jc1lacc.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=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
-      - GOOGLE_REDIRECT_URI=https://fitapp.herringm.com/api/auth/google/callback
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
       - MATRIX_HOMESERVER_URL=http://synapse:8008
       - MATRIX_SERVER_NAME=fitapp.local
       - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
       - BOT_PASSWORD=${BOT_PASSWORD}
-      - VAPID_PUBLIC_KEY=BKBNE0hF7InDUAM9ej_hdFYkWLhrIELtLYyUYb2473mfZxbPtazZc6th1dWYxb3MR-Br-H-Ed30cc_lXAbdjk7U
-      - VAPID_PRIVATE_KEY=Ca1V7ZLGP8JzzR7wi-eYrQ75kvnGMn56PNeKoDrvgLg
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
     volumes:
       - ./fitapp-backend:/app
       - node_modules:/app/node_modules
@@ -94,6 +94,7 @@ services:
     environment:
       - VITE_API_URL=https://fitappbackend.herringm.com
       - VITE_MATRIX_URL=http://synapse:8008
+      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
     volumes:
       - ./fitapp-frontend:/app
       - node_modules_frontend:/app/node_modules

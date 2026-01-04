@@ -93,7 +93,7 @@ const GoogleLoginButton = ({ onComplete }) => {
 
     // Use OAuth2 popup for complete permissions (including Google Fit)
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: '200010665728-4s6dbvd4aopi1lre28k6av1n9jc1lacc.apps.googleusercontent.com',
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
       scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile openid email profile',
       include_granted_scopes: true,
       callback: async (response) => {
