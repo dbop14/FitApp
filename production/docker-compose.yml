@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  mongoosedb:
+    image: mongo:4.4
+    container_name: fitapp-prod-db
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    volumes:
+      - mongo_data_prod:/data/db
+    networks:
+      - fitapp_prod
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: fitapp-prod-synapse
+    ports:
+      - "8008:8008"
+    restart: unless-stopped
+    environment:
+      - SYNAPSE_SERVER_NAME=fitapp.local
+      - SYNAPSE_REPORT_STATS=no
+    volumes:
+      - synapse_data_prod:/data
+    command: ["run", "--config-path=/data/homeserver.yaml"]
+    networks:
+      - fitapp_prod
+
+  fitness-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: fitapp-prod-bot
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=mongodb://mongoosedb:27017/fitapp
+      - MATRIX_HOMESERVER_URL=http://synapse:8008
+      - MATRIX_SERVER_NAME=fitapp.local
+      - BOT_USERNAME=fitness_motivator
+      - BOT_PASSWORD=${BOT_PASSWORD}
+      - BACKEND_API_URL=http://backend:3000
+    depends_on:
+      - mongoosedb
+      - synapse
+      - backend
+    networks:
+      - fitapp_prod
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        - GIT_BRANCH=main
+    container_name: fitapp-prod-backend
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongoosedb:27017/fitapp
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - MATRIX_HOMESERVER_URL=http://synapse:8008
+      - MATRIX_SERVER_NAME=fitapp.local
+      - BOT_USERNAME=${BOT_USERNAME}
+      - BOT_PASSWORD=${BOT_PASSWORD}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+    depends_on:
+      - mongoosedb
+      - synapse
+    networks:
+      - fitapp_prod
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - GIT_BRANCH=main
+    container_name: fitapp-prod-frontend
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
+      - VITE_MATRIX_URL=http://synapse:8008
+    depends_on:
+      - backend
+    networks:
+      - fitapp_prod
+
+volumes:
+  mongo_data_prod:
+  synapse_data_prod:
+
+networks:
+  fitapp_prod:
+    name: fitapp_prod
