@@ -1,6 +1,40 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useContext, useEffect } from 'react'
+import { UserContext } from '../context/UserContext'
 
 const Home = () => {
+  const navigate = useNavigate()
+  const { user } = useContext(UserContext)
+  
+  // Check if we're in a PWA context (standalone mode)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                       window.navigator.standalone === true
+  
+  // Redirect to login if not logged in and in PWA context
+  useEffect(() => {
+    // Check localStorage for user (in case context hasn't loaded yet)
+    const storedUser = localStorage.getItem('fitapp_user')
+    const isLoggedIn = user || storedUser
+    
+    // If in PWA/standalone mode and not logged in, redirect to login
+    if (isStandalone && !isLoggedIn) {
+      console.log('🏠 Home: In PWA mode and not logged in, redirecting to login')
+      navigate('/login', { replace: true })
+    }
+  }, [user, isStandalone, navigate])
+  
+  // If user is logged in and in PWA, redirect to dashboard
+  useEffect(() => {
+    const storedUser = localStorage.getItem('fitapp_user')
+    const isLoggedIn = user || storedUser
+    
+    if (isStandalone && isLoggedIn) {
+      console.log('🏠 Home: In PWA mode and logged in, redirecting to dashboard')
+      navigate('/dashboard', { replace: true })
+    }
+  }, [user, isStandalone, navigate])
+  
   return (
     <div className="min-h-screen bg-white py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
