@@ -4,8 +4,9 @@ services:
   mongoosedb:
     image: mongo:4.4
     container_name: fitapp-prod-db
-    ports:
-      - "27017:27017"
+    # Port not exposed to host - containers communicate via Docker network
+    # ports:
+    #   - "27017:27017"
     restart: unless-stopped
     volumes:
       - mongo_data_prod:/data/db
@@ -81,6 +82,9 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         - GIT_BRANCH=main
+        - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_MATRIX_URL=http://synapse:8008
     container_name: fitapp-prod-frontend
     ports:
       - "5173:5173"

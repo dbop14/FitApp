@@ -11,7 +11,6 @@ import { useChatNotifications } from '../context/ChatNotificationContext';
  * - User is logged in
  * - Notifications are not granted
  * - User hasn't dismissed the dialog before
- * - User just logged in (within last 30 seconds)
  * - NOT on public pages (/, /home, /privacy-policy, /login)
  */
 
@@ -33,10 +32,6 @@ const NotificationPermissionDialog = () => {
     // Check if user has dismissed this dialog before
     const dismissed = localStorage.getItem('fitapp_notification_dialog_dismissed');
     
-    // Check if user just logged in (check last login time)
-    const lastLoginTime = localStorage.getItem('fitapp_last_login');
-    const justLoggedIn = lastLoginTime && (Date.now() - parseInt(lastLoginTime)) < 30000; // Within last 30 seconds
-    
     // Check notification permission status
     if ('Notification' in window) {
       const permission = Notification.permission;
@@ -44,19 +39,9 @@ const NotificationPermissionDialog = () => {
       // Show dialog if:
       // 1. User is logged in
       // 2. Permission is default (not asked yet) or denied
-      // 3. User hasn't dismissed the dialog OR user just logged in (give them another chance)
-      // 4. User just logged in (within last 30 seconds)
+      // 3. User hasn't dismissed the dialog before
       if (user && (permission === 'default' || permission === 'denied')) {
-        if (justLoggedIn && (!dismissed || dismissed === 'true')) {
-          // User just logged in - show dialog even if they dismissed before
-          // Small delay to let the app settle after login
-          const timer = setTimeout(() => {
-            setShowDialog(true);
-            setIsChecking(false);
-          }, 2000);
-          
-          return () => clearTimeout(timer);
-        } else if (!dismissed) {
+        if (!dismissed) {
           // User hasn't dismissed before and notifications aren't enabled
           const timer = setTimeout(() => {
             setShowDialog(true);

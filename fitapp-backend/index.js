@@ -4,13 +4,19 @@ const PORT = 3000
 const cors = require('cors')
 const { google } = require('googleapis')
 
+// CORS allowed origins - includes both production and development domains
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://fitapp.herringm.com',
+  'https://fitappbackend.herringm.com',
+  'https://fitappdev.herringm.com',
+  'https://fitappbackenddev.herringm.com'
+];
+
 // Handle preflight OPTIONS requests for CORS
 app.options('*', cors({
-  origin: [
-    'http://localhost:5173',
-    'https://fitapp.herringm.com',
-    'https://fitappbackend.herringm.com'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -18,11 +24,7 @@ app.options('*', cors({
 
 // Configure CORS to allow your frontend domain
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://fitapp.herringm.com',
-    'https://fitappbackend.herringm.com'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

@@ -7,7 +7,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowedHosts: ['fitapp.herringm.com', 'localhost', '127.0.0.1', '0.0.0.0'],
+    allowedHosts: ['fitapp.herringm.com', 'fitappdev.herringm.com', 'localhost', '127.0.0.1', '0.0.0.0'],
     // HMR configuration - completely disable HMR to prevent WebSocket errors through Cloudflare tunnel
     // Cloudflare tunnel doesn't support WebSocket upgrades, so HMR won't work anyway
     // Set VITE_HMR_HOST environment variable if you need HMR for local development

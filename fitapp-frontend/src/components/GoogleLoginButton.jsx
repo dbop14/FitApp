@@ -84,19 +84,41 @@ const GoogleLoginButton = ({ onComplete }) => {
   };
 
   const handleGoogleLogin = () => {
-    if (!window.google || !window.google.accounts) {
-      console.error('❌ Google Identity Services not loaded')
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      console.error('❌ Google Identity Services not loaded or OAuth2 not available', {
+        hasGoogle: !!window.google,
+        hasAccounts: !!(window.google && window.google.accounts),
+        hasOAuth2: !!(window.google && window.google.accounts && window.google.accounts.oauth2)
+      })
+      return
+    }
+
+    // Get client_id from environment variable or use fallback
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com'
+    
+    if (!clientId || clientId.trim() === '') {
+      console.error('❌ Google Client ID is missing')
+      alert('Google authentication is not configured. Please contact support.')
+      return
+    }
+
+    // Validate client_id format (should end with .apps.googleusercontent.com)
+    if (!clientId.includes('.apps.googleusercontent.com')) {
+      console.error('❌ Invalid Google Client ID format:', clientId)
+      alert('Google authentication configuration error. Please contact support.')
       return
     }
 
     console.log('🔐 Starting complete Google authentication with Fit permissions...')
+    console.log('🔑 Using Client ID:', clientId.substring(0, 20) + '...')
 
-    // Use OAuth2 popup for complete permissions (including Google Fit)
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: '200010665728-4s6dbvd4aopi1lre28k6av1n9jc1lacc.apps.googleusercontent.com',
-      scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile openid email profile',
-      include_granted_scopes: true,
-      callback: async (response) => {
+    try {
+      // Use OAuth2 popup for complete permissions (including Google Fit)
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile openid email profile',
+        include_granted_scopes: true,
+        callback: async (response) => {
         try {
           console.log('🎉 Complete OAuth response received:', response);
           
@@ -146,8 +168,12 @@ const GoogleLoginButton = ({ onComplete }) => {
       }
     });
 
-    // Request access token (this will show the popup with all permissions)
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+      // Request access token (this will show the popup with all permissions)
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (error) {
+      console.error('❌ Error initializing Google OAuth token client:', error);
+      alert('Failed to initialize Google authentication. Please try again or contact support.');
+    }
   };
 
   if (!isGoogleLoaded) {

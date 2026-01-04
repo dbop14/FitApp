@@ -67,9 +67,9 @@ services:
     environment:
       - NODE_ENV=development
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
-      - GOOGLE_CLIENT_ID=200010665728-4s6dbvd4aopi1lre28k6av1n9jc1lacc.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=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
-      - GOOGLE_REDIRECT_URI=https://fitapp.herringm.com/api/auth/google/callback
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
       - MATRIX_HOMESERVER_URL=http://synapse:8008
       - MATRIX_SERVER_NAME=fitapp.local
       - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
