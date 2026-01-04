@@ -100,7 +100,7 @@ Production uses different ports to avoid conflicts with development:
 
 **Critical variables (must be set in `.env` file):**
 - `BOT_PASSWORD` - Must be set
-- `GOOGLE_CLIENT_ID` - Production OAuth client ID (currently: `200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com`)
+- `GOOGLE_CLIENT_ID` - Production OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Production OAuth secret
 - `GOOGLE_REDIRECT_URI` - Production callback URL (e.g., `https://fitapp.herringm.com/api/auth/google/callback`)
 - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` - Push notification keys

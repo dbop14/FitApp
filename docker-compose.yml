@@ -74,8 +74,8 @@ services:
       - MATRIX_SERVER_NAME=fitapp.local
       - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
       - BOT_PASSWORD=${BOT_PASSWORD}
-      - VAPID_PUBLIC_KEY=BKBNE0hF7InDUAM9ej_hdFYkWLhrIELtLYyUYb2473mfZxbPtazZc6th1dWYxb3MR-Br-H-Ed30cc_lXAbdjk7U
-      - VAPID_PRIVATE_KEY=Ca1V7ZLGP8JzzR7wi-eYrQ75kvnGMn56PNeKoDrvgLg
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
     volumes:
       - ./fitapp-backend:/app
       - node_modules:/app/node_modules
