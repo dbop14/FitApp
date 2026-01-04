@@ -82,35 +82,8 @@ router.post('/unsubscribe', async (req, res) => {
 
 // Helper function to send push notification to a user
 async function sendPushNotification(userId, title, body, data = {}) {
-  console.log(`🔔 [PUSH DEBUG] sendPushNotification called for user ${userId}`, { title, bodyLength: body.length, hasVAPID: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) });
-  
-  // #region agent log
-  const fs = require('fs');
-  const path = require('path');
-  const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-  try {
-    const logDir = path.dirname(logPath);
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-    const logEntry = JSON.stringify({location:'push.js:84',message:'sendPushNotification called',data:{userId,title,bodyLength:body.length,hasVAPID:!!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-    fs.appendFileSync(logPath, logEntry);
-  } catch(e) {
-    console.error('❌ [PUSH DEBUG] Failed to write function entry log:', e.message);
-  }
-  // #endregion
-  
   // Check if VAPID keys are configured
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.warn('⚠️ [PUSH DEBUG] Cannot send push notification: VAPID keys not configured', { hasPublic: !!VAPID_PUBLIC_KEY, hasPrivate: !!VAPID_PRIVATE_KEY });
-    // #region agent log
-    try {
-      const logEntry = JSON.stringify({location:'push.js:90',message:'VAPID keys missing',data:{userId,hasPublic:!!VAPID_PUBLIC_KEY,hasPrivate:!!VAPID_PRIVATE_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-    } catch(e) {
-      console.error('❌ [PUSH DEBUG] Failed to write VAPID error log:', e.message);
-    }
-    // #endregion
     return;
   }
 

@@ -1,0 +1,12 @@
+### Add points for a user
+POST https://fitappbackend.herringm.com/api/leaderboard
+Content-Type: application/json
+
+{
+  "userId": "dylan42",
+  "challengeId": "fit100",
+  "points": 25
+}
+
+### Get leaderboard
+GET https://fitappbackend.herringm.com/api/leaderboard/fit100

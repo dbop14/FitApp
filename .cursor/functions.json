@@ -1,0 +1,38 @@
+{
+  "mynas": {
+    "description": "SSH into Synology NAS",
+    "command": "ssh mynas",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  },
+  "mynas-sftp": {
+    "description": "Open SFTP connection to Synology NAS",
+    "command": "sftp mynas",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  },
+  "mynas-rsync": {
+    "description": "Sync files to/from Synology NAS",
+    "command": "rsync -avz --progress /Volumes/docker/fitapp/ mynas:/volume1/docker/fitapp/",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  },
+  "mynas-docker-logs": {
+    "description": "View Docker logs on Synology NAS",
+    "command": "ssh mynas 'docker logs -f $(docker ps -q --filter name=fitapp)'",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  },
+  "mynas-docker-status": {
+    "description": "Check Docker container status on Synology NAS",
+    "command": "ssh mynas 'docker ps -a'",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  },
+  "mynas-restart-services": {
+    "description": "Restart all FitApp services on Synology NAS",
+    "command": "ssh mynas 'cd /volume1/docker/fitapp && docker-compose restart'",
+    "type": "terminal",
+    "cwd": "/Volumes/docker/fitapp"
+  }
+}

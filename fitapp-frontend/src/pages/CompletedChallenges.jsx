@@ -49,6 +49,10 @@ const CompletedChallenges = () => {
         // Helper to parse date string as local date (not UTC)
         const parseLocalDate = (dateString) => {
           if (!dateString) return null
+          // If the string contains 'T' (datetime format), parse it directly as ISO datetime
+          if (dateString.includes('T')) {
+            return new Date(dateString)
+          }
           const dateMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
           if (dateMatch) {
             // Create date in local timezone (not UTC)
@@ -57,12 +61,14 @@ const CompletedChallenges = () => {
           return new Date(dateString)
         }
         const completed = challenges
-          .filter(challenge => 
-            challenge && 
-            challenge.endDate && 
-            parseLocalDate(challenge.endDate) < now &&
-            !challenge._deleted
-          )
+          .filter(challenge => {
+            if (!challenge || !challenge.endDate || challenge._deleted) return false
+            const endDate = parseLocalDate(challenge.endDate)
+            // For date-only strings, use end of day (23:59:59.999) for comparison
+            const isDateOnly = !challenge.endDate.includes('T')
+            const endOfDay = isDateOnly ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999) : endDate
+            return endOfDay < now
+          })
           .map(challenge => ({
             ...challenge,
             // Ensure required properties exist with fallbacks

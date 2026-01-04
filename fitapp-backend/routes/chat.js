@@ -127,36 +127,7 @@ router.post('/:challengeId/messages', async (req, res) => {
       
       // Send push notifications to all participants except the sender
       try {
-        console.log('🔔 [PUSH DEBUG] Starting push notification for user message', { challengeId, sender: verifiedSender, userId });
-        
-        // #region agent log
-        const fs = require('fs');
-        const path = require('path');
-        const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-        try {
-          const logDir = path.dirname(logPath);
-          if (!fs.existsSync(logDir)) {
-            fs.mkdirSync(logDir, { recursive: true });
-          }
-          const logEntry = JSON.stringify({location:'chat.js:125',message:'Starting push notification for user message',data:{challengeId,sender:verifiedSender,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {
-          console.error('❌ [PUSH DEBUG] Failed to write log:', e.message);
-        }
-        // #endregion
-        
         const participants = await ChallengeParticipant.find({ challengeId });
-        console.log(`📱 [PUSH DEBUG] Found ${participants.length} participant(s) for push notifications`);
-        
-        // #region agent log
-        try {
-          const participantIds = participants.map(p => p.userId);
-          const logEntry = JSON.stringify({location:'chat.js:130',message:'Found participants for push',data:{challengeId,participantCount:participants.length,participantIds,currentUserId:userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {
-          console.error('❌ [PUSH DEBUG] Failed to write participant log:', e.message);
-        }
-        // #endregion
         
         const notificationTitle = verifiedSender;
         const notificationBody = message.length > 100 ? message.substring(0, 100) + '...' : message;
@@ -164,34 +135,12 @@ router.post('/:challengeId/messages', async (req, res) => {
         for (const participant of participants) {
           // Skip notification for the sender
           if (participant.userId !== userId) {
-            console.log(`📤 [PUSH DEBUG] Sending push notification to participant: ${participant.userId}`);
-            // #region agent log
-            try {
-              const logEntry = JSON.stringify({location:'chat.js:140',message:'Calling sendPushNotification',data:{targetUserId:participant.userId,title:notificationTitle,bodyLength:notificationBody.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-              fs.appendFileSync(logPath, logEntry);
-            } catch(e) {
-              console.error('❌ [PUSH DEBUG] Failed to write call log:', e.message);
-            }
-            // #endregion
-            
             await sendPushNotification(
               participant.userId,
               notificationTitle,
               notificationBody,
               { challengeId }
             );
-            
-            console.log(`✅ [PUSH DEBUG] sendPushNotification completed for ${participant.userId}`);
-            // #region agent log
-            try {
-              const logEntry = JSON.stringify({location:'chat.js:148',message:'sendPushNotification completed',data:{targetUserId:participant.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-              fs.appendFileSync(logPath, logEntry);
-            } catch(e) {
-              console.error('❌ [PUSH DEBUG] Failed to write completion log:', e.message);
-            }
-            // #endregion
-          } else {
-            console.log(`⏭️  [PUSH DEBUG] Skipping push notification for sender: ${participant.userId}`);
           }
         }
       } catch (pushError) {
@@ -246,65 +195,18 @@ router.post('/:challengeId/messages', async (req, res) => {
       
       // Send push notifications to all participants for bot/system messages
       try {
-        console.log('🔔 [PUSH DEBUG] Starting push notification for bot message', { challengeId, sender, isBot, isSystem });
-        
-        // #region agent log
-        const fs = require('fs');
-        const path = require('path');
-        const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-        try {
-          const logDir = path.dirname(logPath);
-          if (!fs.existsSync(logDir)) {
-            fs.mkdirSync(logDir, { recursive: true });
-          }
-          const logEntry = JSON.stringify({location:'chat.js:181',message:'Starting push notification for bot message',data:{challengeId,sender,isBot,isSystem},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {
-          console.error('❌ [PUSH DEBUG] Failed to write bot log:', e.message);
-        }
-        // #endregion
-        
         const participants = await ChallengeParticipant.find({ challengeId });
-        console.log(`📱 [PUSH DEBUG] Found ${participants.length} participant(s) for bot message push notifications`);
-        
-        // #region agent log
-        try {
-          const participantIds = participants.map(p => p.userId);
-          const logEntry = JSON.stringify({location:'chat.js:187',message:'Found participants for bot push',data:{challengeId,participantCount:participants.length,participantIds},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
         
         const notificationTitle = sender;
         const notificationBody = message.length > 100 ? message.substring(0, 100) + '...' : message;
         
         for (const participant of participants) {
-          console.log(`📤 [PUSH DEBUG] Sending bot push notification to participant: ${participant.userId}`);
-          // #region agent log
-          try {
-            const logEntry = JSON.stringify({location:'chat.js:195',message:'Calling sendPushNotification for bot',data:{targetUserId:participant.userId,title:notificationTitle,bodyLength:notificationBody.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-            fs.appendFileSync(logPath, logEntry);
-          } catch(e) {
-            console.error('❌ [PUSH DEBUG] Failed to write bot call log:', e.message);
-          }
-          // #endregion
-          
           await sendPushNotification(
             participant.userId,
             notificationTitle,
             notificationBody,
             { challengeId }
           );
-          
-          console.log(`✅ [PUSH DEBUG] sendPushNotification completed for bot to ${participant.userId}`);
-          // #region agent log
-          try {
-            const logEntry = JSON.stringify({location:'chat.js:203',message:'sendPushNotification completed for bot',data:{targetUserId:participant.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-            fs.appendFileSync(logPath, logEntry);
-          } catch(e) {
-            console.error('❌ [PUSH DEBUG] Failed to write bot completion log:', e.message);
-          }
-          // #endregion
         }
       } catch (pushError) {
         console.error('❌ Error sending push notifications:', pushError);

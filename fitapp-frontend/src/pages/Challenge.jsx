@@ -69,15 +69,20 @@ const Challenge = () => {
         return true
       }
       const endDate = parseLocalDate(challenge.endDate)
-      return endDate >= now
+      // For date-only strings, use end of day (23:59:59.999) for comparison
+      const isDateOnly = !challenge.endDate.includes('T')
+      const endOfDay = isDateOnly ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999) : endDate
+      return endOfDay >= now
     })
     
-    const completed = challengesData.filter(challenge => 
-      challenge && 
-      !challenge._deleted &&
-      challenge.endDate && 
-      parseLocalDate(challenge.endDate) < now
-    )
+    const completed = challengesData.filter(challenge => {
+      if (!challenge || challenge._deleted || !challenge.endDate) return false
+      const endDate = parseLocalDate(challenge.endDate)
+      // For date-only strings, use end of day (23:59:59.999) for comparison
+      const isDateOnly = !challenge.endDate.includes('T')
+      const endOfDay = isDateOnly ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999) : endDate
+      return endOfDay < now
+    })
     
     return { userChallenges: active, completedChallenges: completed }
   })()
