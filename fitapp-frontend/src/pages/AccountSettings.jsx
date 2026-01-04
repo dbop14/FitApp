@@ -5,7 +5,7 @@ import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
 import Button from '../components/ui/Button'
 import { DEFAULT_AVATAR } from '../utils/constants'
 import ImageCropper from '../components/ImageCropper'
-import { compressImage } from '../utils/imageCompression'
+import { compressImage, compressDataUrl } from '../utils/imageCompression'
 
 const AccountSettings = () => {
   const { user, updateUserProfile } = useContext(UserContext)
@@ -85,18 +85,31 @@ const AccountSettings = () => {
     }
   }
 
-  const handleCropComplete = (croppedImageDataUrl) => {
-    setFormData(prev => ({
-      ...prev,
-      picture: croppedImageDataUrl
-    }))
-    setShowCropper(false)
-    setImageToCrop(null)
+  const handleCropComplete = async (croppedImageDataUrl) => {
+    setIsProcessingImage(true)
     setError('')
     
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+    try {
+      // Compress the cropped image with aggressive settings for profile photos
+      // Max size: 0.5MB, Max dimensions: 512x512 (since it's a square crop)
+      const compressedDataUrl = await compressDataUrl(croppedImageDataUrl, 0.5, 512)
+      
+      setFormData(prev => ({
+        ...prev,
+        picture: compressedDataUrl
+      }))
+      setShowCropper(false)
+      setImageToCrop(null)
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to compress cropped image. Please try again.')
+      console.error('Error compressing cropped image:', err)
+    } finally {
+      setIsProcessingImage(false)
     }
   }
 

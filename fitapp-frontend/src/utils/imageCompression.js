@@ -49,3 +49,50 @@ export const canvasToFile = async (canvas, fileName, fileType = 'image/jpeg', qu
   });
 };
 
+/**
+ * Convert a data URL to a File object
+ * @param {string} dataUrl - The data URL string
+ * @param {string} fileName - The desired file name (default: 'image.jpg')
+ * @returns {Promise<File>} - The file object
+ */
+export const dataUrlToFile = async (dataUrl, fileName = 'image.jpg') => {
+  return new Promise((resolve, reject) => {
+    // Convert data URL to blob
+    fetch(dataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+        resolve(file);
+      })
+      .catch(reject);
+  });
+};
+
+/**
+ * Compress a data URL image (useful for cropped images)
+ * @param {string} dataUrl - The image data URL
+ * @param {number} maxSizeMB - Maximum file size in MB (default: 0.5)
+ * @param {number} maxWidthOrHeight - Maximum width or height in pixels (default: 512)
+ * @returns {Promise<string>} - A promise that resolves to the compressed image data URL
+ */
+export const compressDataUrl = async (dataUrl, maxSizeMB = 0.5, maxWidthOrHeight = 512) => {
+  try {
+    // Convert data URL to File
+    const file = await dataUrlToFile(dataUrl, 'profile-photo.jpg');
+    
+    // Compress the file
+    const compressedFile = await compressImage(file, maxSizeMB, maxWidthOrHeight);
+    
+    // Convert compressed file back to data URL
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(compressedFile);
+    });
+  } catch (error) {
+    console.error('Error compressing data URL:', error);
+    throw new Error('Failed to compress image. Please try a different image.');
+  }
+};
+
