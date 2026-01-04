@@ -25,6 +25,36 @@ if (-not (Test-Path ".env")) {
 Write-Host "Stopping existing development containers..." -ForegroundColor Cyan
 docker-compose down
 
+# Check if Synapse needs initialization
+$synapseVolumeName = "development_synapse_data_dev"
+$volumeList = docker volume ls --format "{{.Name}}" | Out-String
+$synapseVolumeExists = $volumeList -match $synapseVolumeName
+
+$needsInit = $true
+if ($synapseVolumeExists) {
+    # Try to check if homeserver.yaml exists in the volume
+    $checkResult = docker run --rm -v "${synapseVolumeName}:/data" matrixdotorg/synapse:latest test -f /data/homeserver.yaml 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $needsInit = $false
+    }
+}
+
+if ($needsInit) {
+    Write-Host "Initializing Synapse server..." -ForegroundColor Cyan
+    $initResult = docker run --rm `
+        -v "${synapseVolumeName}:/data" `
+        -e SYNAPSE_SERVER_NAME=fitapp.local `
+        -e SYNAPSE_REPORT_STATS=no `
+        matrixdotorg/synapse:latest generate 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Synapse server initialized successfully" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Synapse initialization may have failed" -ForegroundColor Yellow
+        Write-Host $initResult
+    }
+}
+
 # Build and start containers
 Write-Host "Building and starting development containers..." -ForegroundColor Cyan
 Write-Host "(This may take a few minutes on first run)" -ForegroundColor Gray
@@ -52,4 +82,3 @@ Write-Host "To stop:" -ForegroundColor Gray
 Write-Host "  docker-compose down" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Changes to code will automatically reload!" -ForegroundColor Green
-

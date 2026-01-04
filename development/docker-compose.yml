@@ -93,7 +93,7 @@ services:
       - "5174:5173"  # Different port to avoid conflict with production
     restart: unless-stopped
     environment:
-      - VITE_API_URL=${VITE_API_URL}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
       - VITE_MATRIX_URL=http://synapse:8008
     volumes:
       - ../fitapp-frontend:/app
@@ -105,12 +105,11 @@ services:
 
 volumes:
   mongo_data_dev:
-  synapse_data_dev:
-  node_modules_bot:
   node_modules_backend:
+  node_modules_bot:
   node_modules_frontend:
+  synapse_data_dev:
 
 networks:
   fitapp_dev:
     name: fitapp_dev
-

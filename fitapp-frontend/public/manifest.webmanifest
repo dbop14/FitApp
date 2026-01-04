@@ -2,7 +2,7 @@
   "name": "FitApp",
   "short_name": "FitApp",
   "description": "Fitness dashboard and challenges",
-  "start_url": "/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#325be4",

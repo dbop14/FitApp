@@ -18,6 +18,7 @@ import Home from './pages/Home'
 import StepsHistory from './pages/StepsHistory'
 import WeightHistory from './pages/WeightHistory'
 import ProtectedRoute from './components/ProtectedRoute'
+import AuthRedirect from './components/AuthRedirect'
 import MainLayout from './layout/MainLayout'
 import AddToHomeScreen from './components/AddToHomeScreen'
 import NotificationPermissionDialog from './components/NotificationPermissionDialog'
@@ -149,8 +150,8 @@ const App = () => {
               }
             />
             
-            {/* Catch-all route - redirect to dashboard for any unknown paths */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {/* Catch-all route - redirect based on authentication status */}
+            <Route path="*" element={<AuthRedirect />} />
                       </Routes>
           </Router>
         </ChatNotificationProvider>

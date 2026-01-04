@@ -4,7 +4,7 @@
 
 cd "$(dirname "$0")"
 
-echo "🔧 Deploying FitApp Development Environment..."
+echo "🚀 Development Deployment Script for FitApp"
 echo ""
 
 # Check if .env file exists
@@ -24,6 +24,41 @@ fi
 # Stop existing containers
 echo "🛑 Stopping existing development containers..."
 docker-compose down
+
+# Check if Synapse needs initialization
+SYNAPSE_VOLUME_NAME="development_synapse_data_dev"
+VOLUME_LIST=$(docker volume ls --format "{{.Name}}" 2>/dev/null)
+SYNAPSE_VOLUME_EXISTS=false
+if echo "$VOLUME_LIST" | grep -q "$SYNAPSE_VOLUME_NAME"; then
+    SYNAPSE_VOLUME_EXISTS=true
+fi
+
+NEEDS_INIT=true
+if [ "$SYNAPSE_VOLUME_EXISTS" = true ]; then
+    # Try to check if homeserver.yaml exists in the volume
+    CHECK_RESULT=$(docker run --rm -v "$SYNAPSE_VOLUME_NAME":/data matrixdotorg/synapse:latest test -f /data/homeserver.yaml 2>&1)
+    CHECK_EXIT=$?
+    if [ $CHECK_EXIT -eq 0 ]; then
+        NEEDS_INIT=false
+    fi
+fi
+
+if [ "$NEEDS_INIT" = true ]; then
+    echo "🔧 Initializing Synapse server..."
+    INIT_RESULT=$(docker run --rm \
+        -v "$SYNAPSE_VOLUME_NAME":/data \
+        -e SYNAPSE_SERVER_NAME=fitapp.local \
+        -e SYNAPSE_REPORT_STATS=no \
+        matrixdotorg/synapse:latest generate 2>&1)
+    INIT_EXIT=$?
+    
+    if [ $INIT_EXIT -eq 0 ]; then
+        echo "✅ Synapse server initialized successfully"
+    else
+        echo "⚠️  Warning: Synapse initialization may have failed"
+        echo "$INIT_RESULT"
+    fi
+fi
 
 # Build and start containers
 echo "🔨 Building and starting development containers..."
@@ -52,4 +87,3 @@ echo "🛑 To stop:"
 echo "   docker-compose down"
 echo ""
 echo "🔄 Changes to code will automatically reload!"
-

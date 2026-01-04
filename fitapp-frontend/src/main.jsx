@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Create a query client with default options
 const queryClient = new QueryClient({
@@ -21,6 +22,19 @@ const queryClient = new QueryClient({
 })
 
 console.log('🧪 React version:', React.version)
+console.log('🧪 Environment:', process.env.NODE_ENV)
+console.log('🧪 User Agent:', navigator.userAgent)
+console.log('🧪 Current URL:', window.location.href)
+console.log('🧪 Service Worker support:', 'serviceWorker' in navigator)
+
+// Add global error handler to catch unhandled errors
+window.addEventListener('error', (event) => {
+  console.error('❌ Global error:', event.error, event.message, event.filename, event.lineno)
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('❌ Unhandled promise rejection:', event.reason)
+})
 
 // Ensure root element exists before rendering
 // This prevents white screen if service worker serves cached HTML before DOM is ready
@@ -31,21 +45,42 @@ if (!rootElement) {
   const newRoot = document.createElement('div');
   newRoot.id = 'root';
   document.body.appendChild(newRoot);
-  createRoot(newRoot).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </StrictMode>
-  );
+  try {
+    createRoot(newRoot).render(
+      <StrictMode>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </StrictMode>
+    );
+    console.log('✅ App rendered successfully (created root element)');
+  } catch (error) {
+    console.error('❌ Failed to render app:', error);
+  }
 } else {
-  createRoot(rootElement).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </StrictMode>
-  );
+  try {
+    createRoot(rootElement).render(
+      <StrictMode>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </StrictMode>
+    );
+    console.log('✅ App rendered successfully');
+  } catch (error) {
+    console.error('❌ Failed to render app:', error);
+    // Show error message to user
+    rootElement.innerHTML = `
+      <div style="padding: 20px; text-align: center;">
+        <h1 style="color: red;">Failed to load app</h1>
+        <p>Please refresh the page or <a href="/login">go to login</a></p>
+      </div>
+    `;
+  }
 }
 
 // Register service worker for PWA notifications
