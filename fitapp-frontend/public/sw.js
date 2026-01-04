@@ -1,6 +1,8 @@
 // Icon version: Update this when icons change (must match manifest _iconVersion)
 const ICON_VERSION = 2;
-const CACHE_NAME = `fitapp-cache-v4-icons-${ICON_VERSION}`; // Increment version to force update
+// Increment cache version to force service worker update (especially for Safari PWA)
+const SW_VERSION = 5;
+const CACHE_NAME = `fitapp-cache-v${SW_VERSION}-icons-${ICON_VERSION}`; // Increment version to force update
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -43,9 +45,19 @@ self.addEventListener('fetch', (event) => {
   
   // Redirect /home.html to /login for PWA compatibility
   // This prevents users from getting stuck on the static home.html page
+  // Use HTML redirect for maximum Safari compatibility
   if (url.pathname === '/home.html' && request.mode === 'navigate') {
     event.respondWith(
-      Response.redirect(new URL('/login', url.origin), 301)
+      new Response(
+        `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/login"><script>window.location.replace('/login');</script></head><body>Redirecting to login...</body></html>`,
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-cache'
+          }
+        }
+      )
     );
     return;
   }
