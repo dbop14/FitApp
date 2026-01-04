@@ -149,8 +149,8 @@ const App = () => {
               }
             />
             
-            {/* Catch-all route - redirect to dashboard for any unknown paths */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {/* Catch-all route - redirect based on authentication status */}
+            <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>
           </Router>
         </ChatNotificationProvider>
