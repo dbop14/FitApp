@@ -20,7 +20,7 @@
    - `BOT_PASSWORD` - Your production bot password
    - `GOOGLE_CLIENT_ID` - Production Google OAuth client ID
    - `GOOGLE_CLIENT_SECRET` - Production Google OAuth secret
-   - `GOOGLE_REDIRECT_URI` - Production callback URL (https://fitapp.herringm.com/...)
+   - `GOOGLE_REDIRECT_URI` - Production callback URL (https://fitapp.herringm.com/api/auth/google/callback)
    - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` - Push notification keys
    - `VITE_API_URL` - Production API URL (https://fitappbackend.herringm.com)
 
@@ -55,11 +55,17 @@ When you want to deploy new code:
    git push origin main
    ```
 
-2. **Deploy:**
+2. **Update `.env` file if needed:**
+   - If OAuth client changed, update `GOOGLE_CLIENT_ID` in `.env`
+   - Set your Google OAuth client ID in the `.env` file
+
+3. **Deploy:**
    ```bash
    cd production
    ./deploy.ps1  # or ./deploy.sh
    ```
+
+**Note:** The backend CORS configuration includes production domains and will be included when you rebuild from the latest `main` branch.
 
 ## Access Points
 

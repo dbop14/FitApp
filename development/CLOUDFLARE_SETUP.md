@@ -47,16 +47,41 @@ GOOGLE_REDIRECT_URI=https://fitappdev.herringm.com/api/auth/google/callback
 
 ## Google OAuth Setup
 
-If you're using Google OAuth, you'll need to:
+If you're using Google OAuth, you'll need to configure your OAuth 2.0 Client in Google Cloud Console:
 
-1. **Add authorized redirect URIs in Google Cloud Console:**
+### Steps:
+
+1. **Go to Google Cloud Console:**
+   - Navigate to: https://console.cloud.google.com/
+   - Select your project
+   - Go to **APIs & Services** → **Credentials**
+
+2. **Edit your OAuth 2.0 Client ID:**
+   - Find your OAuth client: `200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com`
+   - Click **Edit** (pencil icon)
+
+3. **Add Authorized JavaScript origins:**
+   These are required for the client-side Google Identity Services flow:
+   - `https://fitappdev.herringm.com`
+   - `https://fitapp.herringm.com` (production)
+   - `http://localhost:5174` (local development)
+   - `http://localhost:5173` (local development - root docker-compose)
+
+4. **Add Authorized redirect URIs:**
+   These are required if you're using server-side OAuth flows:
    - `https://fitappdev.herringm.com/api/auth/google/callback`
+   - `https://fitapp.herringm.com/api/auth/google/callback` (production)
+   - `http://localhost:3001/api/auth/google/callback` (local development)
+   - `http://localhost:3000/api/auth/google/callback` (local development - root docker-compose)
 
-2. **Update your Google OAuth client:**
-   - Go to Google Cloud Console
-   - APIs & Services → Credentials
-   - Edit your OAuth 2.0 Client
-   - Add the dev redirect URI to authorized redirect URIs
+5. **Save the changes**
+
+### Important Notes:
+
+- **Authorized JavaScript origins** must match exactly (including protocol `https://` or `http://`)
+- **No trailing slashes** in the origins
+- Changes may take a few minutes to propagate
+- Make sure you're editing the correct OAuth client (the new one with the updated client ID)
 
 ## Testing
 

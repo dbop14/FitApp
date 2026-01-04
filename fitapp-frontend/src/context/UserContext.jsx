@@ -334,8 +334,28 @@ export const UserProvider = ({ children }) => {
 
       function initializeTokenClient() {
         try {
+          // Get client_id from environment variable (required)
+          const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+          if (!clientId) {
+            console.error('VITE_GOOGLE_CLIENT_ID is not set in environment variables')
+            return
+          }
+          
+          if (!clientId || clientId.trim() === '') {
+            console.error('❌ Google Client ID is missing')
+            reject(new Error('Google authentication is not configured'))
+            return
+          }
+
+          // Validate client_id format
+          if (!clientId.includes('.apps.googleusercontent.com')) {
+            console.error('❌ Invalid Google Client ID format:', clientId)
+            reject(new Error('Invalid Google Client ID format'))
+            return
+          }
+
           const tokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+            client_id: clientId,
             scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile',
             callback: (response) => {
               const accessToken = response.access_token;

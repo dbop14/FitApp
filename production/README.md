@@ -72,13 +72,20 @@ When you want to deploy updates:
    git push origin main
    ```
 
-2. **Deploy:**
+2. **Update environment variables (if needed):**
+   - Edit `.env` file in the `production/` directory
+   - Update `GOOGLE_CLIENT_ID` if OAuth client changed
+   - Update any other changed variables
+
+3. **Deploy:**
    ```bash
    cd production
    ./deploy.ps1  # or ./deploy.sh
    ```
 
 This will rebuild images with the latest code from `main` branch.
+
+**Note:** The backend CORS configuration includes production domains (`https://fitapp.herringm.com`, `https://fitappbackend.herringm.com`) and will be included automatically when you rebuild from the latest `main` branch.
 
 ## Ports
 
@@ -91,12 +98,15 @@ Production uses different ports to avoid conflicts with development:
 
 ## Environment Variables
 
-See `.env.example` for all required environment variables. **Critical variables:**
+**Critical variables (must be set in `.env` file):**
 - `BOT_PASSWORD` - Must be set
 - `GOOGLE_CLIENT_ID` - Production OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Production OAuth secret
-- `GOOGLE_REDIRECT_URI` - Production callback URL
+- `GOOGLE_REDIRECT_URI` - Production callback URL (e.g., `https://fitapp.herringm.com/api/auth/google/callback`)
 - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` - Push notification keys
+- `VITE_API_URL` - Production API URL (e.g., `https://fitappbackend.herringm.com`)
+
+**⚠️ Important:** If you get "OAuth client was deleted" errors, update your `.env` file with the new client ID above and rebuild containers.
 
 ## Usage
 
@@ -185,6 +195,28 @@ Before deploying to production:
 - Verify bot password matches Matrix user
 - Check Matrix container is running
 - Review bot logs: `docker-compose logs fitness-bot`
+
+### OAuth Errors (401: deleted_client or CORS errors)
+
+If you see "OAuth client was deleted" or CORS errors:
+
+1. **Update `.env` file** with the new client ID:
+   ```
+   GOOGLE_CLIENT_ID=200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com
+   ```
+
+2. **Rebuild containers** to get the latest code with CORS fixes:
+   ```bash
+   docker-compose down
+   docker-compose build --no-cache
+   docker-compose up -d
+   ```
+
+3. **Verify Google Cloud Console** has the correct authorized origins:
+   - `https://fitapp.herringm.com`
+   - `https://fitappbackend.herringm.com`
+   - And authorized redirect URIs:
+   - `https://fitapp.herringm.com/api/auth/google/callback`
 
 ## Security Notes
 
