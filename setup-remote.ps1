@@ -83,7 +83,7 @@ Write-Host ""
 Write-Host "Your repository is now available at: $RepositoryUrl" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Current branch: develop" -ForegroundColor Yellow
-Write-Host "To switch branches: git checkout <branch-name>" -ForegroundColor Gray
+Write-Host "To switch branches: git checkout branch-name" -ForegroundColor Gray
 Write-Host "To pull latest: git pull origin develop" -ForegroundColor Gray
 Write-Host "To push changes: git push origin develop" -ForegroundColor Gray
 
