@@ -98,6 +98,96 @@ docker-compose up -d
 echo "⏳ Waiting for services to start..."
 sleep 10
 
+# Wait for Synapse to be ready
+echo "⏳ Waiting for Synapse server to be ready..."
+SYNAPSE_READY=false
+for i in {1..30}; do
+    if docker exec fitapp-prod-synapse curl -s http://localhost:8008/_matrix/client/versions > /dev/null 2>&1; then
+        SYNAPSE_READY=true
+        echo "✅ Synapse server is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "⚠️  Synapse server is not responding after 30 seconds"
+        echo "   Bot user creation will be skipped. You may need to create it manually."
+        SYNAPSE_READY=false
+        break
+    fi
+    sleep 2
+done
+
+# Create bot user if Synapse is ready
+if [ "$SYNAPSE_READY" = true ]; then
+    echo ""
+    echo "🤖 Checking if bot user exists..."
+    
+    # Source .env to get bot credentials
+    source .env
+    BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
+    
+    # Check if user exists by trying to query it (non-destructive check)
+    USER_EXISTS=$(docker exec fitapp-prod-synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008 --help 2>&1 | grep -q "register_new_matrix_user" && echo "check_needed" || echo "unknown")
+    
+    # Try to create bot user using expect if available
+    if command -v expect &> /dev/null; then
+        echo "👤 Creating bot user: $BOT_USERNAME"
+        cat > /tmp/create_bot_user_prod.exp << EOF
+#!/usr/bin/expect -f
+set timeout 30
+
+spawn docker exec -i fitapp-prod-synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008
+
+expect {
+    "New user localpart" {
+        send "$BOT_USERNAME\r"
+        exp_continue
+    }
+    "Password:" {
+        send "$BOT_PASSWORD\r"
+        exp_continue
+    }
+    "Confirm password:" {
+        send "$BOT_PASSWORD\r"
+        exp_continue
+    }
+    "Make admin" {
+        send "no\r"
+        exp_continue
+    }
+    "Success!" {
+        exit 0
+    }
+    "User ID already taken" {
+        exit 0
+    }
+    timeout {
+        exit 1
+    }
+    eof
+}
+EOF
+        chmod +x /tmp/create_bot_user_prod.exp
+        
+        if /tmp/create_bot_user_prod.exp > /dev/null 2>&1; then
+            echo "✅ Bot user created or already exists"
+        else
+            echo "⚠️  Could not create bot user automatically"
+            echo "💡 You may need to create it manually:"
+            echo "   docker exec -it fitapp-prod-synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008"
+            echo "   Username: $BOT_USERNAME"
+            echo "   Password: [your BOT_PASSWORD from .env]"
+        fi
+        rm -f /tmp/create_bot_user_prod.exp
+    else
+        echo "⚠️  'expect' command not found. Bot user creation skipped."
+        echo "💡 Please create the bot user manually:"
+        echo "   docker exec -it fitapp-prod-synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008"
+        echo "   Username: $BOT_USERNAME"
+        echo "   Password: [your BOT_PASSWORD from .env]"
+        echo "   Make admin: no"
+    fi
+fi
+
 # Show status
 echo ""
 echo "📊 Production Container Status:"

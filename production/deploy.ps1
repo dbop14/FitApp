@@ -53,7 +53,7 @@ $synapseVolumeExists = $volumeList -match $synapseVolumeName
 $needsInit = $true
 if ($synapseVolumeExists) {
     # Try to check if homeserver.yaml exists in the volume
-    $checkResult = docker run --rm -v "${synapseVolumeName}:/data" matrixdotorg/synapse:latest test -f /data/homeserver.yaml 2>&1
+    docker run --rm -v "${synapseVolumeName}:/data" matrixdotorg/synapse:latest test -f /data/homeserver.yaml 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) {
         $needsInit = $false
     }
@@ -92,6 +92,48 @@ docker-compose up -d
 # Wait for services to start
 Write-Host "Waiting for services to start..." -ForegroundColor Cyan
 Start-Sleep -Seconds 10
+
+# Wait for Synapse to be ready
+Write-Host "Waiting for Synapse server to be ready..." -ForegroundColor Cyan
+$synapseReady = $false
+for ($i = 1; $i -le 30; $i++) {
+    docker exec fitapp-prod-synapse curl -s http://localhost:8008/_matrix/client/versions 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $synapseReady = $true
+        Write-Host "Synapse server is ready" -ForegroundColor Green
+        break
+    }
+    if ($i -eq 30) {
+        Write-Host "Synapse server is not responding after 30 seconds" -ForegroundColor Yellow
+        Write-Host "Bot user creation will be skipped. You may need to create it manually." -ForegroundColor Yellow
+        break
+    }
+    Start-Sleep -Seconds 2
+}
+
+# Create bot user if Synapse is ready
+if ($synapseReady) {
+    Write-Host ""
+    Write-Host "Checking if bot user exists..." -ForegroundColor Cyan
+    
+    # Get bot credentials from .env
+    $envContent = Get-Content ".env" -Raw
+    if ($envContent -match "BOT_USERNAME=(\S+)") {
+        $botUsername = $matches[1]
+    } else {
+        $botUsername = "fitness_motivator"
+    }
+    
+    Write-Host "Bot user creation requires manual interaction on Windows." -ForegroundColor Yellow
+    Write-Host "Please create the bot user manually:" -ForegroundColor Cyan
+    Write-Host "  docker exec -it fitapp-prod-synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008" -ForegroundColor Gray
+    Write-Host "  Username: $botUsername" -ForegroundColor Gray
+    Write-Host "  Password: [your BOT_PASSWORD from .env]" -ForegroundColor Gray
+    Write-Host "  Make admin: no" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Alternatively, you can use the setup-bot-user.sh script from the root directory" -ForegroundColor Yellow
+    Write-Host "if you have WSL or a Linux environment available." -ForegroundColor Yellow
+}
 
 # Show status
 Write-Host ""
