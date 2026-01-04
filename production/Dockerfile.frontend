@@ -1,0 +1,30 @@
+FROM node:20-alpine
+
+# Install git
+RUN apk add --no-cache git
+
+# Set working directory
+WORKDIR /app
+
+# Clone repository and checkout main branch
+ARG GIT_BRANCH=main
+RUN git clone https://github.com/dbop14/FitApp.git /tmp/repo && \
+    cd /tmp/repo && \
+    git checkout ${GIT_BRANCH} && \
+    cp -r fitapp-frontend/* /app/ && \
+    rm -rf /tmp/repo
+
+# Install dependencies
+RUN npm install
+
+# Build the application
+RUN npm run build
+
+# Install serve to run the built app
+RUN npm install -g serve
+
+# Expose port
+EXPOSE 5173
+
+# Start application
+CMD ["serve", "-s", "dist", "-l", "5173"]
