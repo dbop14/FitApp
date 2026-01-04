@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    
+    <!-- iOS PWA meta tags - REQUIRED for push notifications -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FitApp" />
+    <link rel="apple-touch-icon" href="/icon-180x180.png?v=2" />
+    <!-- Note: iOS requires app to be installed as PWA (added to home screen) for push notifications to work -->
+    
+    <!-- iOS Splash Screens -->
+    <!-- iPhone 14 Pro Max / 13 Pro Max -->
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 14 Pro / 13 Pro / 12 Pro -->
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 14 / 13 / 12 -->
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 11 Pro Max / XS Max -->
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 11 Pro / XS / X -->
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 11 / XR -->
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- iPhone 8 Plus / 7 Plus / 6s Plus -->
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)" href="/Android Splash.png" />
+    <!-- iPhone 8 / 7 / 6s / 6 -->
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- iPhone SE -->
+    <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- iPad Pro 12.9" -->
+    <link rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- iPad Pro 11" -->
+    <link rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- iPad -->
+    <link rel="apple-touch-startup-image" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)" href="/Android Splash.png" />
+    <!-- Fallback for other devices -->
+    <link rel="apple-touch-startup-image" href="/Android Splash.png" />
+    <title>FitApp - Fitness Challenge Application</title>
+    <meta name="description" content="FitApp is a fitness challenge application that helps users track their fitness progress, participate in fitness competitions with friends, and stay motivated through social fitness challenges. The application automatically syncs with Google Fit to track daily steps and weight measurements." />
+    
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Suppress Vite HMR WebSocket errors when accessed via tunnel -->
+    <script>
+      // Suppress Vite HMR WebSocket connection errors
+      // These errors occur because Cloudflare tunnel doesn't support WebSocket upgrades
+      (function() {
+        // Override console methods early - must be before any other scripts load
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalLog = console.log;
+        
+        // More aggressive pattern matching for WebSocket errors
+        const isWebSocketError = (args) => {
+          const fullMessage = args.map(a => String(a)).join(' ');
+          const lowerMessage = fullMessage.toLowerCase();
+          
+          // Check for WebSocket-related keywords
+          const hasWebSocket = lowerMessage.includes('websocket') || lowerMessage.includes('ws://') || lowerMessage.includes('wss://');
+          const hasVite = lowerMessage.includes('[vite]') || lowerMessage.includes('vite');
+          const hasConnectionError = lowerMessage.includes('connection') || lowerMessage.includes('failed') || lowerMessage.includes('error');
+          const hasRelevantHost = lowerMessage.includes('fitapp.herringm.com') || lowerMessage.includes('localhost:5173') || lowerMessage.includes('127.0.0.1:5173');
+          const hasSetupWebSocket = lowerMessage.includes('setupwebsocket') || lowerMessage.includes('setupwebsocket');
+          
+          return (hasWebSocket || hasVite) && (hasConnectionError || hasSetupWebSocket || hasRelevantHost);
+        };
+        
+        // Check for QUIC protocol errors (harmless network-level errors for SSE connections)
+        const isQUICError = (args) => {
+          const fullMessage = args.map(a => String(a)).join(' ');
+          const lowerMessage = fullMessage.toLowerCase();
+          
+          // Check for QUIC protocol error patterns
+          const hasQUIC = lowerMessage.includes('quic') || lowerMessage.includes('err_quic');
+          const hasRealtimeEndpoint = lowerMessage.includes('/realtime/events/') || lowerMessage.includes('/api/realtime/');
+          const hasProtocolError = lowerMessage.includes('protocol_error') || lowerMessage.includes('failed to load resource');
+          
+          return hasQUIC && (hasRealtimeEndpoint || hasProtocolError);
+        };
+        
+        console.error = function(...args) {
+          if (isWebSocketError(args) || isQUICError(args)) {
+            return; // Suppress WebSocket and QUIC errors
+          }
+          originalError.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+          if (isWebSocketError(args) || isQUICError(args)) {
+            return; // Suppress WebSocket and QUIC warnings
+          }
+          originalWarn.apply(console, args);
+        };
+        
+        console.log = function(...args) {
+          if (isWebSocketError(args) || isQUICError(args)) {
+            return; // Suppress WebSocket and QUIC logs
+          }
+          originalLog.apply(console, args);
+        };
+        
+        // Suppress unhandled WebSocket and QUIC errors at the window level - catch early
+        // Must use capture phase to catch before other handlers
+        window.addEventListener('error', function(event) {
+          const message = (event.message || '').toLowerCase();
+          const source = (event.filename || '').toLowerCase();
+          const errorString = String(event.error || '');
+          
+          // Check for Vite HMR WebSocket errors
+          if ((message.includes('websocket') || message.includes('ws://') || message.includes('wss://') || 
+               source.includes('client.ts') || source.includes('vite') || errorString.includes('websocket')) &&
+              (message.includes('fitapp.herringm.com') || message.includes('localhost:5173') || 
+               message.includes('127.0.0.1:5173') || message.includes('failed') || message.includes('connection'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return false;
+          }
+          
+          // Check for QUIC protocol errors on SSE/realtime endpoints
+          if ((message.includes('quic') || message.includes('err_quic') || errorString.includes('quic')) &&
+              (message.includes('/realtime/events/') || message.includes('/api/realtime/') || 
+               source.includes('realtime') || message.includes('protocol_error'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+        
+        // Suppress unhandled promise rejections from WebSocket
+        window.addEventListener('unhandledrejection', function(event) {
+          const reason = (event.reason?.toString() || '').toLowerCase();
+          if (reason.includes('websocket') || reason.includes('ws://') || reason.includes('wss://')) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+          }
+        }, true);
+        
+        // Prevent WebSocket creation for Vite HMR if we're in a tunnel environment
+        // This is a last resort - intercept WebSocket constructor
+        const OriginalWebSocket = window.WebSocket;
+        window.WebSocket = function(url, protocols) {
+          const urlStr = String(url || '');
+          // Block WebSocket connections to Vite HMR endpoints
+          if (urlStr.includes('fitapp.herringm.com') || 
+              urlStr.includes('localhost:5173') || 
+              urlStr.includes('127.0.0.1:5173') ||
+              (urlStr.includes('?token=') && urlStr.includes('wss://'))) {
+            // Return a mock WebSocket that does nothing
+            return {
+              readyState: 3, // CLOSED
+              close: () => {},
+              send: () => {},
+              addEventListener: () => {},
+              removeEventListener: () => {},
+              dispatchEvent: () => true
+            };
+          }
+          return new OriginalWebSocket(url, protocols);
+        };
+        // Preserve WebSocket constants
+        Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+        window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+        window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+        window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

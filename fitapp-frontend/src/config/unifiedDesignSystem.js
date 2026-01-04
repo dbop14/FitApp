@@ -1,0 +1,373 @@
+/**
+ * Unified Design System Configuration
+ * Based on fitness-app-design-system.json with React/Tailwind implementation
+ */
+
+export const unifiedDesignSystem = {
+  // Core design system properties from JSON
+  name: "Fitness Challenge App Design System",
+  version: "2.0.0",
+  
+  // Color palette with Tailwind classes and hex values
+  colorPalette: {
+    gradients: {
+      primary: {
+        css: "bg-gradient-to-r from-blue-500 to-blue-800",
+        hex: ["#3b82f6", "#1e40af"],
+        usage: "Main gradient for primary content, hero sections, important stat cards"
+      },
+      light: {
+        css: "bg-gradient-to-r from-blue-400 to-blue-500", 
+        hex: ["#60a5fa", "#3b82f6"],
+        usage: "Lighter variant for secondary content, supporting cards, user avatars"
+      },
+      deep: {
+        css: "bg-gradient-to-r from-blue-800 to-blue-900",
+        hex: ["#1e40af", "#1e3a8a"],
+        usage: "Darker variant for emphasis, accent cards, important actions"
+      }
+    },
+    neutrals: {
+      background: "#f9fafb",
+      white: "#ffffff",
+      textPrimary: "#111827",
+      textSecondary: "#6b7280",
+      textMuted: "#9ca3af",
+      border: "#e5e7eb",
+      modalOverlay: "rgba(0, 0, 0, 0.5)"
+    }
+  },
+
+  // Typography system with Tailwind classes
+  typography: {
+    fontFamily: "System font stack (default Tailwind)",
+    hierarchy: {
+      appTitle: "text-2xl font-bold",
+      pageTitle: "text-2xl font-bold text-gray-800",
+      sectionTitle: "text-xl font-semibold",
+      cardTitle: "text-lg font-semibold",
+      body: "text-base",
+      caption: "text-sm",
+      micro: "text-xs"
+    },
+    weights: {
+      regular: "font-normal",
+      medium: "font-medium", 
+      semibold: "font-semibold",
+      bold: "font-bold"
+    }
+  },
+
+  // Spacing system with Tailwind classes
+  spacing: {
+    system: "Tailwind CSS spacing scale (0.25rem increments)",
+    patterns: {
+      pageContainer: "p-6 pb-24",
+      cardPadding: "p-6",
+      cardSpacing: "mb-4",
+      headerPadding: "px-6 py-4",
+      modalPadding: "p-6",
+      bottomNavOffset: "pb-24"
+    }
+  },
+
+  // Component configurations
+  components: {
+    layout: {
+      appContainer: {
+        className: "max-w-md mx-auto bg-gray-50 min-h-screen relative",
+        description: "Mobile-first container with max width and light background"
+      },
+      pageHeader: {
+        edgeToEdge: {
+          className: "bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white",
+          structure: "Full width gradient header with app title",
+          usage: "App branding and primary navigation"
+        },
+        withActions: {
+          className: "flex items-center justify-between mb-6",
+          structure: "Page title on left, action button on right",
+          usage: "Secondary pages with contextual actions"
+        }
+      }
+    },
+
+    cards: {
+      baseCard: {
+        structure: "Gradient background, rounded corners, padding, white text, shadow",
+        className: "[gradientVariant] rounded-2xl p-6 text-white shadow-lg",
+        variants: ["primary", "light", "deep"],
+        usage: "Primary UI component for all information display"
+      },
+      statCard: {
+        layout: "flex items-center justify-between",
+        contentStructure: {
+          left: "Title (small), Value (large bold), Subtitle (small muted)",
+          right: "Supporting icon (w-8 h-8 opacity-75)"
+        },
+        textAlignment: "left-aligned content",
+        usage: "Metrics, scores, rankings, progress display"
+      },
+      userCard: {
+        layout: "flex items-center justify-between",
+        structure: "Avatar + user info on left, rank/action on right",
+        avatarContainer: "bg-white bg-opacity-20 rounded-full",
+        usage: "Leaderboard entries, user profiles, social elements"
+      },
+      progressCard: {
+        structure: "Content section + progress bar section",
+        progressBar: "bg-white bg-opacity-20 rounded-full h-2 with filled portion",
+        usage: "Challenge progress, completion tracking"
+      }
+    },
+
+    modals: {
+      overlay: {
+        className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+        description: "Full-screen overlay with centered modal positioning"
+      },
+      container: {
+        className: "bg-white rounded-2xl max-w-sm w-full max-h-96 overflow-y-auto",
+        description: "White container with rounded corners and scroll capability"
+      },
+      header: {
+        structure: "flex items-center justify-between mb-6",
+        elements: "Title on left, close button (X icon) on right",
+        closeButton: "p-1 hover:bg-gray-100 rounded-full transition-colors"
+      },
+      content: {
+        sections: "Primary card + settings list + action buttons",
+        settingsItem: "p-4 bg-gray-50 rounded-xl with icon, text, and action button"
+      },
+      actions: {
+        layout: "flex space-x-3 mt-6",
+        primary: "flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-4 rounded-xl font-semibold",
+        secondary: "flex-1 bg-gray-100 text-gray-700 py-3 px-4 rounded-xl font-semibold"
+      }
+    },
+
+    navigation: {
+      bottomNavigation: {
+        position: "fixed bottom-0 left-0 right-0",
+        style: "bg-white border-t border-gray-200 px-4 py-2",
+        layout: "flex justify-around",
+        items: {
+          structure: "flex flex-col items-center py-2 px-3 rounded-lg",
+          activeState: "text-blue-600 bg-blue-50",
+          inactiveState: "text-gray-500",
+          iconSize: 22,
+          labelStyle: "text-xs mt-1"
+        }
+      }
+    },
+
+    avatars: {
+      style: "Emoji-based avatars in circular gradient containers",
+      variants: {
+        user: "bg-gradient-to-r from-blue-400 to-blue-500 rounded-full",
+        inCard: "bg-white bg-opacity-20 rounded-full"
+      },
+      sizes: {
+        small: "w-12 h-12 text-xl",
+        medium: "w-16 h-16 text-2xl",
+        large: "w-20 h-20 text-3xl"
+      }
+    },
+
+    forms: {
+      inputField: {
+        className: "border border-gray-300 rounded-full px-4 py-2",
+        focusState: "focus:outline-none focus:ring-2 focus:ring-blue-500",
+        usage: "Chat inputs, form fields, search bars"
+      },
+      buttonPrimary: {
+        className: "bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full",
+        hoverState: "hover:from-blue-600 hover:to-blue-700",
+        usage: "Primary actions, send buttons, CTAs"
+      },
+      buttonSecondary: {
+        className: "bg-gray-100 text-gray-700 rounded-xl",
+        usage: "Secondary actions, cancel buttons"
+      }
+    },
+
+    icons: {
+      library: "Lucide React",
+      sizes: {
+        navigation: 22,
+        cardSupporting: "w-8 h-8",
+        modalAction: "w-6 h-6",
+        settings: "w-5 h-5"
+      },
+      opacity: {
+        supporting: "opacity-75",
+        muted: "opacity-90"
+      },
+      semanticMapping: {
+        points: "Award",
+        ranking: "Trophy", 
+        streak: "Zap",
+        challenge: "Target",
+        time: "Clock",
+        users: "Users",
+        calendar: "Calendar",
+        info: "Info",
+        close: "X"
+      }
+    }
+  },
+
+  // Layout patterns for different page types
+  layoutPatterns: {
+    dashboard: {
+      structure: "Edge-to-edge header + user greeting + stat cards + progress cards",
+      header: "App title centered in gradient header",
+      greeting: "User avatar + personalized message below header",
+      statsLayout: "Vertically stacked left-aligned cards with right icons",
+      cardVariants: "Mixed gradient variants for visual hierarchy"
+    },
+    leaderboard: {
+      structure: "Page title with action + ranking cards",
+      headerAction: "Info icon in top right for settings access",
+      rankingCards: "User info left, rank/stars right",
+      visualHierarchy: "Top 3 users get special gradients and star icons"
+    },
+    chat: {
+      structure: "Header + scrollable messages + input area",
+      messageAlignment: "Flex-based (left for others, right for user)",
+      messageStyle: "Gradient bubbles for user, gray for others",
+      inputArea: "Fixed bottom with text input + gradient send button"
+    },
+    settings: {
+      structure: "Title + user profile card + option cards + logout",
+      profileDisplay: "Large user card with edit indicator",
+      optionCards: "Icon + title + subtitle + navigation arrow pattern"
+    },
+    modal: {
+      structure: "Overlay + container + header + content + actions",
+      contentFlow: "Primary info card + settings list + button row",
+      interactions: "Close on overlay click, close button, action buttons"
+    }
+  },
+
+  // Design principles
+  designPrinciples: {
+    cardBased: "All information displayed in gradient cards for visual consistency",
+    leftAlignment: "Content aligned to left with supporting elements on right",
+    gradientHierarchy: "Use gradient variants to create clear visual hierarchy",
+    iconSupport: "Icons provide context and visual balance to text content",
+    modalPatterns: "Consistent modal structure for settings and actions",
+    mobileFirst: "Optimized for mobile with touch-friendly targets",
+    accessibility: "High contrast, proper focus states, semantic markup"
+  },
+
+  // Interaction patterns
+  interactionPatterns: {
+    navigation: "Bottom tab navigation with active states",
+    cardTaps: "Cards with hover states for interactive elements",
+    modalTriggers: "Info icons and buttons that open overlay modals",
+    formInteractions: "Rounded inputs with focus rings and gradient buttons",
+    progressDisplay: "Visual progress bars within cards using opacity overlays",
+    buttonStates: "Gradient buttons with hover state transitions"
+  },
+
+  // State management patterns
+  stateManagement: {
+    pageNavigation: "useState for currentPage tracking",
+    modalVisibility: "useState boolean flags for modal display",
+    formInputs: "Controlled components with useState",
+    dataStructures: "Simple objects for user data, arrays for lists"
+  },
+
+  // Responsive considerations
+  responsiveConsiderations: {
+    container: "max-w-md mx-auto (28rem/448px)",
+    padding: "Consistent 1.5rem (p-6) for page margins",
+    bottomNavigation: "Fixed height with pb-24 offset for content",
+    modalSizing: "max-w-sm for modals, max-h-96 with scroll",
+    touchTargets: "Minimum 44px for interactive elements"
+  },
+
+  // Implementation guidelines
+  implementationGuidelines: {
+    framework: "React with Tailwind CSS",
+    statePattern: "useState for simple state, props for component communication",
+    iconSystem: "Lucide React with consistent sizing and opacity",
+    gradientSystem: "Reusable Card component with variant prop",
+    modalPattern: "Conditional rendering with overlay and container components",
+    dataFlow: "Simple prop passing, minimal state lifting"
+  },
+
+  // Code patterns
+  codePatterns: {
+    cardComponent: {
+      structure: "Variant-based gradient mapping with className composition",
+      props: "variant, children, className",
+      usage: "Wrap all content in Cards for consistency"
+    },
+    modalComponent: {
+      structure: "Overlay + container + conditional rendering",
+      closePattern: "onClick handlers for overlay and close button",
+      stateIntegration: "Boolean state variable controls visibility"
+    },
+    navigationComponent: {
+      structure: "Array map with conditional styling",
+      activeState: "Comparison with current page state",
+      iconIntegration: "Dynamic icon component rendering"
+    }
+  },
+
+  // Content guidelines
+  contentGuidelines: {
+    userGreeting: "Personalized with first name extraction",
+    statDisplay: "Large numbers with context labels and subtitles",
+    progressIndicators: "Percentage with visual progress bars",
+    avatarSystem: "Emoji-based for simplicity and universality",
+    challengeContent: "Clear goals with time-based progress tracking"
+  }
+};
+
+// Utility functions for applying design system
+export const applyDesignSystem = {
+  // Get gradient classes by variant
+  getGradientClass: (variant = 'primary') => {
+    const gradients = unifiedDesignSystem.colorPalette.gradients;
+    return gradients[variant]?.css || gradients.primary.css;
+  },
+
+  // Get typography classes by hierarchy
+  getTypographyClass: (hierarchy = 'body') => {
+    return unifiedDesignSystem.typography.hierarchy[hierarchy] || unifiedDesignSystem.typography.hierarchy.body;
+  },
+
+  // Get spacing classes by pattern
+  getSpacingClass: (pattern = 'cardPadding') => {
+    return unifiedDesignSystem.spacing.patterns[pattern] || unifiedDesignSystem.spacing.patterns.cardPadding;
+  },
+
+  // Get card classes with variant
+  getCardClass: (variant = 'primary', additionalClasses = '') => {
+    const baseClass = unifiedDesignSystem.components.cards.baseCard.className;
+    const gradientClass = applyDesignSystem.getGradientClass(variant);
+    return `${gradientClass} rounded-2xl p-6 text-white shadow-lg ${additionalClasses}`;
+  },
+
+  // Get modal classes
+  getModalClasses: () => ({
+    overlay: unifiedDesignSystem.components.modals.overlay.className,
+    container: unifiedDesignSystem.components.modals.container.className,
+    header: unifiedDesignSystem.components.modals.header.structure,
+    content: unifiedDesignSystem.components.modals.content.sections,
+    actions: unifiedDesignSystem.components.modals.actions.layout
+  }),
+
+  // Get navigation classes
+  getNavigationClasses: () => ({
+    container: unifiedDesignSystem.components.navigation.bottomNavigation.style,
+    item: unifiedDesignSystem.components.navigation.bottomNavigation.items.structure,
+    active: unifiedDesignSystem.components.navigation.bottomNavigation.items.activeState,
+    inactive: unifiedDesignSystem.components.navigation.bottomNavigation.items.inactiveState
+  })
+};
+
+export default unifiedDesignSystem;

@@ -1,0 +1,380 @@
+import { API_BASE_URL } from './constants';
+
+/**
+ * Chat Service - Handles chat operations with local storage caching
+ * 
+ * Features:
+ * - Local storage caching for messages
+ * - Optimistic updates
+ * - Batch API calls
+ * - Offline support
+ * - Message deduplication
+ */
+
+class ChatService {
+  constructor() {
+    this.cacheKey = 'fitapp_chat_messages';
+    this.lastSyncKey = 'fitapp_chat_last_sync';
+    this.offlineMessagesKey = 'fitapp_chat_offline_messages';
+    this.hasWarnedAboutMissingToken = false;
+    this.lastTokenWarningTime = 0;
+    this.lastApiErrorWarningTime = 0;
+    this.apiErrorWarningCount = 0;
+  }
+
+  // Get cache key for a specific challenge
+  getCacheKey(challengeId) {
+    return `${this.cacheKey}_${challengeId}`;
+  }
+
+  // Get last sync key for a specific challenge
+  getLastSyncKey(challengeId) {
+    return `${this.lastSyncKey}_${challengeId}`;
+  }
+
+  // Get offline messages key for a specific challenge
+  getOfflineMessagesKey(challengeId) {
+    return `${this.offlineMessagesKey}_${challengeId}`;
+  }
+
+  // Load messages from local storage
+  loadFromCache(challengeId) {
+    try {
+      const cached = localStorage.getItem(this.getCacheKey(challengeId));
+      if (cached) {
+        const messages = JSON.parse(cached);
+        // Convert timestamp strings back to Date objects
+        return messages.map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to load chat cache:', error);
+    }
+    return [];
+  }
+
+  // Save messages to local storage
+  saveToCache(challengeId, messages) {
+    try {
+      localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(messages));
+      // Update last sync timestamp
+      localStorage.setItem(this.getLastSyncKey(challengeId), Date.now().toString());
+    } catch (error) {
+      console.warn('Failed to save chat cache:', error);
+    }
+  }
+
+  // Get last sync timestamp
+  getLastSync(challengeId) {
+    try {
+      const timestamp = localStorage.getItem(this.getLastSyncKey(challengeId));
+      return timestamp ? parseInt(timestamp) : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  // Save offline message
+  saveOfflineMessage(challengeId, message) {
+    try {
+      const key = this.getOfflineMessagesKey(challengeId);
+      const offlineMessages = JSON.parse(localStorage.getItem(key) || '[]');
+      offlineMessages.push(message);
+      localStorage.setItem(key, JSON.stringify(offlineMessages));
+    } catch (error) {
+      console.warn('Failed to save offline message:', error);
+    }
+  }
+
+  // Get offline messages
+  getOfflineMessages(challengeId) {
+    try {
+      const key = this.getOfflineMessagesKey(challengeId);
+      return JSON.parse(localStorage.getItem(key) || '[]');
+    } catch (error) {
+      return [];
+    }
+  }
+
+  // Clear offline messages
+  clearOfflineMessages(challengeId) {
+    try {
+      localStorage.removeItem(this.getOfflineMessagesKey(challengeId));
+    } catch (error) {
+      console.warn('Failed to clear offline messages:', error);
+    }
+  }
+
+  // Fetch messages from API with caching
+  async fetchMessages(challengeId, forceRefresh = false) {
+    if (!challengeId) {
+      console.error('fetchMessages called without challengeId');
+      return [];
+    }
+    
+    const lastSync = this.getLastSync(challengeId);
+    const now = Date.now();
+    const cacheAge = now - lastSync;
+    
+    // Use cache if it's less than 2 minutes old and not forcing refresh
+    // Matches React Query staleTime for consistency
+    if (!forceRefresh && cacheAge < 120000) {
+      const cachedMessages = this.loadFromCache(challengeId);
+      if (cachedMessages.length > 0) {
+        return cachedMessages;
+      }
+    }
+
+    try {
+      console.log('Fetching messages from API...');
+      
+      // Get JWT token for authorization
+      const token = localStorage.getItem('fitapp_jwt_token');
+      
+      const response = await fetch(`${API_BASE_URL}/api/chat/${challengeId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Fetch messages response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Fetch messages error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const messages = await response.json();
+      console.log('Raw messages from API:', messages);
+      
+      // Convert timestamps and save to cache
+      const processedMessages = messages.map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
+      }));
+
+      this.saveToCache(challengeId, processedMessages);
+      console.log('Fetched and cached messages:', processedMessages.length);
+      
+      return processedMessages;
+    } catch (error) {
+      console.warn('Failed to fetch messages, using cache:', error);
+      
+      // Fallback to cache if available
+      const cachedMessages = this.loadFromCache(challengeId);
+      if (cachedMessages.length > 0) {
+        return cachedMessages;
+      }
+      
+      throw error;
+    }
+  }
+
+  // Send message with optimistic update
+  async sendMessage(challengeId, messageData) {
+    // Create optimistic message
+    const optimisticMessage = {
+      id: `temp_${Date.now()}_${Math.random()}`,
+      ...messageData,
+      timestamp: new Date(),
+      isOptimistic: true
+    };
+
+    try {
+      // Get JWT token for authorization
+      const token = localStorage.getItem('fitapp_jwt_token');
+      
+      // Send to API
+      console.log('Sending message to API:', { challengeId, messageData });
+      
+      const response = await fetch(`${API_BASE_URL}/api/chat/${challengeId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(messageData),
+      });
+
+      console.log('API response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const savedMessage = await response.json();
+      console.log('Message saved successfully:', savedMessage);
+      
+      // Update cache with real message
+      const cachedMessages = this.loadFromCache(challengeId);
+      const updatedMessages = cachedMessages.map(msg => 
+        msg.id === optimisticMessage.id ? { ...savedMessage, timestamp: new Date(savedMessage.timestamp) } : msg
+      );
+      
+      this.saveToCache(challengeId, updatedMessages);
+      console.log('Updated cache with saved message');
+      
+      return savedMessage;
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      
+      // Save to offline queue for later sync
+      this.saveOfflineMessage(challengeId, messageData);
+      
+      throw error;
+    }
+  }
+
+  // Sync offline messages
+  async syncOfflineMessages(challengeId) {
+    const offlineMessages = this.getOfflineMessages(challengeId);
+    if (offlineMessages.length === 0) return;
+
+    console.log(`Syncing ${offlineMessages.length} offline messages...`);
+
+    try {
+      for (const messageData of offlineMessages) {
+        await this.sendMessage(challengeId, messageData);
+      }
+      
+      // Clear offline messages after successful sync
+      this.clearOfflineMessages(challengeId);
+      console.log('Offline messages synced successfully');
+    } catch (error) {
+      console.error('Failed to sync offline messages:', error);
+    }
+  }
+
+  // Check for new messages (lightweight check)
+  async checkForNewMessages(challengeId) {
+    try {
+      // First check if user is logged in
+      const storedUser = localStorage.getItem('fitapp_user');
+      if (!storedUser) {
+        // User is not logged in, silently return without logging
+        return null;
+      }
+      
+      // Get JWT token for authorization
+      const token = localStorage.getItem('fitapp_jwt_token');
+      
+      // DO NOT LOG TOKEN INFO - This function is called too frequently
+      // Any logging here will spam the console
+      
+      if (!token) {
+        // Only warn once per 5 minutes to prevent log spam
+        const now = Date.now();
+        if (!this.hasWarnedAboutMissingToken || (now - this.lastTokenWarningTime) > 300000) {
+          console.warn('No JWT token found for chat API call');
+          this.hasWarnedAboutMissingToken = true;
+          this.lastTokenWarningTime = now;
+        }
+        return null;
+      }
+      
+      // Reset warning flag if token is found
+      this.hasWarnedAboutMissingToken = false;
+      
+      // Fetch all messages (backend sorts ascending, we'll get the last one)
+      const response = await fetch(`${API_BASE_URL}/api/chat/${challengeId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        // Throttle API error warnings - only log once per 5 minutes
+        const now = Date.now();
+        if (!this.lastApiErrorWarningTime || (now - this.lastApiErrorWarningTime) > 300000) {
+          console.warn(`Chat API call failed: ${response.status} ${response.statusText}`);
+          this.lastApiErrorWarningTime = now;
+          this.apiErrorWarningCount = 1;
+        } else {
+          this.apiErrorWarningCount++;
+        }
+        return null;
+      }
+      
+      // Reset error warning count on successful call
+      if (this.apiErrorWarningCount > 0) {
+        this.apiErrorWarningCount = 0;
+        this.lastApiErrorWarningTime = 0;
+      }
+
+      const messages = await response.json();
+      if (messages.length === 0) return null;
+
+      // Backend returns messages sorted ascending, so the last message is the newest
+      const latestMessage = messages[messages.length - 1];
+      const cachedMessages = this.loadFromCache(challengeId);
+      
+      if (cachedMessages.length === 0) return null;
+
+      const lastCachedMessage = cachedMessages[cachedMessages.length - 1];
+      
+      // Check if we have new messages by comparing timestamps
+      const latestTimestamp = new Date(latestMessage.timestamp).getTime();
+      const cachedTimestamp = new Date(lastCachedMessage.timestamp).getTime();
+      
+      if (latestTimestamp > cachedTimestamp) {
+        // Immediately update cache with the new message to prevent duplicate detections
+        // This prevents the same message from being detected as "new" on subsequent checks
+        const updatedCache = [...cachedMessages, latestMessage];
+        this.saveToCache(challengeId, updatedCache);
+        
+        return {
+          hasNew: true,
+          count: 1, // At least one new message
+          latestTimestamp: new Date(latestMessage.timestamp),
+          latestMessage: latestMessage // Include the latest message for notification customization
+        };
+      }
+
+      return { hasNew: false };
+    } catch (error) {
+      console.warn('Failed to check for new messages:', error);
+      return null;
+    }
+  }
+
+  // Clear cache for a challenge
+  clearCache(challengeId) {
+    try {
+      localStorage.removeItem(this.getCacheKey(challengeId));
+      localStorage.removeItem(this.getLastSyncKey(challengeId));
+      localStorage.removeItem(this.getOfflineMessagesKey(challengeId));
+    } catch (error) {
+      console.warn('Failed to clear cache:', error);
+    }
+  }
+
+  // Get cache statistics
+  getCacheStats(challengeId) {
+    try {
+      const messages = this.loadFromCache(challengeId);
+      const lastSync = this.getLastSync(challengeId);
+      const offlineMessages = this.getOfflineMessages(challengeId);
+      
+      return {
+        cachedMessages: messages.length,
+        lastSync: lastSync ? new Date(lastSync) : null,
+        offlineMessages: offlineMessages.length,
+        cacheSize: JSON.stringify(messages).length,
+        isStale: Date.now() - lastSync > 300000 // 5 minutes
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+}
+
+// Export singleton instance
+export const chatService = new ChatService();
+export default chatService;

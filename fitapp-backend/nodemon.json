@@ -1,0 +1,20 @@
+{
+  "watch": ["index.js", "routes/", "models/", "middleware/"],
+  "ext": "js",
+  "ignore": [
+    "node_modules/",
+    "logs/",
+    "uploads/",
+    "data/",
+    "*.log",
+    "*.tmp",
+    "scripts/",
+    "*.test.js",
+    "*.spec.js"
+  ],
+  "delay": "2500",
+  "legacyWatch": true,
+  "env": {
+    "NODE_ENV": "development"
+  }
+} 
