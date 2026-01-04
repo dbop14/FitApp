@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  mongoosedb:
+    image: mongo:4.4
+    container_name: fitapp-dev-db
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    volumes:
+      - mongo_data_dev:/data/db
+    networks:
+      - fitapp_dev
+
+  # Matrix Synapse Chat Server
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: fitapp-dev-synapse
+    ports:
+      - "8009:8008"
+    restart: unless-stopped
+    environment:
+      - SYNAPSE_SERVER_NAME=fitapp.local
+      - SYNAPSE_REPORT_STATS=no
+    volumes:
+      - synapse_data_dev:/data
+    command: ["run", "--config-path=/data/homeserver.yaml"]
+    networks:
+      - fitapp_dev
+
+  # Fitness Challenge Bot
+  fitness-bot:
+    build:
+      context: ../fitapp-bot
+      dockerfile: Dockerfile
+    container_name: fitapp-dev-bot
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=mongodb://mongoosedb:27017/fitapp
+      - MATRIX_HOMESERVER_URL=http://synapse:8008
+      - MATRIX_SERVER_NAME=fitapp.local
+      - BOT_USERNAME=fitness_motivator
+      - BOT_PASSWORD=${BOT_PASSWORD}
+    volumes:
+      - ../fitapp-bot:/app
+      - node_modules_bot:/app/node_modules
+    depends_on:
+      - mongoosedb
+      - synapse
+    networks:
+      - fitapp_dev
+
+  backend:
+    build:
+      context: ../fitapp-backend
+      dockerfile: Dockerfile
+    container_name: fitapp-dev-backend
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb://mongoosedb:27017/fitapp
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - MATRIX_HOMESERVER_URL=http://synapse:8008
+      - MATRIX_SERVER_NAME=fitapp.local
+      - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
+      - BOT_PASSWORD=${BOT_PASSWORD}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+    volumes:
+      - ../fitapp-backend:/app
+      - node_modules_backend:/app/node_modules
+    depends_on:
+      - mongoosedb
+      - synapse
+    networks:
+      - fitapp_dev
+
+  frontend:
+    build:
+      context: ../fitapp-frontend
+      dockerfile: Dockerfile
+    container_name: fitapp-dev-frontend
+    ports:
+      - "5174:5173"
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
+      - VITE_MATRIX_URL=http://synapse:8008
+    volumes:
+      - ../fitapp-frontend:/app
+      - node_modules_frontend:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - fitapp_dev
+
+volumes:
+  mongo_data_dev:
+  node_modules_backend:
+  node_modules_bot:
+  node_modules_frontend:
+  synapse_data_dev:
+
+networks:
+  fitapp_dev:
+    name: fitapp_dev
+
