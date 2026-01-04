@@ -78,6 +78,7 @@ services:
     volumes:
       - ../fitapp-backend:/app
       - node_modules_backend:/app/node_modules
+      - backend_uploads_dev:/app/uploads
     depends_on:
       - mongoosedb
       - synapse
@@ -109,6 +110,7 @@ volumes:
   node_modules_bot:
   node_modules_frontend:
   synapse_data_dev:
+  backend_uploads_dev:
 
 networks:
   fitapp_dev:

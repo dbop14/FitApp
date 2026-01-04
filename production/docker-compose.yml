@@ -70,6 +70,8 @@ services:
       - BOT_PASSWORD=${BOT_PASSWORD}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+    volumes:
+      - backend_uploads_prod:/app/uploads
     depends_on:
       - mongoosedb
       - synapse
@@ -100,6 +102,7 @@ services:
 volumes:
   mongo_data_prod:
   synapse_data_prod:
+  backend_uploads_prod:
 
 networks:
   fitapp_prod:
