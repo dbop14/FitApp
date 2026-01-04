@@ -1,0 +1,37 @@
+# ⚠️ AI ASSISTANT WARNING ⚠️
+# DO NOT MODIFY EXISTING HOSTNAMES OR TUNNEL ID
+# DO NOT CHANGE THE CREDENTIALS FILE PATH
+# SEE AI_CONFIGURATION_REFERENCE.md FOR DETAILS
+#
+# This file is for reference only - the actual tunnel is managed
+# through the existing cloudflare-synology-tunnel container
+# using token-based authentication
+
+tunnel: 72eba6db-169d-4bb3-86f4-b53103ee3e5d
+credentials-file: /etc/cloudflared/creds/credentials.json
+
+# Connector configuration
+connector-id: 54b29340-4771-4733-902c-e26ea554b776
+
+ingress:
+  # API routes (must come first for path matching)
+  - hostname: fitapp.herringm.com
+    path: /api/*
+    service: http://backend:3000
+    originRequest:
+      noTLSVerify: true
+
+  # Frontend application (catch-all for the domain)
+  - hostname: fitapp.herringm.com
+    service: http://frontend:5173
+    originRequest:
+      noTLSVerify: true
+
+  # Matrix Synapse (if you want external access)
+  - hostname: chat.fitapp.herringm.com
+    service: http://synapse:8008
+    originRequest:
+      noTLSVerify: true
+
+  # Catch-all rule - redirect to frontend
+  - service: http_status:404

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: fitapp-nginx
+    ports:
+      - "8080:80"
+      - "8443:443"
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl:/etc/nginx/ssl
+    networks:
+      - fitapp_default
+    depends_on:
+      - fitapp-backend
+      - fitapp-frontend
+
+networks:
+  fitapp_default:
+    external: true
+

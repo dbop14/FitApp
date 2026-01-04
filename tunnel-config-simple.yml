@@ -1,0 +1,18 @@
+tunnel: 72eba6db-169d-4bb3-86f4-b53103ee3e5d
+credentials-file: /etc/cloudflared/creds/credentials.json
+
+# Connector configuration
+connector-id: 54b29340-4771-4733-902c-e26ea554b776
+
+ingress:
+  # Main FitApp frontend
+  - hostname: fitapp.herringm.com
+    service: http://fitapp-frontend:5173
+
+  # API endpoints
+  - hostname: fitapp.herringm.com
+    path: /api/*
+    service: http://fitapp-backend:3000
+
+  # Catch-all - serve frontend
+  - service: http://fitapp-frontend:5173

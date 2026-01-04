@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: fitapp-nginx-ssl
+    ports:
+      - "8081:80"
+      - "8444:443"
+    restart: unless-stopped
+    volumes:
+      - ./nginx-init.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl:/etc/nginx/ssl
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    networks:
+      - fitapp_default
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    container_name: fitapp-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot --webroot-path=/var/www/certbot --email dbop@herringm.com --agree-tos --no-eff-email -d fitapp.herringm.com -d www.fitapp.herringm.com
+    depends_on:
+      - nginx
+
+networks:
+  fitapp_default:
+    external: true
