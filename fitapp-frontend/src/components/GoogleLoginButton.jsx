@@ -93,8 +93,12 @@ const GoogleLoginButton = ({ onComplete }) => {
       return
     }
 
-    // Get client_id from environment variable or use fallback
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com'
+    // Get client_id from environment variable (required)
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      console.error('VITE_GOOGLE_CLIENT_ID is not set in environment variables')
+      return
+    }
     
     if (!clientId || clientId.trim() === '') {
       console.error('❌ Google Client ID is missing')
