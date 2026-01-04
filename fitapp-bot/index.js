@@ -689,13 +689,17 @@ const checkNewParticipants = async () => {
             
             try {
               roomOptions.room_alias_name = `challenge-${challenge._id}`;
-              roomId = await matrixClient.createRoom(roomOptions);
+              const createResponse = await matrixClient.createRoom(roomOptions);
+              // Handle both string (old API) and object (new API) responses
+              roomId = typeof createResponse === 'string' ? createResponse : (createResponse.room_id || createResponse);
               console.log(`✅ Created Matrix room: ${roomId}`);
             } catch (createErr) {
               // If alias is taken, create without alias
               if (createErr.data && createErr.data.errcode === 'M_ROOM_IN_USE') {
                 delete roomOptions.room_alias_name;
-                roomId = await matrixClient.createRoom(roomOptions);
+                const createResponse = await matrixClient.createRoom(roomOptions);
+                // Handle both string (old API) and object (new API) responses
+                roomId = typeof createResponse === 'string' ? createResponse : (createResponse.room_id || createResponse);
                 console.log(`✅ Created Matrix room (without alias): ${roomId}`);
               } else {
                 throw createErr;

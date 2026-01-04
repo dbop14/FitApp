@@ -92,7 +92,9 @@ const createMatrixRoom = async (challenge) => {
     // Try with alias first, if that fails, try without
     try {
       roomOptions.room_alias_name = `challenge-${challenge._id}`;
-      const roomId = await matrixClient.createRoom(roomOptions);
+      const createResponse = await matrixClient.createRoom(roomOptions);
+      // Handle both string (old API) and object (new API) responses
+      const roomId = typeof createResponse === 'string' ? createResponse : (createResponse.room_id || createResponse);
       console.log(`✅ Created Matrix room: ${roomId}`);
       challenge.matrixRoomId = roomId;
       await challenge.save();
@@ -102,7 +104,9 @@ const createMatrixRoom = async (challenge) => {
       if (createErr.data && createErr.data.errcode === 'M_ROOM_IN_USE') {
         console.log(`   Room alias is taken, creating room without alias...`);
         delete roomOptions.room_alias_name;
-        const roomId = await matrixClient.createRoom(roomOptions);
+        const createResponse = await matrixClient.createRoom(roomOptions);
+        // Handle both string (old API) and object (new API) responses
+        const roomId = typeof createResponse === 'string' ? createResponse : (createResponse.room_id || createResponse);
         console.log(`✅ Created Matrix room (without alias): ${roomId}`);
         challenge.matrixRoomId = roomId;
         await challenge.save();
