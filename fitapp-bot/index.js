@@ -217,9 +217,11 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
 
 // Send card message with text message below
 const sendCardMessage = async (roomId, message, challengeId, botName, cardType, cardData, userPicture = null, userId = null) => {
+  console.log(`📤 sendCardMessage called: type=${cardType}, roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}`);
   debugLog('sendCardMessage:entry', 'sendCardMessage called', { hasMatrixClient: !!matrixClient, matrixConnected, hasRoomId: !!roomId, challengeId: challengeId?.toString(), cardType });
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
+    console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
     debugLog('sendCardMessage:earlyReturn', 'Early return - missing requirements', { hasMatrixClient: !!matrixClient, matrixConnected, hasRoomId: !!roomId });
     return false;
   }
@@ -232,7 +234,8 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
     };
 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
-    console.log(`✅ Sent message to room ${roomId}: ${message.substring(0, 50)}...`);
+    console.log(`✅ Sent message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
+    console.log(`   Message type: ${cardType}, Challenge ID: ${challengeId?.toString() || 'none'}`);
     debugLog('sendCardMessage:matrixSent', 'Message sent to Matrix', { roomId, messageLength: message.length, cardType });
     
     // Save card message to MongoDB
@@ -273,8 +276,10 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
 // Update sendMatrixMessage to also save to MongoDB (for backward compatibility)
 const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitness Motivator') => {
+  console.log(`📤 sendMatrixMessage called: roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}, challengeId=${challengeId?.toString() || 'none'}`);
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
+    console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
     return false;
   }
 
@@ -285,7 +290,8 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
     };
 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
-    console.log(`✅ Sent message to room ${roomId}: ${message.substring(0, 50)}...`);
+    console.log(`✅ Sent Matrix message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
+    console.log(`   Bot name: ${botName}, Challenge ID: ${challengeId?.toString() || 'none'}`);
     
     // Also save to MongoDB so it appears in the app
     if (challengeId && mongoConnected) {
@@ -335,13 +341,19 @@ const checkStepPointChanges = async () => {
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     debugLog('checkStepPointChanges:participantsFound', 'Participants found', { count: participants.length });
     
+    let totalChecked = 0;
+    let increasesFound = 0;
     for (const participant of participants) {
+      totalChecked++;
       const key = `${participant.challengeId}-${participant.userId}`;
       const previousPoints = previousStepPoints.get(key) || 0;
       const currentPoints = participant.stepGoalPoints || 0;
+      
+      console.log(`   [${totalChecked}/${participants.length}] Participant ${participant.userId} in challenge ${participant.challengeId}: previous=${previousPoints}, current=${currentPoints}`);
 
       // If points increased, someone earned a step point
       if (currentPoints > previousPoints) {
+        increasesFound++;
         console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
         previousStepPoints.set(key, currentPoints);
         
@@ -401,7 +413,7 @@ const checkStepPointChanges = async () => {
         previousStepPoints.set(key, currentPoints);
       }
     }
-    console.log(`✅ Finished checking step point changes for ${participants.length} participants`);
+    console.log(`✅ Finished checking step point changes: ${totalChecked} participants checked, ${increasesFound} increases found, ${previousStepPoints.size} tracked in map`);
   } catch (err) {
     console.error('❌ Error checking step point changes:', err.message);
     console.error(err.stack);
@@ -441,13 +453,22 @@ const sendDailyStepUpdate = async () => {
     debugLog('sendDailyStepUpdate:challengesFound', 'Active challenges found', { count: challenges.length, now: now.toISOString() });
 
     for (const challenge of challenges) {
-      if (!challenge.matrixRoomId) continue;
+      console.log(`📊 Processing challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}`);
+      if (!challenge.matrixRoomId) {
+        console.log(`   ⏭️ Skipping - no matrixRoomId`);
+        continue;
+      }
 
       // Skip if winner already announced
       const challengeKey = challenge._id.toString();
-      if (announcedWinners.has(challengeKey)) continue;
+      if (announcedWinners.has(challengeKey)) {
+        console.log(`   ⏭️ Skipping - winner already announced`);
+        continue;
+      }
+      console.log(`   ✅ Challenge is active, preparing daily step update`);
 
       const participants = await ChallengeParticipant.find({ challengeId: challenge._id.toString() });
+      console.log(`   Found ${participants.length} participants`);
       const userMap = new Map();
       
       // Get all user info
@@ -486,6 +507,7 @@ const sendDailyStepUpdate = async () => {
       }
 
       const botName = challenge.botName || 'Fitness Motivator';
+      console.log(`   📤 Sending daily step update to room ${challenge.matrixRoomId} with ${participantData.length} participants`);
       // Send as plain text message, not a card
       await sendMatrixMessage(
         challenge.matrixRoomId,
@@ -493,28 +515,43 @@ const sendDailyStepUpdate = async () => {
         challenge._id,
         botName
       );
+      console.log(`   ✅ Daily step update sent for challenge ${challenge.name}`);
     }
+    console.log(`✅ Finished sending daily step updates`);
   } catch (err) {
     console.error('❌ Error sending daily step update:', err.message);
+    console.error(err.stack);
   }
 };
 
 // Send weigh-in reminder (plain text, not a card)
 const sendWeighInReminder = async () => {
-  if (!mongoConnected) return;
+  console.log('⚖️ sendWeighInReminder:entry - mongoConnected:', mongoConnected);
+  if (!mongoConnected) {
+    console.log('⚖️ sendWeighInReminder:earlyReturn - MongoDB not connected');
+    return;
+  }
 
   try {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+    const todayDayName = getDayName(now);
+    console.log(`⚖️ Checking weigh-in reminders for ${todayDayName} (${today})`);
     
     // Find challenges that are active (started and not ended)
     const challenges = await Challenge.find({
       startDate: { $lte: now.toISOString().split('T')[0] },
       endDate: { $gte: now.toISOString().split('T')[0] }
     });
+    console.log(`⚖️ Found ${challenges.length} active challenges`);
 
     for (const challenge of challenges) {
-      if (!challenge.matrixRoomId || !isWeighInDay(challenge.weighInDay)) continue;
+      console.log(`⚖️ Checking challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}, weighInDay=${challenge.weighInDay}, isWeighInDay=${isWeighInDay(challenge.weighInDay)}`);
+      if (!challenge.matrixRoomId || !isWeighInDay(challenge.weighInDay)) {
+        if (!challenge.matrixRoomId) console.log(`   ⏭️ Skipping - no matrixRoomId`);
+        if (!isWeighInDay(challenge.weighInDay)) console.log(`   ⏭️ Skipping - not weigh-in day (today is ${todayDayName}, weigh-in day is ${challenge.weighInDay})`);
+        continue;
+      }
 
       // Skip if winner already announced
       const challengeKey = challenge._id.toString();
@@ -543,6 +580,7 @@ const sendWeighInReminder = async () => {
       }
       
       const botName = challenge.botName || 'Fitness Motivator';
+      console.log(`⚖️ Sending weigh-in reminder to room ${challenge.matrixRoomId} for challenge ${challenge.name}`);
       // Send as card message
       await sendCardMessage(
         challenge.matrixRoomId,
@@ -558,9 +596,12 @@ const sendWeighInReminder = async () => {
         null, // No user picture for weigh-in reminders
         null  // No userId for bot messages
       );
+      console.log(`✅ Weigh-in reminder sent for challenge ${challenge.name}`);
     }
+    console.log(`✅ Finished checking weigh-in reminders`);
   } catch (err) {
     console.error('❌ Error sending weigh-in reminder:', err.message);
+    console.error(err.stack);
   }
 };
 
@@ -569,7 +610,11 @@ const celebratedWeightLoss = new Set(); // challengeId-userId-date
 
 // Check for weight loss celebrations (runs after weigh-in day)
 const checkWeightLossCelebrations = async () => {
-  if (!mongoConnected) return;
+  console.log('🎉 checkWeightLossCelebrations:entry - mongoConnected:', mongoConnected);
+  if (!mongoConnected) {
+    console.log('🎉 checkWeightLossCelebrations:earlyReturn - MongoDB not connected');
+    return;
+  }
 
   try {
     const now = new Date();
@@ -577,28 +622,46 @@ const checkWeightLossCelebrations = async () => {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDay = getDayName(yesterday);
     const todayStr = now.toISOString().split('T')[0];
+    console.log(`🎉 Checking weight loss celebrations - yesterday was ${yesterdayDay}, today is ${todayStr}`);
 
     // Check challenges that had weigh-in day yesterday
     const challenges = await Challenge.find({
       startDate: { $lte: now.toISOString().split('T')[0] },
       endDate: { $gte: now.toISOString().split('T')[0] }
     });
+    console.log(`🎉 Found ${challenges.length} active challenges`);
 
     for (const challenge of challenges) {
-      if (!challenge.matrixRoomId || !challenge.weighInDay) continue;
+      console.log(`🎉 Checking challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}, weighInDay=${challenge.weighInDay}, yesterdayDay=${yesterdayDay}`);
+      if (!challenge.matrixRoomId || !challenge.weighInDay) {
+        if (!challenge.matrixRoomId) console.log(`   ⏭️ Skipping - no matrixRoomId`);
+        if (!challenge.weighInDay) console.log(`   ⏭️ Skipping - no weighInDay set`);
+        continue;
+      }
       
       // Only check if yesterday was weigh-in day
-      if (yesterdayDay.toLowerCase() !== challenge.weighInDay.toLowerCase()) continue;
+      if (yesterdayDay.toLowerCase() !== challenge.weighInDay.toLowerCase()) {
+        console.log(`   ⏭️ Skipping - yesterday (${yesterdayDay}) was not weigh-in day (${challenge.weighInDay})`);
+        continue;
+      }
+      console.log(`   ✅ Yesterday was weigh-in day, checking participants for weight loss`);
 
       const participants = await ChallengeParticipant.find({ challengeId: challenge._id.toString() });
+      console.log(`   Found ${participants.length} participants for challenge ${challenge.name}`);
       
       for (const participant of participants) {
-        if (!participant.startingWeight || !participant.lastWeight) continue;
+        console.log(`   Participant ${participant.userId}: startingWeight=${participant.startingWeight}, lastWeight=${participant.lastWeight}`);
+        if (!participant.startingWeight || !participant.lastWeight) {
+          console.log(`     ⏭️ Skipping - missing weight data`);
+          continue;
+        }
 
         const weightLost = participant.startingWeight - participant.lastWeight;
+        console.log(`     Weight lost: ${weightLost.toFixed(1)} pounds`);
         
         // Only celebrate if weight was lost
         if (weightLost > 0) {
+          console.log(`     🎉 Weight loss detected! Sending celebration message`);
           const celebrationKey = `${challenge._id}-${participant.userId}-${todayStr}`;
           
           // Skip if already celebrated today
@@ -614,6 +677,7 @@ const checkWeightLossCelebrations = async () => {
             const firstName = userName.split(' ')[0];
             const message = `Congratulations ${firstName}! You've lost ${weightLost.toFixed(1)} pounds since the start of the challenge. That's amazing progress - keep up the great work!`;
             const botName = challenge.botName || 'Fitness Motivator';
+            console.log(`     📤 Sending weight loss celebration to room ${challenge.matrixRoomId}`);
             await sendCardMessage(
               challenge.matrixRoomId,
               message,
@@ -629,49 +693,77 @@ const checkWeightLossCelebrations = async () => {
               user.picture,
               participant.userId
             );
+            console.log(`     ✅ Weight loss celebration sent for ${firstName}`);
             
             // Mark as celebrated
             celebratedWeightLoss.add(celebrationKey);
+          } else {
+            console.log(`     ⏭️ No weight loss to celebrate (weightLost=${weightLost.toFixed(1)})`);
           }
         }
       }
+      console.log(`✅ Finished checking weight loss celebrations for challenge ${challenge.name}`);
     }
+    console.log(`✅ Finished checking all weight loss celebrations`);
   } catch (err) {
     console.error('❌ Error checking weight loss celebrations:', err.message);
+    console.error(err.stack);
   }
 };
 
 // Announce challenge winner
 const announceChallengeWinner = async () => {
-  if (!mongoConnected) return;
+  console.log('🏆 announceChallengeWinner:entry - mongoConnected:', mongoConnected);
+  if (!mongoConnected) {
+    console.log('🏆 announceChallengeWinner:earlyReturn - MongoDB not connected');
+    return;
+  }
 
   try {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+    console.log(`🏆 Checking for challenge winners - today is ${today}`);
 
     // Find challenges that ended today or yesterday (in case we missed it)
     const challenges = await Challenge.find({
       endDate: { $lte: today }
     });
+    console.log(`🏆 Found ${challenges.length} challenges that have ended`);
 
     for (const challenge of challenges) {
-      if (!challenge.matrixRoomId) continue;
+      console.log(`🏆 Checking challenge ${challenge.name}: endDate=${challenge.endDate}, matrixRoomId=${!!challenge.matrixRoomId}`);
+      if (!challenge.matrixRoomId) {
+        console.log(`   ⏭️ Skipping - no matrixRoomId`);
+        continue;
+      }
 
       const challengeKey = challenge._id.toString();
       
       // Skip if we've already announced winner for this challenge
-      if (announcedWinners.has(challengeKey)) continue;
+      if (announcedWinners.has(challengeKey)) {
+        console.log(`   ⏭️ Skipping - winner already announced`);
+        continue;
+      }
       
       const participants = await ChallengeParticipant.find({ challengeId: challengeKey })
         .sort({ points: -1 })
         .limit(1);
+      console.log(`   Found ${participants.length} participants (checking winner)`);
 
-      if (participants.length === 0) continue;
+      if (participants.length === 0) {
+        console.log(`   ⏭️ Skipping - no participants`);
+        continue;
+      }
 
       const winner = participants[0];
+      console.log(`   Winner: ${winner.userId} with ${winner.points} points`);
       const user = await User.findOne({ googleId: winner.userId });
       
-      if (!user) continue;
+      if (!user) {
+        console.log(`   ⏭️ Skipping - winner user not found`);
+        continue;
+      }
+      console.log(`   ✅ Winner user found: ${user.name || user.email}`);
 
       const userName = user.name || user.email || 'Unknown';
       const firstName = userName.split(' ')[0];
@@ -686,6 +778,7 @@ const announceChallengeWinner = async () => {
       message += `\n\nCongratulations on your dedication and hard work!`;
 
       const botName = challenge.botName || 'Fitness Motivator';
+      console.log(`   📤 Sending winner announcement to room ${challenge.matrixRoomId}`);
       await sendCardMessage(
         challenge.matrixRoomId,
         message,
@@ -702,12 +795,15 @@ const announceChallengeWinner = async () => {
         user.picture,
         winner.userId
       );
+      console.log(`   ✅ Winner announcement sent for challenge ${challenge.name}`);
       
       // Mark as announced - this prevents all future messages for this challenge
       announcedWinners.add(challengeKey);
     }
+    console.log(`✅ Finished checking all challenge winners`);
   } catch (err) {
     console.error('❌ Error announcing challenge winner:', err.message);
+    console.error(err.stack);
   }
 };
 
@@ -912,7 +1008,11 @@ const checkNewParticipants = async () => {
 
 // Send challenge start reminders (plain text, not a card)
 const sendChallengeStartReminders = async () => {
-  if (!mongoConnected) return;
+  console.log('📅 sendChallengeStartReminders:entry - mongoConnected:', mongoConnected);
+  if (!mongoConnected) {
+    console.log('📅 sendChallengeStartReminders:earlyReturn - MongoDB not connected');
+    return;
+  }
 
   try {
     const now = new Date();
@@ -920,18 +1020,27 @@ const sendChallengeStartReminders = async () => {
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    console.log(`📅 Checking challenge start reminders - today is ${today}, looking for challenges starting ${tomorrowStr}`);
 
     // Find challenges starting tomorrow
     const challenges = await Challenge.find({
       startDate: tomorrowStr
     });
+    console.log(`📅 Found ${challenges.length} challenges starting tomorrow`);
 
     for (const challenge of challenges) {
-      if (!challenge.matrixRoomId) continue;
+      console.log(`📅 Checking challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}, startDate=${challenge.startDate}`);
+      if (!challenge.matrixRoomId) {
+        console.log(`   ⏭️ Skipping - no matrixRoomId`);
+        continue;
+      }
 
       // Skip if winner already announced
       const challengeKey = challenge._id.toString();
-      if (announcedWinners.has(challengeKey)) continue;
+      if (announcedWinners.has(challengeKey)) {
+        console.log(`   ⏭️ Skipping - winner already announced`);
+        continue;
+      }
 
       const startDate = new Date(challenge.startDate);
       const formattedDate = startDate.toLocaleDateString('en-US', { 
@@ -946,6 +1055,7 @@ const sendChallengeStartReminders = async () => {
       message += `\n\nGet ready to crush your daily step goal of ${challenge.stepGoal} steps!`;
 
       const botName = challenge.botName || 'Fitness Motivator';
+      console.log(`   📤 Sending challenge start reminder to room ${challenge.matrixRoomId}`);
       // Send as plain text message, not a card
       await sendMatrixMessage(
         challenge.matrixRoomId,
@@ -953,9 +1063,12 @@ const sendChallengeStartReminders = async () => {
         challenge._id,
         botName
       );
+      console.log(`   ✅ Challenge start reminder sent for ${challenge.name}`);
     }
+    console.log(`✅ Finished checking challenge start reminders`);
   } catch (err) {
     console.error('❌ Error sending challenge start reminders:', err.message);
+    console.error(err.stack);
   }
 };
 
@@ -1014,6 +1127,12 @@ const setupCronJobs = () => {
   }, 30 * 1000);
 
   console.log('✅ Cron jobs and monitoring intervals set up');
+  console.log('📋 Scheduled cron jobs:');
+  console.log('   - Daily step updates: 12:00 PM and 9:00 PM');
+  console.log('   - Weigh-in reminders: 8:00 AM');
+  console.log('   - Weight loss celebrations: 9:00 AM');
+  console.log('   - Challenge winners: 10:00 AM');
+  console.log('   - Challenge start reminders: 8:00 AM');
   debugLog('setupCronJobs:complete', 'Cron jobs and intervals set up', {});
   
   // Test intervals immediately to verify they work
