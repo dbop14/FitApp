@@ -16,9 +16,6 @@ const useGoogleFit = () => {
     const end = new Date()
 
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGoogleFit.js:19',message:'useGoogleFit API call - before fetch',data:{hasToken:!!token,tokenLength:token?token.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       let response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
@@ -35,9 +32,6 @@ const useGoogleFit = () => {
           endTimeMillis: end.getTime()
         }),
       })
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGoogleFit.js:34',message:'useGoogleFit API call - after fetch',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
 
       // If we get 401 (Unauthorized), the token is invalid
       if (response.status === 401) {

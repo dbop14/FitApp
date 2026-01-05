@@ -580,10 +580,6 @@ const Dashboard = () => {
 
   // Handle weight submission
   const handleWeightSubmitted = async (newWeight) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:570',message:'handleWeightSubmitted called',data:{newWeight,activeChallengeId:activeChallenge?._id,userId:user?.sub},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
     // Refresh participant data immediately
     if (activeChallenge?._id && user?.sub) {
       try {
@@ -596,16 +592,8 @@ const Dashboard = () => {
         if (participantResponse.ok) {
           const participant = await participantResponse.json()
           
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:577',message:'Participant data received',data:{participant:participant.participant,startingWeight:participant.participant?.startingWeight,lastWeight:participant.participant?.lastWeight,fullResponse:participant},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
-          
           // Update participant data state
           setParticipantData(participant.participant)
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:582',message:'Participant data set, invalidating cache',data:{participantData:participant.participant,startingWeightSet:participant.participant?.startingWeight},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           
           // Invalidate React Query cache to ensure UI updates
           await queryClient.invalidateQueries({ queryKey: ['challenges', user.sub] })
@@ -616,17 +604,9 @@ const Dashboard = () => {
         } else {
           const errorText = await participantResponse.text().catch(() => 'Unknown error')
           console.error('Failed to fetch participant data after weight submission:', errorText)
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:590',message:'Participant fetch failed',data:{status:participantResponse.status,error:errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
         }
       } catch (err) {
         console.error('Failed to refresh participant data:', err)
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:595',message:'Failed to refresh participant data',data:{error:err.message,stack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
       }
     }
     
@@ -955,10 +935,6 @@ const Dashboard = () => {
                   firstWeighInDay.setHours(0, 0, 0, 0);
                   firstWeighInDayHasPassed = today >= firstWeighInDay;
                 }
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:920',message:'Calculating weight subtitle',data:{challengeHasStarted,firstWeighInDayHasPassed,startingWeight:participantData?.startingWeight,participantData:participantData},timestamp:Date.now(),sessionId:'debug-session',runId:'weight-submit',hypothesisId:'F'})}).catch(()=>{});
-                // #endregion
                 
                 // Only show starting weight if:
                 // 1. Challenge has started
