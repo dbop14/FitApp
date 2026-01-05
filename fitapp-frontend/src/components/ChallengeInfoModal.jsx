@@ -2,6 +2,7 @@ import { useState, useContext, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { getApiUrl } from '../utils/apiService'
+import { compressImage } from '../utils/imageCompression'
 
 const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
   const { user } = useContext(UserContext)
@@ -40,41 +41,186 @@ const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
     }
   }, [isOpen, onClose])
   const [editData, setEditData] = useState({
-    name: challenge?.name || '',
-    startDate: challenge?.startDate || '',
-    endDate: challenge?.endDate || '',
-    stepGoal: challenge?.stepGoal || 8000,
-    botName: challenge?.botName || '',
-    botAvatar: challenge?.botAvatar || '',
-    isPublic: challenge?.isPublic ?? true,
-    weighInDay: challenge?.weighInDay || 'monday'
+    name: challenge?.name || ''
   })
+  const [selectedPhoto, setSelectedPhoto] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const isAdmin = challenge?.admin === user?.sub || challenge?.creatorEmail === user?.email
 
-  const handleSave = () => {
-    onUpdate({ ...editData, userGoogleId: user?.sub })
-    setIsEditing(false)
+  // Update editData when challenge changes
+  useEffect(() => {
+    if (challenge) {
+      setEditData({
+        name: challenge.name || ''
+      })
+      setSelectedPhoto(null)
+      setPhotoPreview(null)
+    }
+  }, [challenge])
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file')
+      e.target.value = ''
+      return
+    }
+
+    try {
+      // Compress the image to stay under 5MB
+      const compressedFile = await compressImage(file, 5, 1920)
+      setSelectedPhoto(compressedFile)
+      
+      // Create preview URL from compressed file
+      const reader = new FileReader()
+      reader.onload = (e) => setPhotoPreview(e.target.result)
+      reader.onerror = () => {
+        alert('Failed to read image file')
+        e.target.value = ''
+      }
+      reader.readAsDataURL(compressedFile)
+    } catch (err) {
+      alert(err.message || 'Failed to process image. Please try a different image.')
+      e.target.value = ''
+    }
+  }
+
+  const removePhoto = () => {
+    setSelectedPhoto(null)
+    setPhotoPreview(null)
+    // Reset file input
+    const fileInput = document.getElementById('challenge-photo-edit')
+    if (fileInput) fileInput.value = ''
+  }
+
+  const handleSave = async () => {
+    if (!challenge?._id) {
+      alert('Challenge ID is missing. Please refresh and try again.')
+      return
+    }
+
+    if (!user?.sub) {
+      alert('User information is missing. Please log in again.')
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      const apiUrl = getApiUrl()
+      let nameUpdated = false
+      let photoUpdated = false
+      
+      // First, update the challenge name if it changed
+      if (editData.name !== challenge.name && editData.name.trim()) {
+        const updateResponse = await fetch(`${apiUrl}/api/challenge/${challenge._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: editData.name.trim(),
+            userGoogleId: user.sub
+          })
+        })
+
+        if (!updateResponse.ok) {
+          const errorData = await updateResponse.json().catch(() => ({ error: 'Failed to update challenge' }))
+          throw new Error(errorData.error || 'Failed to update challenge name')
+        }
+
+        nameUpdated = true
+        console.log('✅ Challenge name updated')
+      }
+
+      // Then, upload photo if one was selected
+      if (selectedPhoto) {
+        try {
+          const formData = new FormData()
+          formData.append('photo', selectedPhoto)
+
+          const photoResponse = await fetch(`${apiUrl}/api/challenge/${challenge._id}/photo`, {
+            method: 'PUT',
+            body: formData
+          })
+
+          if (!photoResponse.ok) {
+            const errorText = await photoResponse.text()
+            console.error('❌ Photo upload failed:', errorText)
+            
+            // Check if it's a file size error
+            if (errorText.includes('File too large') || errorText.includes('MulterError')) {
+              throw new Error('File is too large. Maximum size is 5MB. Please choose a smaller image.')
+            }
+            
+            throw new Error(`Photo upload failed: ${errorText}`)
+          }
+
+          photoUpdated = true
+          const photoResult = await photoResponse.json()
+          console.log('✅ Photo uploaded successfully:', photoResult)
+        } catch (photoError) {
+          console.error('❌ Photo upload failed:', photoError)
+          if (nameUpdated) {
+            alert(`Challenge name was updated, but photo upload failed: ${photoError.message}`)
+          } else {
+            throw photoError
+          }
+        }
+      }
+
+      // If nothing was updated, just close the editor
+      if (!nameUpdated && !photoUpdated) {
+        setIsEditing(false)
+        setIsSaving(false)
+        return
+      }
+
+      // Fetch the updated challenge from the backend to get all latest data
+      const fetchResponse = await fetch(`${apiUrl}/api/challenge/${challenge._id}`)
+      if (fetchResponse.ok) {
+        const updatedChallenge = await fetchResponse.json()
+        onUpdate(updatedChallenge)
+        console.log('✅ Challenge updated successfully')
+      } else {
+        // If fetch fails, construct updated challenge from what we know
+        const updatedChallenge = {
+          ...challenge,
+          name: editData.name.trim() || challenge.name
+        }
+        onUpdate(updatedChallenge)
+        console.log('⚠️ Updated challenge locally (could not fetch from server)')
+      }
+
+      setIsEditing(false)
+      setSelectedPhoto(null)
+      setPhotoPreview(null)
+    } catch (err) {
+      console.error('❌ Error saving challenge:', err)
+      alert(`Error updating challenge: ${err.message}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleCancel = () => {
     setEditData({
-      name: challenge?.name || '',
-      startDate: challenge?.startDate || '',
-      endDate: challenge?.endDate || '',
-      stepGoal: challenge?.stepGoal || 8000,
-      botName: challenge?.botName || '',
-      botAvatar: challenge?.botAvatar || '',
-      isPublic: challenge?.isPublic ?? true,
-      weighInDay: challenge?.weighInDay || 'monday'
+      name: challenge?.name || ''
     })
+    setSelectedPhoto(null)
+    setPhotoPreview(null)
     setIsEditing(false)
   }
 
   const handleEndChallenge = () => {
     if (window.confirm('Are you sure you want to end this challenge? This will set the end date to today.')) {
       const today = new Date().toISOString().split('T')[0]
-      onUpdate({ ...editData, endDate: today, userGoogleId: user?.sub })
+      onUpdate({ ...challenge, endDate: today, userGoogleId: user?.sub })
       onClose()
     }
   }
@@ -341,114 +487,78 @@ const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
                     value={editData.name}
                     onChange={(e) => setEditData({ ...editData, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Start Date
-                    </label>
-                    <input
-                      type="date"
-                      value={editData.startDate}
-                      onChange={(e) => setEditData({ ...editData, startDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      End Date
-                    </label>
-                    <input
-                      type="date"
-                      value={editData.endDate}
-                      onChange={(e) => setEditData({ ...editData, endDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
+                {/* Challenge Photo Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Daily Step Goal
-                  </label>
-                  <input
-                    type="number"
-                    value={editData.stepGoal}
-                    onChange={(e) => setEditData({ ...editData, stepGoal: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bot Avatar
-                    </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Photo</label>
+                  <div className="space-y-3">
+                    {/* File Input */}
                     <input
-                      type="text"
-                      value={editData.botAvatar}
-                      onChange={(e) => setEditData({ ...editData, botAvatar: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="🤖"
+                      id="challenge-photo-edit"
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
+                    
+                    {/* Current Photo Preview */}
+                    {!photoPreview && challenge?.photo && (
+                      <div className="relative">
+                        <img
+                          src={`${getApiUrl()}${challenge.photo}`}
+                          alt="Current challenge photo"
+                          className="w-full h-32 object-cover rounded-md border border-gray-200"
+                          onError={(e) => {
+                            e.target.style.display = 'none'
+                          }}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Current photo</p>
+                      </div>
+                    )}
+                    
+                    {/* New Photo Preview */}
+                    {photoPreview && (
+                      <div className="relative">
+                        <img
+                          src={photoPreview}
+                          alt="New challenge photo preview"
+                          className="w-full h-32 object-cover rounded-md border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
+                          aria-label="Remove photo"
+                        >
+                          <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <p className="text-xs text-gray-500 mt-1">New photo preview</p>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500">
+                      Upload a new photo to replace the current one. Images will be compressed automatically. Max size: 5MB. Supported formats: JPG, PNG, GIF.
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bot Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editData.botName}
-                      onChange={(e) => setEditData({ ...editData, botName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Weekly Weigh-in Day
-                  </label>
-                  <select
-                    value={editData.weighInDay}
-                    onChange={(e) => setEditData({ ...editData, weighInDay: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="monday">Monday</option>
-                    <option value="tuesday">Tuesday</option>
-                    <option value="wednesday">Wednesday</option>
-                    <option value="thursday">Thursday</option>
-                    <option value="friday">Friday</option>
-                    <option value="saturday">Saturday</option>
-                    <option value="sunday">Sunday</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    checked={editData.isPublic}
-                    onChange={(e) => setEditData({ ...editData, isPublic: e.target.checked })}
-                    className="mr-2"
-                  />
-                  <label htmlFor="isPublic" className="text-sm text-gray-700">
-                    Public Challenge
-                  </label>
                 </div>
 
                 <div className="flex space-x-3 pt-4">
                   <button
                     onClick={handleSave}
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md font-medium"
+                    disabled={isSaving}
+                    className={`flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Save Changes
+                    {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                   <button
                     onClick={handleCancel}
-                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-md font-medium"
+                    disabled={isSaving}
+                    className={`flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-md font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Cancel
                   </button>

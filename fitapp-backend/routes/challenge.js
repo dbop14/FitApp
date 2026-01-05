@@ -833,6 +833,9 @@ router.put('/:challengeId/participant/:userId/weight', async (req, res) => {
       user.weight = weightValue;
       await user.save();
     }
+    
+    // Store user name for notification (reuse user variable if available)
+    const userName = user?.name || 'A participant';
 
     // Store historical weight data for the specified date (manual entry)
     // Use the 'today' variable which may be from user's local date or server date
@@ -867,6 +870,42 @@ router.put('/:challengeId/participant/:userId/weight', async (req, res) => {
     
 
     console.log(`✅ Updated weight for participant ${userId} in challenge ${challengeId}: ${weightValue} lbs`);
+
+    // Send bot notification to all users about the weigh-in
+    try {
+      if (challenge.matrixRoomId) {
+        // Create notification message (userName already retrieved above)
+        const botName = challenge.botName || 'Fitness Motivator';
+        const notificationMessage = `${userName} has weighed in`;
+        
+        // Send message to Matrix room
+        const client = await initializeMatrixClient();
+        if (client) {
+          const content = {
+            msgtype: 'm.text',
+            body: notificationMessage,
+          };
+          await client.sendEvent(challenge.matrixRoomId, 'm.room.message', content);
+          console.log(`✅ Sent weigh-in notification to Matrix room: ${notificationMessage}`);
+        }
+        
+        // Also save to MongoDB so it appears in the app chat
+        const ChatMessage = require('../models/ChatMessage');
+        const chatMessage = new ChatMessage({
+          challengeId: challengeId.toString(),
+          sender: botName,
+          message: notificationMessage,
+          isBot: true,
+          isSystem: false,
+          timestamp: new Date()
+        });
+        await chatMessage.save();
+        console.log(`✅ Saved weigh-in notification to MongoDB`);
+      }
+    } catch (notificationError) {
+      // Don't fail the weight update if notification fails
+      console.error('⚠️ Error sending weigh-in notification:', notificationError.message);
+    }
 
     const responseData = {
       success: true,

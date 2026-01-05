@@ -49,10 +49,10 @@ const ImageCropper = ({ image, onCropComplete, onCancel, aspectRatio = 1 }) => {
   }, [image, croppedAreaPixels, onCropComplete]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-75 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <h2 className="text-xl font-semibold text-gray-800">Crop Your Profile Picture</h2>
           <button
             onClick={onCancel}
@@ -65,8 +65,8 @@ const ImageCropper = ({ image, onCropComplete, onCancel, aspectRatio = 1 }) => {
           </button>
         </div>
 
-        {/* Cropper Container */}
-        <div className="relative" style={{ width: '100%', height: '500px', minHeight: '500px' }}>
+        {/* Cropper Container - Scrollable */}
+        <div className="relative flex-1 overflow-auto" style={{ width: '100%', minHeight: '400px' }}>
           {!image ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-gray-500">No image to crop</p>
@@ -94,8 +94,8 @@ const ImageCropper = ({ image, onCropComplete, onCancel, aspectRatio = 1 }) => {
           )}
         </div>
 
-        {/* Controls */}
-        <div className="p-4 border-t bg-gray-50">
+        {/* Controls - Fixed at bottom */}
+        <div className="p-4 border-t bg-gray-50 flex-shrink-0">
           <div className="space-y-4">
             {/* Zoom Control */}
             <div>
