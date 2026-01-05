@@ -71,11 +71,11 @@ export const dataUrlToFile = async (dataUrl, fileName = 'image.jpg') => {
 /**
  * Compress a data URL image (useful for cropped images)
  * @param {string} dataUrl - The image data URL
- * @param {number} maxSizeMB - Maximum file size in MB (default: 0.5)
- * @param {number} maxWidthOrHeight - Maximum width or height in pixels (default: 512)
+ * @param {number} maxSizeMB - Maximum file size in MB (default: 0.05 for profile photos)
+ * @param {number} maxWidthOrHeight - Maximum width or height in pixels (default: 400)
  * @returns {Promise<string>} - A promise that resolves to the compressed image data URL
  */
-export const compressDataUrl = async (dataUrl, maxSizeMB = 0.5, maxWidthOrHeight = 512) => {
+export const compressDataUrl = async (dataUrl, maxSizeMB = 0.05, maxWidthOrHeight = 400) => {
   // #region agent log
   const inputSizeBytes = dataUrl ? Math.round((dataUrl.length * 3) / 4) : 0;
   fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompression.js:78',message:'compressDataUrl entry',data:{inputDataUrlLength:dataUrl?.length,inputSizeBytes,inputSizeMB:(inputSizeBytes/1024/1024).toFixed(2),maxSizeMB,maxWidthOrHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});

@@ -110,7 +110,10 @@ mongoose.connection.on('reconnected', () => {
   console.log('✅ MongoDB reconnected');
 });
 
-app.use(express.json())
+// Increase JSON body size limit to 1MB to accommodate profile photos
+// Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)
+// But we allow up to 1MB for flexibility
+app.use(express.json({ limit: '1mb' }))
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));

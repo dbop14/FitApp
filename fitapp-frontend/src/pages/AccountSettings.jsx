@@ -95,11 +95,13 @@ const AccountSettings = () => {
     
     try {
       // Compress the cropped image with aggressive settings for profile photos
-      // Max size: 0.5MB, Max dimensions: 512x512 (since it's a square crop)
+      // Max size: 0.05MB (50KB) to account for base64 overhead (~33%) = ~67KB data URL
+      // This ensures we stay well under the 100KB server limit
+      // Max dimensions: 400x400 (smaller for profile photos)
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:95',message:'Before compressDataUrl call',data:{maxSizeMB:0.5,maxWidthOrHeight:512},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:95',message:'Before compressDataUrl call',data:{maxSizeMB:0.05,maxWidthOrHeight:400},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
       // #endregion
-      const compressedDataUrl = await compressDataUrl(croppedImageDataUrl, 0.5, 512)
+      const compressedDataUrl = await compressDataUrl(croppedImageDataUrl, 0.05, 400)
       // #region agent log
       const compressedSizeBytes = compressedDataUrl ? Math.round((compressedDataUrl.length * 3) / 4) : 0;
       fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:98',message:'After compressDataUrl call',data:{compressedDataUrlLength:compressedDataUrl?.length,compressedSizeBytes,compressedSizeMB:(compressedSizeBytes/1024/1024).toFixed(2),compressionRatio:((1-compressedSizeBytes/croppedSizeBytes)*100).toFixed(1)+'%'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
