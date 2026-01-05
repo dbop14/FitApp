@@ -141,6 +141,9 @@ const StepsHistory = () => {
         endTimeMillis: endDate.getTime()
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StepsHistory.jsx:144',message:'StepsHistory API call - before fetch',data:{hasAccessToken:!!accessToken,tokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
@@ -149,6 +152,9 @@ const StepsHistory = () => {
         },
         body: JSON.stringify(requestBody)
       })
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StepsHistory.jsx:151',message:'StepsHistory API call - after fetch',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       if (response.ok) {
         const data = await response.json()

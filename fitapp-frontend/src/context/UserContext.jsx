@@ -514,14 +514,23 @@ export const UserProvider = ({ children }) => {
   const syncGoogleFitData = async (token) => {
     try {
       console.log('🚀 syncGoogleFitData function called with token:', token ? 'provided' : 'not provided');
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:514',message:'syncGoogleFitData entry',data:{hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     
     // If no token provided, get from storage
     let accessToken = token || localStorage.getItem('fitapp_access_token')
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:520',message:'Token retrieved from storage',data:{hasAccessToken:!!accessToken,tokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     const tokenExpiry = localStorage.getItem('fitapp_access_token_expiry')
     const expiryTime = tokenExpiry ? parseInt(tokenExpiry, 10) : null
     const now = Date.now()
     const isExpired = isTokenExpired()
     const hasValidPerms = hasValidGoogleFitPermissions()
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:525',message:'Token expiry check',data:{hasToken:!!accessToken,isExpired,hasValidPerms,expiryTime,now,hoursUntilExpiry:expiryTime?(expiryTime-now)/(1000*60*60):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     
     console.log('🔑 Access token status:', {
       hasToken: !!accessToken,
@@ -691,6 +700,9 @@ export const UserProvider = ({ children }) => {
       };
       
       // Try API call - if we get 401, refresh token and retry
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:694',message:'First API call - before fetch',data:{hasAccessToken:!!accessToken,tokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       let response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
@@ -699,12 +711,21 @@ export const UserProvider = ({ children }) => {
         },
         body: JSON.stringify(requestBody)
       })
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:701',message:'First API call - after fetch',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       // If we get 401 (Unauthorized), the token is invalid - refresh it and retry
       if (response.status === 401) {
         console.log('⚠️ Token invalid (401), refreshing token...');
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:705',message:'401 detected - refreshing token',data:{oldTokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         try {
           accessToken = await requestGoogleFitPermissions();
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:708',message:'Token refreshed',data:{newTokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           // Retry the API call with the new token
           response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
             method: 'POST',
@@ -868,6 +889,9 @@ export const UserProvider = ({ children }) => {
         endTimeMillis: todayEnd.getTime()
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:871',message:'Second API call - before fetch',data:{hasAccessToken:!!accessToken,tokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const todayResponse = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
@@ -876,6 +900,9 @@ export const UserProvider = ({ children }) => {
         },
         body: JSON.stringify(todayRequestBody)
       })
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:878',message:'Second API call - after fetch',data:{status:todayResponse.status,statusText:todayResponse.statusText,ok:todayResponse.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // Process today's data for user state update
       if (todayResponse.ok) {
