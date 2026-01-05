@@ -322,14 +322,17 @@ const announcedWinners = new Set(); // challengeId
 
 // Monitor step point changes
 const checkStepPointChanges = async () => {
+  console.log('[DEBUG] checkStepPointChanges:entry - mongoConnected:', mongoConnected);
   debugLog('checkStepPointChanges:entry', 'checkStepPointChanges called', { mongoConnected });
   if (!mongoConnected) {
+    console.log('[DEBUG] checkStepPointChanges:earlyReturn - MongoDB not connected');
     debugLog('checkStepPointChanges:earlyReturn', 'Early return - MongoDB not connected', {});
     return;
   }
 
   try {
     const participants = await ChallengeParticipant.find({});
+    console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     debugLog('checkStepPointChanges:participantsFound', 'Participants found', { count: participants.length });
     
     for (const participant of participants) {
@@ -339,12 +342,14 @@ const checkStepPointChanges = async () => {
 
       // If points increased, someone earned a step point
       if (currentPoints > previousPoints) {
+        console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
         previousStepPoints.set(key, currentPoints);
         
         // Get challenge and user info
         const challenge = await Challenge.findById(participant.challengeId);
         const user = await User.findOne({ googleId: participant.userId });
         
+        console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
         debugLog('checkStepPointChanges:pointIncrease', 'Point increase detected', { challengeId: participant.challengeId, userId: participant.userId, previousPoints, currentPoints });
         if (challenge && challenge.matrixRoomId && user) {
           // Only send if challenge is active
@@ -357,9 +362,11 @@ const checkStepPointChanges = async () => {
             // Skip if winner already announced
             const challengeKey = challenge._id.toString();
             if (announcedWinners.has(challengeKey)) {
+              console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
               debugLog('checkStepPointChanges:skipWinner', 'Skipping - winner already announced', { challengeKey });
               continue;
             }
+            console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
             debugLog('checkStepPointChanges:sendingMessage', 'Sending step point message', { challengeId: challenge._id.toString(), roomId: challenge.matrixRoomId });
 
             const userName = user.name || user.email || 'Someone';
@@ -368,6 +375,7 @@ const checkStepPointChanges = async () => {
             const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${challenge.stepGoal} steps. Keep up the momentum!`;
             const botName = challenge.botName || 'Fitness Motivator';
             
+            console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
             await sendCardMessage(
               challenge.matrixRoomId,
               fullMessage,
@@ -384,14 +392,19 @@ const checkStepPointChanges = async () => {
               participant.userId
             );
           }
+        } else {
+          console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
         }
       } else if (currentPoints !== previousPoints) {
         // Update tracking even if points didn't increase (in case of reset)
+        console.log(`   📊 Points changed (not increase): ${participant.userId} - ${previousPoints} -> ${currentPoints}, updating tracking`);
         previousStepPoints.set(key, currentPoints);
       }
     }
+    console.log(`✅ Finished checking step point changes for ${participants.length} participants`);
   } catch (err) {
     console.error('❌ Error checking step point changes:', err.message);
+    console.error(err.stack);
   }
 };
 
@@ -410,8 +423,10 @@ const isWeighInDay = (weighInDay) => {
 
 // Send daily step progress update (plain text, not a card)
 const sendDailyStepUpdate = async () => {
+  console.log('[DEBUG] sendDailyStepUpdate:entry - mongoConnected:', mongoConnected);
   debugLog('sendDailyStepUpdate:entry', 'sendDailyStepUpdate called', { mongoConnected });
   if (!mongoConnected) {
+    console.log('[DEBUG] sendDailyStepUpdate:earlyReturn - MongoDB not connected');
     debugLog('sendDailyStepUpdate:earlyReturn', 'Early return - MongoDB not connected', {});
     return;
   }
@@ -422,6 +437,7 @@ const sendDailyStepUpdate = async () => {
       startDate: { $lte: now.toISOString().split('T')[0] },
       endDate: { $gte: now.toISOString().split('T')[0] }
     });
+    console.log('[DEBUG] sendDailyStepUpdate:challengesFound - count:', challenges.length, 'now:', now.toISOString());
     debugLog('sendDailyStepUpdate:challengesFound', 'Active challenges found', { count: challenges.length, now: now.toISOString() });
 
     for (const challenge of challenges) {
@@ -697,14 +713,17 @@ const announceChallengeWinner = async () => {
 
 // Welcome new participants
 const checkNewParticipants = async () => {
+  console.log('[DEBUG] checkNewParticipants:entry - mongoConnected:', mongoConnected);
   debugLog('checkNewParticipants:entry', 'checkNewParticipants called', { mongoConnected });
   if (!mongoConnected) {
+    console.log('[DEBUG] checkNewParticipants:earlyReturn - MongoDB not connected');
     debugLog('checkNewParticipants:earlyReturn', 'Early return - MongoDB not connected', {});
     return;
   }
 
   try {
     const participants = await ChallengeParticipant.find({});
+    console.log('[DEBUG] checkNewParticipants:participantsFound - count:', participants.length);
     debugLog('checkNewParticipants:participantsFound', 'Participants found', { count: participants.length });
     
     for (const participant of participants) {
@@ -981,19 +1000,32 @@ const setupCronJobs = () => {
   });
 
   // Check for new participants every 2 minutes (more frequent to catch new joins)
-  setInterval(() => {
-    debugLog('interval:checkNewParticipants', 'Interval executed - checkNewParticipants', {});
+  console.log('⏰ Setting up interval for checkNewParticipants (every 2 minutes)');
+  const newParticipantsInterval = setInterval(() => {
+    console.log(`🔄 [${new Date().toISOString()}] Interval: Checking for new participants...`);
     checkNewParticipants();
   }, 2 * 60 * 1000);
 
   // Check for step point changes every 30 seconds
-  setInterval(() => {
-    debugLog('interval:checkStepPointChanges', 'Interval executed - checkStepPointChanges', {});
+  console.log('⏰ Setting up interval for checkStepPointChanges (every 30 seconds)');
+  const stepPointInterval = setInterval(() => {
+    console.log(`🔄 [${new Date().toISOString()}] Interval: Checking step point changes...`);
     checkStepPointChanges();
   }, 30 * 1000);
 
   console.log('✅ Cron jobs and monitoring intervals set up');
   debugLog('setupCronJobs:complete', 'Cron jobs and intervals set up', {});
+  
+  // Test intervals immediately to verify they work
+  console.log('[DEBUG] Testing intervals immediately...');
+  setTimeout(() => {
+    console.log('[DEBUG] Test: Executing checkStepPointChanges after 5 seconds');
+    checkStepPointChanges();
+  }, 5000);
+  setTimeout(() => {
+    console.log('[DEBUG] Test: Executing checkNewParticipants after 10 seconds');
+    checkNewParticipants();
+  }, 10000);
 };
 
 // Graceful shutdown
