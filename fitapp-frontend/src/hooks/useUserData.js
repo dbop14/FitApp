@@ -55,10 +55,30 @@ export const useUserData = () => {
       
       const data = await response.json()
       
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useUserData.js:56',message:'User data fetched from API',data:{hasName:data.name!==undefined,hasPicture:data.picture!==undefined,name:data.name,pictureLength:data.picture?.length,isDataUrl:data.picture?.startsWith('data:image')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      // Update user context with name/picture if they're provided (from backend)
+      if (data.name !== undefined || data.picture !== undefined) {
+        setUser(prev => {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useUserData.js:63',message:'Updating user context from userData fetch',data:{oldName:prev?.name,newName:data.name,oldPicture:prev?.picture?.substring(0,50),newPicture:data.picture?.substring(0,50),nameChanged:prev?.name!==data.name,pictureChanged:prev?.picture!==data.picture},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          if (!prev) return prev
+          const updates = {}
+          if (data.name !== undefined) updates.name = data.name
+          if (data.picture !== undefined) updates.picture = data.picture
+          return { ...prev, ...updates }
+        })
+      }
+      
       return {
         steps: data.steps,
         weight: data.weight,
-        lastSync: data.lastSync
+        lastSync: data.lastSync,
+        name: data.name,
+        picture: data.picture
       }
     },
     enabled: !!user?.sub, // Only run if user exists

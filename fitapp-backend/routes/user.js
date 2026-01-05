@@ -311,7 +311,9 @@ router.get('/userdata', async (req, res) => {
       return res.json({ 
         steps: user.steps || 0, 
         weight: user.weight || null, 
-        lastSync: user.lastSync || null 
+        lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null
       });
     }
 
@@ -330,6 +332,8 @@ router.get('/userdata', async (req, res) => {
         steps: user.steps || 0, 
         weight: user.weight || null, 
         lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null,
         error: 'Token refresh failed, returning stored data'
       });
     }
@@ -459,7 +463,13 @@ router.get('/userdata', async (req, res) => {
       lastSync: user.lastSync
     });
 
-    res.json({ steps, weight, lastSync: user.lastSync });
+    res.json({ 
+      steps, 
+      weight, 
+      lastSync: user.lastSync,
+      name: user.name || null,
+      picture: user.picture || null
+    });
   } catch (err) {
     console.error('Failed to fetch Google Fit data:', err);
     // If Google Fit fetch fails, return stored data instead of error
@@ -469,7 +479,9 @@ router.get('/userdata', async (req, res) => {
       res.json({ 
         steps: user.steps || 0, 
         weight: user.weight || null, 
-        lastSync: user.lastSync || null 
+        lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null
       });
     } else {
       console.error('User not found, cannot return stored data');

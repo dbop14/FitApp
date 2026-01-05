@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useRef, useCallback, Fragment } from 'react';
+import React, { useContext, useEffect, useState, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import { ChallengeContext } from '../context/ChallengeContext';
@@ -10,6 +10,13 @@ import MainLayout from '../layout/MainLayout';
 
 const Chat = () => {
   const { user, logout } = useContext(UserContext);
+  // #region agent log
+  React.useEffect(() => {
+    if (user) {
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Chat.jsx:12',message:'Chat component user data',data:{hasUser:!!user,userName:user?.name,userPicture:user?.picture?.substring(0,50),pictureLength:user?.picture?.length,isDataUrl:user?.picture?.startsWith('data:image')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    }
+  }, [user]);
+  // #endregion
   const { challenge: selectedChallenge, saveChallenge } = useContext(ChallengeContext);
   const { markAllAsRead, unreadCount } = useChatNotifications();
   const navigate = useNavigate();

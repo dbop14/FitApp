@@ -21,6 +21,9 @@ export const UserProvider = ({ children }) => {
   // Save user to localStorage whenever it changes (including fitness data updates)
   useEffect(() => {
     if (user) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:22',message:'Saving user to localStorage',data:{userName:user?.name,userPicture:user?.picture?.substring(0,50),pictureLength:user?.picture?.length,isDataUrl:user?.picture?.startsWith('data:image')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       localStorage.setItem('fitapp_user', JSON.stringify(user))
     }
   }, [user])
@@ -1170,12 +1173,24 @@ export const UserProvider = ({ children }) => {
 
       const result = await response.json()
       
-      // Update local user state
-      setUser(prev => ({
-        ...prev,
-        name: profileData.name,
-        picture: profileData.picture
-      }))
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1171',message:'Profile update response received',data:{backendName:result.user?.name,backendPicture:result.user?.picture,backendPictureLength:result.user?.picture?.length,isDataUrl:result.user?.picture?.startsWith('data:image')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      // Update local user state using backend response (which has confirmed saved data)
+      // Convert backend format (googleId) to frontend format (sub)
+      setUser(prev => {
+        // #region agent log
+        const newName = result.user.name;
+        const newPicture = result.user.picture;
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1176',message:'Updating user state with backend data',data:{oldName:prev?.name,newName,oldPicture:prev?.picture?.substring(0,50),newPicture:newPicture?.substring(0,50),nameChanged:prev?.name!==newName,pictureChanged:prev?.picture!==newPicture},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        return {
+          ...prev,
+          name: result.user.name,
+          picture: result.user.picture
+        }
+      })
 
       console.log('✅ Profile updated successfully:', result)
       return result
