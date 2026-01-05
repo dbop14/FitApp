@@ -892,7 +892,7 @@ export const UserProvider = ({ children }) => {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:871',message:'Second API call - before fetch',data:{hasAccessToken:!!accessToken,tokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
-      const todayResponse = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
+      let todayResponse = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -903,6 +903,44 @@ export const UserProvider = ({ children }) => {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:878',message:'Second API call - after fetch',data:{status:todayResponse.status,statusText:todayResponse.statusText,ok:todayResponse.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
+
+      // If we get 401 (Unauthorized), the token is invalid - refresh it and retry
+      if (todayResponse.status === 401) {
+        console.log('⚠️ Token invalid (401) on second API call, refreshing token...');
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:905',message:'401 detected on second call - refreshing token',data:{oldTokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        try {
+          accessToken = await requestGoogleFitPermissions();
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:909',message:'Token refreshed for second call',data:{newTokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          // Retry the API call with the new token
+          todayResponse = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(todayRequestBody)
+          });
+          
+          console.log('📥 Retry second API call response status:', todayResponse.status, todayResponse.statusText);
+          
+          if (!todayResponse.ok) {
+            const errorText = await todayResponse.text();
+            console.error('❌ Google Fit API error after token refresh on second call:', errorText);
+            // Don't throw - just log the error and continue
+          }
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token after 401 on second call:', refreshError);
+          // Don't throw - just log the error and continue
+        }
+      } else if (!todayResponse.ok) {
+        const errorText = await todayResponse.text();
+        console.error('❌ Google Fit API error on second call:', errorText);
+        // Don't throw - just log the error and continue
+      }
 
       // Process today's data for user state update
       if (todayResponse.ok) {
@@ -1089,13 +1127,32 @@ export const UserProvider = ({ children }) => {
       console.log('🧪 Testing Google Fit API connection...');
       
       // Test with a simple request to get data sources
-      const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
+      let response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         }
       });
 
       console.log('📥 Data sources response:', response.status, response.statusText);
+      
+      // If we get 401 (Unauthorized), the token is invalid - refresh it and retry
+      if (response.status === 401) {
+        console.log('⚠️ Token invalid (401) on dataSources call, refreshing token...');
+        try {
+          accessToken = await requestGoogleFitPermissions();
+          // Retry the API call with the new token
+          response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            }
+          });
+          
+          console.log('📥 Retry dataSources response status:', response.status, response.statusText);
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token after 401 on dataSources call:', refreshError);
+          return false;
+        }
+      }
       
       if (response.ok) {
         const data = await response.json();

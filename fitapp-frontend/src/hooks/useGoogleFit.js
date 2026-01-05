@@ -19,7 +19,7 @@ const useGoogleFit = () => {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGoogleFit.js:19',message:'useGoogleFit API call - before fetch',data:{hasToken:!!token,tokenLength:token?token.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
+      let response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -38,6 +38,33 @@ const useGoogleFit = () => {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGoogleFit.js:34',message:'useGoogleFit API call - after fetch',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
+
+      // If we get 401 (Unauthorized), the token is invalid
+      if (response.status === 401) {
+        console.log('⚠️ Token invalid (401) on useGoogleFit API call');
+        // Check if there's a newer token in localStorage (might have been refreshed elsewhere)
+        const newToken = localStorage.getItem('fitapp_access_token');
+        if (newToken && newToken !== token) {
+          console.log('🔄 Found newer token in localStorage, retrying with new token...');
+          response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${newToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              aggregateBy: [
+                { dataTypeName: 'com.google.step_count.delta' },
+                { dataTypeName: 'com.google.weight' }
+              ],
+              bucketByTime: { durationMillis: 86400000 },
+              startTimeMillis: start.getTime(),
+              endTimeMillis: end.getTime()
+            }),
+          });
+          console.log('📥 Retry useGoogleFit API call response status:', response.status, response.statusText);
+        }
+      }
 
       const raw = await response.text()
       console.log('📡 Google Fit raw response:', raw)
