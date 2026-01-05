@@ -81,9 +81,19 @@ export const UserProvider = ({ children }) => {
         localStorage.setItem('fitapp_jwt_expiry', (Date.now() + 7 * 24 * 60 * 60 * 1000).toString());
         
         // Update user data if backend returned updated data
+        // Convert database user format to frontend format (sub instead of googleId)
         if (result.user) {
-          localStorage.setItem('fitapp_user', JSON.stringify(result.user));
-          setUser(result.user);
+          const dbUserData = {
+            sub: result.user.googleId,
+            name: result.user.name,
+            email: result.user.email,
+            picture: result.user.picture,
+            steps: result.user.steps,
+            weight: result.user.weight,
+            lastSync: result.user.lastSync
+          };
+          localStorage.setItem('fitapp_user', JSON.stringify(dbUserData));
+          setUser(dbUserData);
         }
         
         return result.token;

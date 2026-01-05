@@ -68,10 +68,22 @@ const GoogleLoginButton = ({ onComplete }) => {
         localStorage.setItem('fitapp_jwt_token', result.token);
         localStorage.setItem('fitapp_jwt_expiry', (Date.now() + 7 * 24 * 60 * 60 * 1000).toString());
         
-        // Also store the user data
-        localStorage.setItem('fitapp_user', JSON.stringify(result.user));
+        // Convert database user format to frontend format (sub instead of googleId)
+        const dbUserData = {
+          sub: result.user.googleId,
+          name: result.user.name,
+          email: result.user.email,
+          picture: result.user.picture,
+          steps: result.user.steps,
+          weight: result.user.weight,
+          lastSync: result.user.lastSync
+        };
         
-        return result.token;
+        // Store the user data (from database, which includes custom picture/name) in frontend format
+        localStorage.setItem('fitapp_user', JSON.stringify(dbUserData));
+        
+        // Return both token and user data (user data from DB has custom picture/name)
+        return { token: result.token, user: dbUserData };
       } else {
         const error = await response.json();
         console.error('❌ Failed to get JWT token:', error);
@@ -151,11 +163,17 @@ const GoogleLoginButton = ({ onComplete }) => {
 
               console.log('👤 Complete user data with profile:', completeUserData);
               
-              // Get JWT token from backend
-              const jwtToken = await getJWTToken(completeUserData);
+              // Get JWT token from backend (returns both token and user data from database)
+              const jwtResult = await getJWTToken(completeUserData);
               
-              // Call the onLogin callback with both user data AND access token
-              onComplete?.(completeUserData, response.access_token, response.expires_in, jwtToken)
+              // Use user data from database (which includes custom picture/name) instead of Google OAuth data
+              // jwtResult.user is already in frontend format (sub instead of googleId)
+              const dbUserData = jwtResult?.user || completeUserData;
+              
+              console.log('👤 Using database user data (preserves custom picture/name):', dbUserData);
+              
+              // Call the onLogin callback with database user data (preserves custom picture/name)
+              onComplete?.(dbUserData, response.access_token, response.expires_in, jwtResult?.token)
               
             } else {
               console.error('❌ Failed to fetch user profile');
