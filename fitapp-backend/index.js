@@ -2022,11 +2022,13 @@ app.post('/api/save-user', async (req, res) => {
     // Only update picture if:
     // 1. User doesn't exist (new user), OR
     // 2. User exists but has no picture, OR
-    // 3. User's current picture matches Google picture (hasn't been customized)
-    if (!existingUser || !existingUser.picture || existingUser.picture === picture) {
+    // 3. User's current picture is NOT a custom picture (data URL)
+    // Custom pictures start with "data:image" and should never be overwritten by Google
+    const isCustomPicture = existingUser?.picture && existingUser.picture.startsWith('data:image');
+    if (!existingUser || !existingUser.picture || !isCustomPicture) {
       updateData.picture = picture;
     }
-    // Otherwise, preserve the existing custom picture
+    // Otherwise, preserve the existing custom picture (data URL)
     
     // Only update steps and weight if they are provided
     if (steps !== undefined) updateData.steps = steps;

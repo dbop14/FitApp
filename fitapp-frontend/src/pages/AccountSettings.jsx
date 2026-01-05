@@ -86,10 +86,6 @@ const AccountSettings = () => {
   }
 
   const handleCropComplete = async (croppedImageDataUrl) => {
-    // #region agent log
-    const croppedSizeBytes = croppedImageDataUrl ? Math.round((croppedImageDataUrl.length * 3) / 4) : 0;
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:88',message:'handleCropComplete entry',data:{croppedDataUrlLength:croppedImageDataUrl?.length,croppedSizeBytes,estimatedSizeMB:(croppedSizeBytes/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     setIsProcessingImage(true)
     setError('')
     
@@ -98,25 +94,12 @@ const AccountSettings = () => {
       // Max size: 0.05MB (50KB) to account for base64 overhead (~33%) = ~67KB data URL
       // This ensures we stay well under the 100KB server limit
       // Max dimensions: 400x400 (smaller for profile photos)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:95',message:'Before compressDataUrl call',data:{maxSizeMB:0.05,maxWidthOrHeight:400},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix'})}).catch(()=>{});
-      // #endregion
       const compressedDataUrl = await compressDataUrl(croppedImageDataUrl, 0.05, 400)
-      // #region agent log
-      const compressedSizeBytes = compressedDataUrl ? Math.round((compressedDataUrl.length * 3) / 4) : 0;
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:98',message:'After compressDataUrl call',data:{compressedDataUrlLength:compressedDataUrl?.length,compressedSizeBytes,compressedSizeMB:(compressedSizeBytes/1024/1024).toFixed(2),compressionRatio:((1-compressedSizeBytes/croppedSizeBytes)*100).toFixed(1)+'%'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       
-      setFormData(prev => {
-        // #region agent log
-        const newPictureSizeBytes = compressedDataUrl ? Math.round((compressedDataUrl.length * 3) / 4) : 0;
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:100',message:'Setting formData.picture',data:{newPictureSizeBytes,newPictureSizeMB:(newPictureSizeBytes/1024/1024).toFixed(2),hasPicture:!!compressedDataUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        return {
-          ...prev,
-          picture: compressedDataUrl
-        }
-      })
+      setFormData(prev => ({
+        ...prev,
+        picture: compressedDataUrl
+      }))
       setShowCropper(false)
       setImageToCrop(null)
       
@@ -125,9 +108,6 @@ const AccountSettings = () => {
         fileInputRef.current.value = ''
       }
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:113',message:'Error in handleCropComplete',data:{error:err.message,stack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       setError(err.message || 'Failed to compress cropped image. Please try again.')
       console.error('Error compressing cropped image:', err)
     } finally {
@@ -148,11 +128,6 @@ const AccountSettings = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    // #region agent log
-    const pictureSizeBytes = formData.picture ? Math.round((formData.picture.length * 3) / 4) : 0;
-    const payloadSize = JSON.stringify({googleId:user?.sub,name:formData.name,picture:formData.picture}).length;
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AccountSettings.jsx:127',message:'handleSubmit entry',data:{pictureSizeBytes,pictureSizeMB:(pictureSizeBytes/1024/1024).toFixed(2),payloadSize,payloadSizeMB:(payloadSize/1024/1024).toFixed(2),hasPicture:!!formData.picture},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     setIsLoading(true)
     setError('')
     setSuccess('')

@@ -1141,33 +1141,20 @@ export const UserProvider = ({ children }) => {
 
     try {
       const apiUrl = getApiUrl()
-      const requestBody = {
-        googleId: user.sub,
-        name: profileData.name,
-        picture: profileData.picture
-      }
-      // #region agent log
-      const pictureSizeBytes = profileData.picture ? Math.round((profileData.picture.length * 3) / 4) : 0;
-      const payloadString = JSON.stringify(requestBody);
-      const payloadSizeBytes = new Blob([payloadString]).size;
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1137',message:'updateUserProfile before API call',data:{pictureSizeBytes,pictureSizeMB:(pictureSizeBytes/1024/1024).toFixed(2),payloadSizeBytes,payloadSizeMB:(payloadSizeBytes/1024/1024).toFixed(2),payloadStringLength:payloadString.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       const response = await fetchWithAuth(`${apiUrl}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: payloadString
+        body: JSON.stringify({
+          googleId: user.sub,
+          name: profileData.name,
+          picture: profileData.picture
+        })
       })
 
       if (!response.ok) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1156',message:'API response not ok',data:{status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         const errorData = await response.json()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1159',message:'API error response',data:{error:errorData.error,errorData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         throw new Error(errorData.error || 'Failed to update profile')
       }
 
