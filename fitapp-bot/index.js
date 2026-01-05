@@ -1,7 +1,52 @@
 const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
+
+// Debug logging helper
+const debugLog = (location, message, data = {}) => {
+  // Try multiple log paths
+  const logPaths = [
+    path.join(__dirname, '..', '.cursor', 'debug.log'),
+    path.join(process.cwd(), '.cursor', 'debug.log'),
+    '/app/.cursor/debug.log',
+    path.join(__dirname, 'debug.log')
+  ];
+  
+  const logEntry = {
+    location,
+    message,
+    data,
+    timestamp: Date.now(),
+    sessionId: 'debug-session',
+    runId: 'run1',
+    hypothesisId: 'A'
+  };
+  
+  let logged = false;
+  for (const logPath of logPaths) {
+    try {
+      // Ensure directory exists
+      const logDir = path.dirname(logPath);
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+      logged = true;
+      break;
+    } catch (err) {
+      // Try next path
+      continue;
+    }
+  }
+  
+  // Also log to console for visibility
+  if (!logged) {
+    console.log(`[DEBUG] ${location}: ${message}`, data);
+  }
+};
 
 // Import models
 const Challenge = require('./models/Challenge');
@@ -64,6 +109,7 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     matrixConnected = true;
     
     console.log('✅ Connected to Matrix');
+    debugLog('connectMatrix:success', 'Matrix connection successful', { botUsername, matrixUrl, matrixServerName, hasAccessToken: !!response.access_token });
     
     // Start the client
     await client.startClient({ initialSyncLimit: 10 });
@@ -171,8 +217,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
 
 // Send card message with text message below
 const sendCardMessage = async (roomId, message, challengeId, botName, cardType, cardData, userPicture = null, userId = null) => {
+  debugLog('sendCardMessage:entry', 'sendCardMessage called', { hasMatrixClient: !!matrixClient, matrixConnected, hasRoomId: !!roomId, challengeId: challengeId?.toString(), cardType });
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
+    debugLog('sendCardMessage:earlyReturn', 'Early return - missing requirements', { hasMatrixClient: !!matrixClient, matrixConnected, hasRoomId: !!roomId });
     return false;
   }
 
@@ -185,6 +233,7 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
     console.log(`✅ Sent message to room ${roomId}: ${message.substring(0, 50)}...`);
+    debugLog('sendCardMessage:matrixSent', 'Message sent to Matrix', { roomId, messageLength: message.length, cardType });
     
     // Save card message to MongoDB
     if (challengeId && mongoConnected) {
@@ -273,10 +322,15 @@ const announcedWinners = new Set(); // challengeId
 
 // Monitor step point changes
 const checkStepPointChanges = async () => {
-  if (!mongoConnected) return;
+  debugLog('checkStepPointChanges:entry', 'checkStepPointChanges called', { mongoConnected });
+  if (!mongoConnected) {
+    debugLog('checkStepPointChanges:earlyReturn', 'Early return - MongoDB not connected', {});
+    return;
+  }
 
   try {
     const participants = await ChallengeParticipant.find({});
+    debugLog('checkStepPointChanges:participantsFound', 'Participants found', { count: participants.length });
     
     for (const participant of participants) {
       const key = `${participant.challengeId}-${participant.userId}`;
@@ -291,16 +345,22 @@ const checkStepPointChanges = async () => {
         const challenge = await Challenge.findById(participant.challengeId);
         const user = await User.findOne({ googleId: participant.userId });
         
+        debugLog('checkStepPointChanges:pointIncrease', 'Point increase detected', { challengeId: participant.challengeId, userId: participant.userId, previousPoints, currentPoints });
         if (challenge && challenge.matrixRoomId && user) {
           // Only send if challenge is active
           const now = new Date();
           const startDate = new Date(challenge.startDate);
           const endDate = new Date(challenge.endDate);
+          debugLog('checkStepPointChanges:challengeCheck', 'Checking challenge status', { hasChallenge: !!challenge, hasMatrixRoomId: !!challenge.matrixRoomId, hasUser: !!user, now: now.toISOString(), startDate: startDate.toISOString(), endDate: endDate.toISOString() });
           
           if (now >= startDate && now <= endDate) {
             // Skip if winner already announced
             const challengeKey = challenge._id.toString();
-            if (announcedWinners.has(challengeKey)) continue;
+            if (announcedWinners.has(challengeKey)) {
+              debugLog('checkStepPointChanges:skipWinner', 'Skipping - winner already announced', { challengeKey });
+              continue;
+            }
+            debugLog('checkStepPointChanges:sendingMessage', 'Sending step point message', { challengeId: challenge._id.toString(), roomId: challenge.matrixRoomId });
 
             const userName = user.name || user.email || 'Someone';
             const firstName = userName.split(' ')[0];
@@ -350,7 +410,11 @@ const isWeighInDay = (weighInDay) => {
 
 // Send daily step progress update (plain text, not a card)
 const sendDailyStepUpdate = async () => {
-  if (!mongoConnected) return;
+  debugLog('sendDailyStepUpdate:entry', 'sendDailyStepUpdate called', { mongoConnected });
+  if (!mongoConnected) {
+    debugLog('sendDailyStepUpdate:earlyReturn', 'Early return - MongoDB not connected', {});
+    return;
+  }
 
   try {
     const now = new Date();
@@ -358,6 +422,7 @@ const sendDailyStepUpdate = async () => {
       startDate: { $lte: now.toISOString().split('T')[0] },
       endDate: { $gte: now.toISOString().split('T')[0] }
     });
+    debugLog('sendDailyStepUpdate:challengesFound', 'Active challenges found', { count: challenges.length, now: now.toISOString() });
 
     for (const challenge of challenges) {
       if (!challenge.matrixRoomId) continue;
@@ -632,10 +697,15 @@ const announceChallengeWinner = async () => {
 
 // Welcome new participants
 const checkNewParticipants = async () => {
-  if (!mongoConnected) return;
+  debugLog('checkNewParticipants:entry', 'checkNewParticipants called', { mongoConnected });
+  if (!mongoConnected) {
+    debugLog('checkNewParticipants:earlyReturn', 'Early return - MongoDB not connected', {});
+    return;
+  }
 
   try {
     const participants = await ChallengeParticipant.find({});
+    debugLog('checkNewParticipants:participantsFound', 'Participants found', { count: participants.length });
     
     for (const participant of participants) {
       const key = `${participant.challengeId}-${participant.userId}`;
@@ -872,9 +942,11 @@ const sendChallengeStartReminders = async () => {
 
 // Set up cron jobs
 const setupCronJobs = () => {
+  debugLog('setupCronJobs:entry', 'Setting up cron jobs', {});
   // Daily step updates at 12 PM (noon)
   cron.schedule('0 12 * * *', () => {
     console.log('📊 Running daily step update (noon)...');
+    debugLog('cron:dailyStepUpdate:noon', 'Cron job executed - daily step update (noon)', {});
     sendDailyStepUpdate();
   });
 
@@ -910,15 +982,18 @@ const setupCronJobs = () => {
 
   // Check for new participants every 2 minutes (more frequent to catch new joins)
   setInterval(() => {
+    debugLog('interval:checkNewParticipants', 'Interval executed - checkNewParticipants', {});
     checkNewParticipants();
   }, 2 * 60 * 1000);
 
   // Check for step point changes every 30 seconds
   setInterval(() => {
+    debugLog('interval:checkStepPointChanges', 'Interval executed - checkStepPointChanges', {});
     checkStepPointChanges();
   }, 30 * 1000);
 
   console.log('✅ Cron jobs and monitoring intervals set up');
+  debugLog('setupCronJobs:complete', 'Cron jobs and intervals set up', {});
 };
 
 // Graceful shutdown
@@ -961,23 +1036,28 @@ process.on('uncaughtException', (err) => {
 const start = async () => {
   try {
     console.log('🤖 Fitness Bot starting...');
+    debugLog('start:entry', 'Bot starting', {});
     
     // Connect to MongoDB
     await connectMongo();
+    debugLog('start:mongoConnected', 'MongoDB connection result', { mongoConnected });
     
     // Connect to Matrix (may fail, but we continue anyway)
     let client = null;
     try {
       client = await connectMatrix();
+      debugLog('start:matrixConnected', 'Matrix connection result', { matrixConnected, hasClient: !!client });
     } catch (matrixErr) {
       console.error('⚠️  Unexpected error during Matrix connection:', matrixErr.message);
       client = null; // Continue without Matrix
+      debugLog('start:matrixError', 'Matrix connection error', { error: matrixErr.message });
     }
     
     // Set up cron jobs and monitoring
     setupCronJobs();
     
     // Initial checks
+    debugLog('start:initialChecks', 'Running initial checks', {});
     checkNewParticipants();
     checkStepPointChanges();
     
