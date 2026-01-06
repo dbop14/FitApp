@@ -257,6 +257,9 @@ export const UserProvider = ({ children }) => {
       // Do this asynchronously so it doesn't block the login flow
       (async () => {
         try {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:253',message:'Saving token to backend during login',data:{hasToken:!!accessToken,expiryTime:finalExpiryTime},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           const apiUrl = getApiUrl()
           const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
             method: 'POST',
@@ -271,6 +274,9 @@ export const UserProvider = ({ children }) => {
               tokenExpiry: finalExpiryTime
             })
           })
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:268',message:'Token save response during login',data:{status:saveResponse.status,ok:saveResponse.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           if (saveResponse.ok) {
             console.log('✅ Access token saved to backend during login')
           } else {
@@ -278,6 +284,9 @@ export const UserProvider = ({ children }) => {
           }
         } catch (err) {
           console.warn('⚠️ Error saving access token to backend during login:', err)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:275',message:'Token save error during login',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
         }
       })()
     }
@@ -463,8 +472,11 @@ export const UserProvider = ({ children }) => {
               const storedUser = JSON.parse(localStorage.getItem('fitapp_user') || '{}')
               if (storedUser?.sub) {
                 try {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:438',message:'Saving token to backend after Google permissions',data:{hasToken:!!accessToken,expiryTime},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+                  // #endregion
                   const apiUrl = getApiUrl()
-                  await fetch(`${apiUrl}/api/save-user`, {
+                  const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -476,9 +488,18 @@ export const UserProvider = ({ children }) => {
                       refreshToken: null, // GIS doesn't provide refresh tokens
                       tokenExpiry: expiryTime
                     })
-                  }).catch(() => {}); // Don't fail if backend save fails
+                  })
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:455',message:'Token save response after Google permissions',data:{status:saveResponse.status,ok:saveResponse.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+                  // #endregion
+                  if (!saveResponse.ok) {
+                    console.warn('⚠️ Failed to save token to backend:', saveResponse.status);
+                  }
                 } catch (err) {
                   console.warn('⚠️ Failed to save token to backend:', err);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:462',message:'Token save error after Google permissions',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+                  // #endregion
                 }
               }
               

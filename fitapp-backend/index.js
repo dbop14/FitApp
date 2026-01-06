@@ -298,10 +298,10 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
     }
     
     // Check if user has refresh token - if yes, use it to refresh
-    // If no refresh token, check if current token is still valid (with 1 hour buffer)
+    // If no refresh token, check if current token is still valid (with 5 minute buffer for network delays)
     const now = Date.now();
-    const oneHourInMs = 60 * 60 * 1000;
-    const tokenStillValid = user.tokenExpiry && user.tokenExpiry > (now + oneHourInMs);
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer (instead of 1 hour) since GIS tokens expire after 1 hour
+    const tokenStillValid = user.tokenExpiry && user.tokenExpiry > (now + bufferTime);
     
     if (user.refreshToken) {
       // User has refresh token - use ensureValidGoogleTokens to refresh if needed
