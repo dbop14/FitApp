@@ -435,6 +435,29 @@ export const UserProvider = ({ children }) => {
               localStorage.setItem('fitapp_access_token', accessToken);
               localStorage.setItem('fitapp_access_token_expiry', expiryTime.toString());
               
+              // Save token to backend so backend can use it for future refreshes
+              const storedUser = JSON.parse(localStorage.getItem('fitapp_user') || '{}')
+              if (storedUser?.sub) {
+                try {
+                  const apiUrl = getApiUrl()
+                  await fetch(`${apiUrl}/api/save-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      googleId: storedUser.sub,
+                      name: storedUser.name,
+                      email: storedUser.email,
+                      picture: storedUser.picture,
+                      accessToken: accessToken,
+                      refreshToken: null, // GIS doesn't provide refresh tokens
+                      tokenExpiry: expiryTime
+                    })
+                  }).catch(() => {}); // Don't fail if backend save fails
+                } catch (err) {
+                  console.warn('⚠️ Failed to save token to backend:', err);
+                }
+              }
+              
               console.log('✅ Google Fit permissions granted');
               resolve(accessToken);
             },
