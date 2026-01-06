@@ -249,9 +249,18 @@ export const UserProvider = ({ children }) => {
     
     // Only save access token if we have one (for Google Fit scopes)
     if (accessToken) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:251',message:'Saving access token - before setItem',data:{hasAccessToken:!!accessToken,expiryTime:expiryTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       localStorage.setItem('fitapp_access_token', accessToken)
       const finalExpiryTime = expiryTime || (Date.now() + 24 * 3600 * 1000) // fallback: 24 hours from now
-      localStorage.setItem('fitapp_access_token_expiry', finalExpiryTime.toString())
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:254',message:'Before setItem expiry - checking for semicolon issue',data:{finalExpiryTime:finalExpiryTime,expiryTimeString:finalExpiryTime.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      localStorage.setItem('fitapp_access_token_expiry', finalExpiryTime.toString());
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:254',message:'After setItem expiry - semicolon added',data:{success:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       // Save token to backend so backend can use it for future refreshes
       // Do this asynchronously so it doesn't block the login flow
