@@ -215,6 +215,100 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
   }
 };
 
+// Helper function to check if a similar message was already sent today
+const hasMessageBeenSentToday = async (challengeId, message, botName, messageType = null, userId = null) => {
+  if (!mongoConnected || !challengeId) {
+    return false; // Can't check, allow sending
+  }
+
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    // Build query to find duplicate messages
+    const query = {
+      challengeId: challengeId.toString(),
+      sender: botName,
+      isBot: true,
+      timestamp: {
+        $gte: todayStart,
+        $lt: todayEnd
+      }
+    };
+
+    // If messageType is provided, include it in the query
+    if (messageType) {
+      query.messageType = messageType;
+    }
+
+    // If userId is provided (for user-specific messages like stepGoalCard, weightLossCard, welcomeCard),
+    // include it to allow different users to receive the same message type
+    if (userId) {
+      query.userId = userId;
+    }
+
+    // Check for exact message match first
+    const exactMatch = await ChatMessage.findOne({
+      ...query,
+      message: message
+    });
+
+    if (exactMatch) {
+      console.log(`⏭️  Duplicate message detected (exact match): messageType=${messageType}, userId=${userId || 'none'}, challengeId=${challengeId}`);
+      return true;
+    }
+
+    // For user-specific messages (with userId and messageType), check if same type was sent to same user today
+    // This prevents sending multiple cards of the same type to the same user even if content differs slightly
+    if (userId && messageType) {
+      const sameTypeForUserToday = await ChatMessage.findOne({
+        challengeId: challengeId.toString(),
+        sender: botName,
+        isBot: true,
+        messageType: messageType,
+        userId: userId,
+        timestamp: {
+          $gte: todayStart,
+          $lt: todayEnd
+        }
+      });
+
+      if (sameTypeForUserToday) {
+        console.log(`⏭️  Duplicate message detected (same type for user today): messageType=${messageType}, userId=${userId}, challengeId=${challengeId}`);
+        return true;
+      }
+    }
+
+    // For messages without userId (like dailyStepUpdateCard, weighInReminderCard, startReminderCard),
+    // check if any message of the same type was sent today
+    if (!userId && messageType) {
+      const sameTypeToday = await ChatMessage.findOne({
+        challengeId: challengeId.toString(),
+        sender: botName,
+        isBot: true,
+        messageType: messageType,
+        timestamp: {
+          $gte: todayStart,
+          $lt: todayEnd
+        }
+      });
+
+      if (sameTypeToday) {
+        console.log(`⏭️  Duplicate message detected (same type today): messageType=${messageType}, challengeId=${challengeId}`);
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    console.error('❌ Error checking for duplicate messages:', err.message);
+    // On error, allow sending (fail open)
+    return false;
+  }
+};
+
 // Send card message with text message below
 const sendCardMessage = async (roomId, message, challengeId, botName, cardType, cardData, userPicture = null, userId = null) => {
   console.log(`📤 sendCardMessage called: type=${cardType}, roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}`);
@@ -223,6 +317,13 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
     console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
     debugLog('sendCardMessage:earlyReturn', 'Early return - missing requirements', { hasMatrixClient: !!matrixClient, matrixConnected, hasRoomId: !!roomId });
+    return false;
+  }
+
+  // Check if this message was already sent today
+  const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
+  if (isDuplicate) {
+    console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
   }
 
@@ -275,11 +376,18 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 };
 
 // Update sendMatrixMessage to also save to MongoDB (for backward compatibility)
-const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitness Motivator') => {
-  console.log(`📤 sendMatrixMessage called: roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}, challengeId=${challengeId?.toString() || 'none'}`);
+const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitness Motivator', messageType = 'text') => {
+  console.log(`📤 sendMatrixMessage called: roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}, challengeId=${challengeId?.toString() || 'none'}, messageType=${messageType}`);
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
     console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
+    return false;
+  }
+
+  // Check if this message was already sent today
+  const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, messageType, null);
+  if (isDuplicate) {
+    console.log(`⏭️  Skipping duplicate message: challengeId=${challengeId?.toString() || 'none'}, messageType=${messageType}`);
     return false;
   }
 
@@ -291,7 +399,7 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
     console.log(`✅ Sent Matrix message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
-    console.log(`   Bot name: ${botName}, Challenge ID: ${challengeId?.toString() || 'none'}`);
+    console.log(`   Bot name: ${botName}, Challenge ID: ${challengeId?.toString() || 'none'}, Message Type: ${messageType}`);
     
     // Also save to MongoDB so it appears in the app
     if (challengeId && mongoConnected) {
@@ -300,6 +408,7 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
           challengeId: challengeId.toString(),
           sender: botName,
           message: message,
+          messageType: messageType,
           isBot: true,
           isSystem: false,
           timestamp: new Date()
@@ -384,7 +493,8 @@ const checkStepPointChanges = async () => {
             const userName = user.name || user.email || 'Someone';
             const firstName = userName.split(' ')[0];
             const currentSteps = user.steps || participant.lastStepCount || challenge.stepGoal || 10000;
-            const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${challenge.stepGoal} steps. Keep up the momentum!`;
+            const stepGoalFormatted = (challenge.stepGoal || 10000).toLocaleString();
+            const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${stepGoalFormatted} steps. Keep up the momentum!`;
             const botName = challenge.botName || 'Fitness Motivator';
             
             console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
@@ -513,7 +623,8 @@ const sendDailyStepUpdate = async () => {
         challenge.matrixRoomId,
         message,
         challenge._id,
-        botName
+        botName,
+        'dailyStepUpdateCard'
       );
       console.log(`   ✅ Daily step update sent for challenge ${challenge.name}`);
     }
@@ -771,10 +882,10 @@ const announceChallengeWinner = async () => {
       const stepPoints = winner.stepGoalPoints || 0;
       const weightLossPoints = winner.weightLossPoints || 0;
 
-      let message = `Challenge Complete! The winner of ${challenge.name} is ${firstName} with ${totalPoints} total points!`;
+      let message = `Challenge Complete! The winner of ${challenge.name} is ${firstName} with ${totalPoints.toLocaleString()} total points!`;
       message += `\n\nBreakdown:`;
-      message += `\n- Step Goal Points: ${stepPoints}`;
-      message += `\n- Weight Loss Points: ${weightLossPoints}`;
+      message += `\n- Step Goal Points: ${stepPoints.toLocaleString()}`;
+      message += `\n- Weight Loss Points: ${weightLossPoints.toLocaleString()}`;
       message += `\n\nCongratulations on your dedication and hard work!`;
 
       const botName = challenge.botName || 'Fitness Motivator';
@@ -1052,7 +1163,8 @@ const sendChallengeStartReminders = async () => {
 
       let message = `Reminder: The ${challenge.name} challenge starts tomorrow (${formattedDate})!`;
       message += `\n\nPlease make sure to confirm your starting weight before the challenge begins.`;
-      message += `\n\nGet ready to crush your daily step goal of ${challenge.stepGoal} steps!`;
+      const stepGoalFormatted = (challenge.stepGoal || 10000).toLocaleString();
+      message += `\n\nGet ready to crush your daily step goal of ${stepGoalFormatted} steps!`;
 
       const botName = challenge.botName || 'Fitness Motivator';
       console.log(`   📤 Sending challenge start reminder to room ${challenge.matrixRoomId}`);
@@ -1061,7 +1173,8 @@ const sendChallengeStartReminders = async () => {
         challenge.matrixRoomId,
         message,
         challenge._id,
-        botName
+        botName,
+        'startReminderCard'
       );
       console.log(`   ✅ Challenge start reminder sent for ${challenge.name}`);
     }

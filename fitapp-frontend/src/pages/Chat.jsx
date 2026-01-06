@@ -435,7 +435,7 @@ const Chat = () => {
 
   // Send a message
   const sendMessage = async () => {
-    if (!newMessage.trim() || !activeChallenge) return;
+    if (!newMessage.trim() || !activeChallenge || saving) return;
     
     try {
       setSaving(true);
@@ -1261,11 +1261,11 @@ const Chat = () => {
                   placeholder="Type your message..."
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
                   style={{ fontSize: '16px' }}
-                  disabled={!isConnected}
+                  disabled={!isConnected || saving}
                 />
                 <Button
                   type="submit"
-                  disabled={!newMessage.trim() || !isConnected}
+                  disabled={!newMessage.trim() || !isConnected || saving}
                   size="md"
                   className="flex-shrink-0"
                 >
