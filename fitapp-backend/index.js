@@ -273,6 +273,7 @@ app.use('/api/push', authenticateJWT, pushRoutes)
 
 // Endpoint to refresh Google Fit access token using backend's refresh token
 // This allows frontend to get a new access token without prompting user to login
+// If backend has no refresh token, it will return the current access token if still valid
 app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
   const { googleId } = req.params;
   if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
@@ -291,27 +292,68 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
       });
     }
     
-    // Use ensureValidGoogleTokens to refresh if needed
-    const { ensureValidGoogleTokens } = require('./utils/googleAuth');
-    const tokenResult = await ensureValidGoogleTokens(user);
+    // Check if user has refresh token - if yes, use it to refresh
+    // If no refresh token, check if current token is still valid (with 1 hour buffer)
+    const now = Date.now();
+    const oneHourInMs = 60 * 60 * 1000;
+    const tokenStillValid = user.tokenExpiry && user.tokenExpiry > (now + oneHourInMs);
     
-    // Reload user from database to get updated token (user.save() was called in ensureValidGoogleTokens)
-    const updatedUser = await User.findOne({ googleId });
-    
-    return res.json({
-      accessToken: updatedUser.accessToken,
-      expiryTime: updatedUser.tokenExpiry,
-      refreshed: tokenResult.refreshed
-    });
+    if (user.refreshToken) {
+      // User has refresh token - use ensureValidGoogleTokens to refresh if needed
+      try {
+        const { ensureValidGoogleTokens } = require('./utils/googleAuth');
+        const tokenResult = await ensureValidGoogleTokens(user);
+        
+        // Reload user from database to get updated token (user.save() was called in ensureValidGoogleTokens)
+        const updatedUser = await User.findOne({ googleId });
+        
+        return res.json({
+          accessToken: updatedUser.accessToken,
+          expiryTime: updatedUser.tokenExpiry,
+          refreshed: tokenResult.refreshed
+        });
+      } catch (refreshError) {
+        console.error('❌ Failed to refresh token with refresh token:', refreshError);
+        // If refresh fails, check if current token is still valid
+        if (tokenStillValid) {
+          console.log('⚠️ Refresh failed but current token still valid, returning it');
+          return res.json({
+            accessToken: user.accessToken,
+            expiryTime: user.tokenExpiry,
+            refreshed: false
+          });
+        }
+        // Refresh failed and token expired - need reauth
+        if (refreshError.message.includes('re-authenticate') || refreshError.message.includes('Refresh token invalid')) {
+          return res.status(401).json({ 
+            error: 'Authentication required',
+            message: 'Please re-authenticate with Google to continue syncing data',
+            needsReauth: true
+          });
+        }
+        throw refreshError;
+      }
+    } else {
+      // No refresh token - check if current token is still valid
+      if (tokenStillValid) {
+        console.log('✅ No refresh token but current token still valid, returning it');
+        return res.json({
+          accessToken: user.accessToken,
+          expiryTime: user.tokenExpiry,
+          refreshed: false
+        });
+      } else {
+        // No refresh token and token expired - need reauth
+        console.log('⚠️ No refresh token and token expired, user needs to re-authenticate');
+        return res.status(401).json({ 
+          error: 'Authentication required',
+          message: 'Please re-authenticate with Google to continue syncing data',
+          needsReauth: true
+        });
+      }
+    }
   } catch (error) {
     console.error('❌ Failed to refresh Google Fit token:', error);
-    if (error.message.includes('re-authenticate') || error.message.includes('Refresh token invalid')) {
-      return res.status(401).json({ 
-        error: 'Authentication required',
-        message: 'Please re-authenticate with Google to continue syncing data',
-        needsReauth: true
-      });
-    }
     return res.status(500).json({ error: error.message || 'Failed to refresh token' });
   }
 });
