@@ -250,12 +250,36 @@ export const UserProvider = ({ children }) => {
     // Only save access token if we have one (for Google Fit scopes)
     if (accessToken) {
       localStorage.setItem('fitapp_access_token', accessToken)
-      if (expiryTime) {
-        localStorage.setItem('fitapp_access_token_expiry', expiryTime.toString())
-      } else {
-        // fallback: 24 hours from now
-        localStorage.setItem('fitapp_access_token_expiry', (Date.now() + 24 * 3600 * 1000).toString())
-      }
+      const finalExpiryTime = expiryTime || (Date.now() + 24 * 3600 * 1000) // fallback: 24 hours from now
+      localStorage.setItem('fitapp_access_token_expiry', finalExpiryTime.toString())
+      
+      // Save token to backend so backend can use it for future refreshes
+      // Do this asynchronously so it doesn't block the login flow
+      (async () => {
+        try {
+          const apiUrl = getApiUrl()
+          const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              googleId: userData.sub,
+              name: userData.name,
+              email: userData.email,
+              picture: userData.picture,
+              accessToken: accessToken,
+              refreshToken: null, // GIS doesn't provide refresh tokens
+              tokenExpiry: finalExpiryTime
+            })
+          })
+          if (saveResponse.ok) {
+            console.log('✅ Access token saved to backend during login')
+          } else {
+            console.warn('⚠️ Failed to save access token to backend during login:', saveResponse.status)
+          }
+        } catch (err) {
+          console.warn('⚠️ Error saving access token to backend during login:', err)
+        }
+      })()
     }
 
     // Check if JWT token exists in localStorage (set by GoogleLoginButton)

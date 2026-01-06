@@ -279,12 +279,17 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
   if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
   
   try {
+    console.log(`🔄 Refresh token request for googleId: ${googleId}`);
     const user = await User.findOne({ googleId });
     if (!user) {
+      console.log(`❌ User not found: ${googleId}`);
       return res.status(404).json({ error: 'User not found' });
     }
     
+    console.log(`📊 User found: ${user.email}, hasAccessToken: ${!!user.accessToken}, hasRefreshToken: ${!!user.refreshToken}, tokenExpiry: ${user.tokenExpiry ? new Date(user.tokenExpiry).toISOString() : 'null'}`);
+    
     if (!user.accessToken) {
+      console.log(`⚠️ User ${user.email} has no access token in database`);
       return res.status(401).json({ 
         error: 'No access token available',
         message: 'User needs to authenticate with Google Fit first',
@@ -344,7 +349,8 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
         });
       } else {
         // No refresh token and token expired - need reauth
-        console.log('⚠️ No refresh token and token expired, user needs to re-authenticate');
+        const hoursExpired = user.tokenExpiry ? (Date.now() - user.tokenExpiry) / (1000 * 60 * 60) : 'unknown';
+        console.log(`⚠️ No refresh token and token expired (${hoursExpired.toFixed(1)} hours ago), user ${user.email} needs to re-authenticate`);
         return res.status(401).json({ 
           error: 'Authentication required',
           message: 'Please re-authenticate with Google to continue syncing data',
