@@ -271,6 +271,51 @@ app.use('/api/leaderboard', leaderboardRoutes)
 app.use('/api/chat', authenticateJWT, chatRoutes)
 app.use('/api/push', authenticateJWT, pushRoutes)
 
+// Endpoint to refresh Google Fit access token using backend's refresh token
+// This allows frontend to get a new access token without prompting user to login
+app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
+  const { googleId } = req.params;
+  if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
+  
+  try {
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.accessToken) {
+      return res.status(401).json({ 
+        error: 'No access token available',
+        message: 'User needs to authenticate with Google Fit first',
+        needsReauth: true
+      });
+    }
+    
+    // Use ensureValidGoogleTokens to refresh if needed
+    const { ensureValidGoogleTokens } = require('./utils/googleAuth');
+    const tokenResult = await ensureValidGoogleTokens(user);
+    
+    // Reload user from database to get updated token (user.save() was called in ensureValidGoogleTokens)
+    const updatedUser = await User.findOne({ googleId });
+    
+    return res.json({
+      accessToken: updatedUser.accessToken,
+      expiryTime: updatedUser.tokenExpiry,
+      refreshed: tokenResult.refreshed
+    });
+  } catch (error) {
+    console.error('❌ Failed to refresh Google Fit token:', error);
+    if (error.message.includes('re-authenticate') || error.message.includes('Refresh token invalid')) {
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        message: 'Please re-authenticate with Google to continue syncing data',
+        needsReauth: true
+      });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to refresh token' });
+  }
+});
+
 // Google Fit sync endpoint (no JWT required - uses stored Google tokens)
 app.get('/api/sync-google-fit/:googleId', async (req, res) => {
   const { googleId } = req.params;

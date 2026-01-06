@@ -305,18 +305,68 @@ export const UserProvider = ({ children }) => {
     }
   }
 
+  // Try to refresh token from backend first (silent refresh using stored refresh tokens)
+  // Falls back to requesting permissions from Google if backend refresh fails
+  const refreshGoogleFitToken = async () => {
+    const storedUser = JSON.parse(localStorage.getItem('fitapp_user') || '{}')
+    if (!storedUser?.sub) {
+      throw new Error('No user found in localStorage')
+    }
+    
+    try {
+      const apiUrl = getApiUrl()
+      const response = await fetch(`${apiUrl}/api/auth/refresh-google-fit-token/${storedUser.sub}`)
+      
+      if (response.ok) {
+        const result = await response.json()
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:309',message:'Backend token refresh successful',data:{refreshed:result.refreshed,hasToken:!!result.accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
+        // Store the refreshed token
+        localStorage.setItem('fitapp_access_token', result.accessToken)
+        localStorage.setItem('fitapp_access_token_expiry', result.expiryTime.toString())
+        
+        console.log(`✅ Google Fit token refreshed from backend${result.refreshed ? ' (was expired)' : ' (still valid)'}`)
+        return result.accessToken
+      } else if (response.status === 401) {
+        const errorData = await response.json()
+        if (errorData.needsReauth) {
+          // Backend says user needs to re-authenticate - fall through to requestGoogleFitPermissions
+          console.log('⚠️ Backend refresh failed - user needs to re-authenticate')
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:325',message:'Backend refresh failed - needs reauth',data:{status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          throw new Error('needsReauth')
+        }
+        throw new Error(`Backend refresh failed: ${response.status}`)
+      } else {
+        throw new Error(`Backend refresh failed: ${response.status}`)
+      }
+    } catch (error) {
+      if (error.message === 'needsReauth') {
+        throw error // Re-throw to trigger fallback
+      }
+      console.warn('⚠️ Backend token refresh failed, will try Google Identity Services:', error)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:335',message:'Backend refresh error - falling back',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      throw error
+    }
+  }
+
   // Request Google Fit permissions when needed
   const requestGoogleFitPermissions = () => {
     return new Promise((resolve, reject) => {
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:309',message:'requestGoogleFitPermissions called',data:{hasValidPerms:hasValidGoogleFitPermissions()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:340',message:'requestGoogleFitPermissions called',data:{hasValidPerms:hasValidGoogleFitPermissions()},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       // Check if user already has valid permissions
       if (hasValidGoogleFitPermissions()) {
         const token = localStorage.getItem('fitapp_access_token')
         console.log('✅ User already has valid Google Fit permissions, using existing token')
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:314',message:'Using existing valid token',data:{hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:345',message:'Using existing valid token',data:{hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         resolve(token)
         return
@@ -547,57 +597,51 @@ export const UserProvider = ({ children }) => {
       hasValidPerms: hasValidPerms
     });
     
-    // If no access token, request Google Fit permissions
-    if (!accessToken) {
+    // If no access token or token is expired, refresh it proactively BEFORE making API calls
+    // First try backend refresh (silent, no user prompt), then fall back to Google Identity Services if needed
+    // This prevents 401 errors and ensures we always have a valid token
+    if (!accessToken || isExpired) {
       try {
-        console.log('🔐 No access token, requesting Google Fit permissions...');
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:534',message:'No token - requesting permissions',data:{action:'requestGoogleFitPermissions'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        accessToken = await requestGoogleFitPermissions();
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:537',message:'Permissions granted - new token received',data:{hasNewToken:!!accessToken,newTokenLength:accessToken?accessToken.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
+        if (!accessToken) {
+          console.log('🔐 No access token, trying backend refresh first...');
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:534',message:'No token - trying backend refresh',data:{action:'refreshGoogleFitToken'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+        } else {
+          const hoursExpired = expiryTime ? (now - expiryTime) / (1000 * 60 * 60) : Infinity
+          console.log(`🔐 Token expired ${hoursExpired.toFixed(1)} hours ago, refreshing proactively from backend...`);
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:537',message:'Token expired - refreshing from backend',data:{hoursExpired,action:'refreshGoogleFitToken'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+        }
+        
+        // Try backend refresh first (silent, uses stored refresh tokens)
+        try {
+          accessToken = await refreshGoogleFitToken();
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:542',message:'Backend refresh successful',data:{hasNewToken:!!accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+        } catch (refreshError) {
+          // Backend refresh failed - fall back to Google Identity Services (will prompt user)
+          if (refreshError.message === 'needsReauth' || !accessToken) {
+            console.log('⚠️ Backend refresh unavailable, requesting Google Fit permissions from Google...');
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:546',message:'Backend refresh failed - falling back to Google',data:{error:refreshError.message,action:'requestGoogleFitPermissions'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            accessToken = await requestGoogleFitPermissions();
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:548',message:'Google permissions granted',data:{hasNewToken:!!accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+          } else {
+            throw refreshError;
+          }
+        }
       } catch (error) {
-        console.error('❌ Failed to get Google Fit permissions:', error);
+        console.error('❌ Failed to get/refresh Google Fit permissions:', error);
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:540',message:'Failed to get permissions',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:554',message:'All refresh methods failed',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
         throw error;
-      }
-    } else if (isExpired) {
-      // Token exists but is expired - try using it first (grace period), only refresh if API call fails
-      // Check if token is expired by less than 24 hours (reasonable grace period)
-      const hoursExpired = expiryTime ? (now - expiryTime) / (1000 * 60 * 60) : Infinity
-      const gracePeriodHours = 24
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:542',message:'Token expired - checking grace period',data:{hoursExpired,gracePeriodHours,willUseExpiredToken:hoursExpired<gracePeriodHours},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      if (hoursExpired < gracePeriodHours) {
-        // Token is expired but within grace period - try using it, refresh only if API fails
-        console.log(`⚠️ Token expired ${hoursExpired.toFixed(1)} hours ago, trying to use it first (within ${gracePeriodHours}h grace period)`);
-        // We'll proceed with the expired token and let the API call fail if needed
-        // The error handler below will catch 401 and refresh the token
-      } else {
-        // Token expired by more than grace period - refresh immediately
-        console.log(`🔐 Token expired ${hoursExpired.toFixed(1)} hours ago (beyond ${gracePeriodHours}h grace period), refreshing...`);
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:555',message:'Token expired beyond grace - refreshing',data:{hoursExpired,action:'requestGoogleFitPermissions'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        try {
-          accessToken = await requestGoogleFitPermissions();
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:557',message:'Token refreshed after expiry',data:{hasNewToken:!!accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-        } catch (error) {
-          console.error('❌ Failed to refresh expired token:', error);
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:559',message:'Failed to refresh expired token',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-          throw error;
-        }
       }
     }
     
