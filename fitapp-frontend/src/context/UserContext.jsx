@@ -423,7 +423,7 @@ export const UserProvider = ({ children }) => {
           const tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: clientId,
             scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile',
-            callback: (response) => {
+            callback: async (response) => {
               const accessToken = response.access_token;
               const expiresIn = response.expires_in || 3600;
               const expiryTime = Date.now() + expiresIn * 1000;
