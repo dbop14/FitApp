@@ -217,13 +217,7 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
 
 // Helper function to check if a similar message was already sent today
 const hasMessageBeenSentToday = async (challengeId, message, botName, messageType = null, userId = null) => {
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:219',message:'hasMessageBeenSentToday entry',data:{challengeId:challengeId?.toString(),messageType,userId,mongoConnected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   if (!mongoConnected || !challengeId) {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:221',message:'hasMessageBeenSentToday early return',data:{mongoConnected,hasChallengeId:!!challengeId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     return false; // Can't check, allow sending
   }
 
@@ -255,9 +249,6 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
       query.userId = userId;
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:252',message:'before exact match query',data:{query:JSON.stringify(query),todayStart:todayStart.toISOString(),todayEnd:todayEnd.toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     // Check for exact message match first
     const exactMatch = await ChatMessage.findOne({
       ...query,
@@ -265,9 +256,6 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
     });
 
     if (exactMatch) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:258',message:'exact match found',data:{exactMatchId:exactMatch._id?.toString(),messageType,userId,challengeId:challengeId.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       console.log(`⏭️  Duplicate message detected (exact match): messageType=${messageType}, userId=${userId || 'none'}, challengeId=${challengeId}`);
       return true;
     }
@@ -275,9 +263,6 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
     // For user-specific messages (with userId and messageType), check if same type was sent to same user today
     // This prevents sending multiple cards of the same type to the same user even if content differs slightly
     if (userId && messageType) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:265',message:'checking same type for user today',data:{challengeId:challengeId.toString(),messageType,userId,todayStart:todayStart.toISOString(),todayEnd:todayEnd.toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       const sameTypeForUserToday = await ChatMessage.findOne({
         challengeId: challengeId.toString(),
         sender: botName,
@@ -291,21 +276,12 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
       });
 
       if (sameTypeForUserToday) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:278',message:'same type for user found today',data:{foundId:sameTypeForUserToday._id?.toString(),messageType,userId,challengeId:challengeId.toString(),foundTimestamp:sameTypeForUserToday.timestamp?.toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         console.log(`⏭️  Duplicate message detected (same type for user today): messageType=${messageType}, userId=${userId}, challengeId=${challengeId}`);
         return true;
       } else {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:280',message:'no same type for user found today',data:{messageType,userId,challengeId:challengeId.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         // Also check if ANY stepGoalCard was ever sent to this user for this challenge (not just today)
         // This prevents re-sending milestone cards after container restarts
         if (messageType === 'stepGoalCard' && userId) {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:283',message:'checking for any stepGoalCard ever sent',data:{challengeId:challengeId.toString(),messageType,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           const anyStepGoalCard = await ChatMessage.findOne({
             challengeId: challengeId.toString(),
             sender: botName,
@@ -314,15 +290,8 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
             userId: userId
           });
           if (anyStepGoalCard) {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:291',message:'stepGoalCard found in history',data:{foundId:anyStepGoalCard._id?.toString(),userId,challengeId:challengeId.toString(),foundTimestamp:anyStepGoalCard.timestamp?.toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             console.log(`⏭️  Duplicate message detected (stepGoalCard already sent to user): userId=${userId}, challengeId=${challengeId}`);
             return true;
-          } else {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:295',message:'no stepGoalCard found in history',data:{userId,challengeId:challengeId.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
           }
         }
       }
@@ -486,9 +455,6 @@ const announcedWinners = new Set(); // challengeId
 const checkStepPointChanges = async () => {
   console.log('[DEBUG] checkStepPointChanges:entry - mongoConnected:', mongoConnected);
   debugLog('checkStepPointChanges:entry', 'checkStepPointChanges called', { mongoConnected });
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:439',message:'checkStepPointChanges entry',data:{previousStepPointsSize:previousStepPoints.size,previousStepPointsKeys:Array.from(previousStepPoints.keys())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   if (!mongoConnected) {
     console.log('[DEBUG] checkStepPointChanges:earlyReturn - MongoDB not connected');
     debugLog('checkStepPointChanges:earlyReturn', 'Early return - MongoDB not connected', {});
@@ -507,9 +473,6 @@ const checkStepPointChanges = async () => {
       const key = `${participant.challengeId}-${participant.userId}`;
       const previousPoints = previousStepPoints.get(key) || 0;
       const currentPoints = participant.stepGoalPoints || 0;
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:458',message:'participant comparison',data:{key,previousPoints,currentPoints,isIncrease:currentPoints>previousPoints,mapHasKey:previousStepPoints.has(key)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       console.log(`   [${totalChecked}/${participants.length}] Participant ${participant.userId} in challenge ${participant.challengeId}: previous=${previousPoints}, current=${currentPoints}`);
 
@@ -518,9 +481,6 @@ const checkStepPointChanges = async () => {
         increasesFound++;
         console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
         previousStepPoints.set(key, currentPoints);
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:464',message:'point increase detected',data:{key,previousPoints,currentPoints,challengeId:participant.challengeId,userId:participant.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         
         // Get challenge and user info
         const challenge = await Challenge.findById(participant.challengeId);
@@ -553,11 +513,8 @@ const checkStepPointChanges = async () => {
             const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${stepGoalFormatted} steps. Keep up the momentum!`;
             const botName = challenge.botName || 'Fitness Motivator';
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:500',message:'before sendCardMessage call',data:{challengeId:challenge._id.toString(),userId:participant.userId,messageType:'stepGoalCard',messagePreview:fullMessage.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
-            const sendResult = await sendCardMessage(
+            await sendCardMessage(
               challenge.matrixRoomId,
               fullMessage,
               challenge._id,
@@ -572,9 +529,6 @@ const checkStepPointChanges = async () => {
               user.picture,
               participant.userId
             );
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:518',message:'after sendCardMessage call',data:{sendResult,challengeId:challenge._id.toString(),userId:participant.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
           }
         } else {
           console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
@@ -1382,18 +1336,12 @@ const start = async () => {
     // Initialize previousStepPoints from database to prevent re-sending milestone cards on restart
     if (mongoConnected) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1382',message:'initializing previousStepPoints from database',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         const participants = await ChallengeParticipant.find({});
         for (const participant of participants) {
           const key = `${participant.challengeId}-${participant.userId}`;
           const currentPoints = participant.stepGoalPoints || 0;
           previousStepPoints.set(key, currentPoints);
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1390',message:'previousStepPoints initialized',data:{mapSize:previousStepPoints.size,participantCount:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         console.log(`✅ Initialized previousStepPoints Map with ${previousStepPoints.size} entries from database`);
       } catch (err) {
         console.error('⚠️  Failed to initialize previousStepPoints from database:', err.message);

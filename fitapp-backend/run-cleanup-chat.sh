@@ -32,5 +32,6 @@ echo "✅ Found container: $CONTAINER_NAME"
 echo "🚀 Running cleanup script for challenge: $CHALLENGE_ID"
 echo ""
 
-docker exec $CONTAINER_NAME node cleanup-chat-duplicates.js $CHALLENGE_ID
+# Run the cleanup script from the app directory
+docker exec $CONTAINER_NAME sh -c "cd /app && node cleanup-chat-duplicates.js $CHALLENGE_ID"
 
