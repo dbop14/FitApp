@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const fs = require('fs');
 const User = require('../models/User');
 const Challenge = require('../models/Challenge');
 const ChallengeParticipant = require('../models/ChallengeParticipant');
@@ -320,20 +321,20 @@ router.get('/userdata', async (req, res) => {
     // Ensure tokens are valid and refresh proactively if needed
     let oauth2Client;
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:320',message:'Before ensureValidGoogleTokens',data:{hasAccessToken:!!user.accessToken,hasRefreshToken:!!user.refreshToken,tokenExpiry:user.tokenExpiry,email:user.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    try{const logPath=path.join(__dirname,'../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'routes/user.js:320',message:'Before ensureValidGoogleTokens',data:{hasAccessToken:!!user.accessToken,hasRefreshToken:!!user.refreshToken,tokenExpiry:user.tokenExpiry,email:user.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
     // #endregion
     try {
       const tokenResult = await ensureValidGoogleTokens(user);
       oauth2Client = tokenResult.oauth2Client;
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:325',message:'ensureValidGoogleTokens success',data:{refreshed:tokenResult.refreshed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      try{const logPath=path.join(__dirname,'../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'routes/user.js:325',message:'ensureValidGoogleTokens success',data:{refreshed:tokenResult.refreshed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
       // #endregion
       if (tokenResult.refreshed) {
         console.log(`🔑 Token refreshed proactively for ${user.email}`);
       }
     } catch (tokenError) {
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:328',message:'ensureValidGoogleTokens error',data:{error:tokenError.message,hasRefreshToken:!!user.refreshToken,tokenExpiry:user.tokenExpiry,now:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      try{const logPath=path.join(__dirname,'../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'routes/user.js:328',message:'ensureValidGoogleTokens error',data:{error:tokenError.message,hasRefreshToken:!!user.refreshToken,tokenExpiry:user.tokenExpiry,now:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
       // #endregion
       console.error('❌ Token validation/refresh failed:', tokenError);
       // If token refresh fails, return stored data instead of error
