@@ -21,17 +21,24 @@ export const UserProvider = ({ children }) => {
   // Save user to localStorage whenever it changes (including fitness data updates)
   useEffect(() => {
     if (user) {
-      localStorage.setItem('fitapp_user', JSON.stringify(user))
+      localStorage.setItem('fitapp_user', JSON.stringify(user));
     }
   }, [user])
 
   // Helper to check if token is expired
   // Use a 30-minute buffer to refresh proactively before actual expiry
   const isTokenExpired = () => {
-    const expiry = localStorage.getItem('fitapp_access_token_expiry')
-    if (!expiry) return true
-    const bufferTime = 30 * 60 * 1000 // 30 minutes buffer
-    return Date.now() > (parseInt(expiry, 10) - bufferTime)
+    const expiry = localStorage.getItem('fitapp_access_token_expiry');
+    if (!expiry) return true;
+    const bufferTime = 30 * 60 * 1000; // 30 minutes buffer
+    const expiryTime = parseInt(expiry, 10);
+    const isExpired = Date.now() > (expiryTime - bufferTime);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:30',message:'isTokenExpired check',data:{hasExpiry:!!expiry,expiryValue:expiry,expiryParsed:expiryTime,now:Date.now(),isExpired,timeUntilExpiry:expiryTime-Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    return isExpired;
   }
 
   // Helper to check if JWT token is expired
@@ -43,14 +50,25 @@ export const UserProvider = ({ children }) => {
 
   // Helper to check if user has valid Google Fit permissions
   const hasValidGoogleFitPermissions = () => {
-    const token = localStorage.getItem('fitapp_access_token')
-    const expiry = localStorage.getItem('fitapp_access_token_expiry')
+    const token = localStorage.getItem('fitapp_access_token');
+    const expiry = localStorage.getItem('fitapp_access_token_expiry');
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:45',message:'hasValidGoogleFitPermissions check',data:{hasToken:!!token,hasExpiry:!!expiry,expiryValue:expiry,expiryParsed:expiry?parseInt(expiry,10):null,now:Date.now(),userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     
     if (!token || !expiry) return false
     
     // Check if token is expired (with 30 minute buffer to match isTokenExpired)
-    const bufferTime = 30 * 60 * 1000 // 30 minutes
-    return Date.now() < (parseInt(expiry, 10) - bufferTime)
+    const bufferTime = 30 * 60 * 1000; // 30 minutes
+    const expiryTime = parseInt(expiry, 10);
+    const isValid = Date.now() < (expiryTime - bufferTime);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:53',message:'Token validity check result',data:{isValid,expiryTime,now:Date.now(),timeUntilExpiry:expiryTime-Date.now(),hoursUntilExpiry:(expiryTime-Date.now())/(1000*60*60)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    return isValid;
   }
 
   // Helper function to regenerate JWT token from backend
@@ -145,7 +163,7 @@ export const UserProvider = ({ children }) => {
             
             if (lastLoginTime && parseInt(lastLoginTime) > thirtyDaysAgo) {
               // Session is still valid - extend it
-              localStorage.setItem('fitapp_last_login', Date.now().toString())
+              localStorage.setItem('fitapp_last_login', Date.now().toString());
               console.log('✅ Login session valid and extended - user won\'t need to login again for 30 days')
               
               // Check if JWT token is expired - if so, regenerate it
@@ -168,7 +186,7 @@ export const UserProvider = ({ children }) => {
             } else if (!lastLoginTime) {
               // First time loading - set login timestamp and user data
               // This handles cases where user data exists but lastLoginTime was never set
-              localStorage.setItem('fitapp_last_login', Date.now().toString())
+              localStorage.setItem('fitapp_last_login', Date.now().toString());
               console.log('🔄 Set initial login timestamp for 30-day persistence')
               setUser(userData)
             } else {
@@ -242,18 +260,18 @@ export const UserProvider = ({ children }) => {
     }
     
     setUser(userData)
-    localStorage.setItem('fitapp_user', JSON.stringify(userData))
+    localStorage.setItem('fitapp_user', JSON.stringify(userData));
     
     // Set login timestamp for session persistence (30 days)
-    localStorage.setItem('fitapp_last_login', Date.now().toString())
+    localStorage.setItem('fitapp_last_login', Date.now().toString());
     
     // Only save access token if we have one (for Google Fit scopes)
     if (accessToken) {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:251',message:'Saving access token - before setItem',data:{hasAccessToken:!!accessToken,expiryTime:expiryTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
-      localStorage.setItem('fitapp_access_token', accessToken)
-      const finalExpiryTime = expiryTime || (Date.now() + 24 * 3600 * 1000) // fallback: 24 hours from now
+      localStorage.setItem('fitapp_access_token', accessToken);
+      const finalExpiryTime = expiryTime || (Date.now() + 24 * 3600 * 1000); // fallback: 24 hours from now
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:254',message:'Before setItem expiry - checking for semicolon issue',data:{finalExpiryTime:finalExpiryTime,expiryTimeString:finalExpiryTime.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
@@ -264,7 +282,7 @@ export const UserProvider = ({ children }) => {
       
       // Save token to backend so backend can use it for future refreshes
       // Do this asynchronously so it doesn't block the login flow
-      (async () => {
+      void (async () => {
         try {
           const apiUrl = getApiUrl()
           const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
@@ -279,7 +297,7 @@ export const UserProvider = ({ children }) => {
               refreshToken: null, // GIS doesn't provide refresh tokens
               tokenExpiry: finalExpiryTime
             })
-          })
+          });
           if (saveResponse.ok) {
             console.log('✅ Access token saved to backend during login')
           } else {
@@ -288,7 +306,7 @@ export const UserProvider = ({ children }) => {
         } catch (err) {
           console.warn('⚠️ Error saving access token to backend during login:', err)
         }
-      })()
+      })();
     }
 
     // Check if JWT token exists in localStorage (set by GoogleLoginButton)
@@ -354,8 +372,8 @@ export const UserProvider = ({ children }) => {
         const result = await response.json()
         
         // Store the refreshed token
-        localStorage.setItem('fitapp_access_token', result.accessToken)
-        localStorage.setItem('fitapp_access_token_expiry', result.expiryTime.toString())
+        localStorage.setItem('fitapp_access_token', result.accessToken);
+        localStorage.setItem('fitapp_access_token_expiry', result.expiryTime.toString());
         
         console.log(`✅ Google Fit token refreshed from backend${result.refreshed ? ' (was expired)' : ' (still valid)'}`)
         return result.accessToken
