@@ -9,6 +9,9 @@ const { google } = require('googleapis');
  * @returns {Object} - { oauth2Client, refreshed: boolean }
  */
 async function ensureValidGoogleTokens(user) {
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'googleAuth.js:11',message:'ensureValidGoogleTokens entry',data:{hasAccessToken:!!user?.accessToken,hasRefreshToken:!!user?.refreshToken,tokenExpiry:user?.tokenExpiry,email:user?.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (!user || !user.accessToken) {
     throw new Error('User or access token not found');
   }
@@ -35,9 +38,15 @@ async function ensureValidGoogleTokens(user) {
   const now = Date.now();
   const oneDayInMs = 24 * 60 * 60 * 1000; // 1 day in milliseconds
   const shouldRefresh = !user.tokenExpiry || user.tokenExpiry < (now + oneDayInMs);
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'googleAuth.js:37',message:'Token refresh check',data:{now,tokenExpiry:user.tokenExpiry,shouldRefresh,hasRefreshToken:!!user.refreshToken,timeUntilExpiry:user.tokenExpiry?Math.round((user.tokenExpiry-now)/(60*60*1000)):'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 
   if (shouldRefresh) {
     if (!user.refreshToken) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'googleAuth.js:41',message:'No refresh token available',data:{tokenExpiry:user.tokenExpiry,now,isExpired:user.tokenExpiry?user.tokenExpiry<now:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       throw new Error('No refresh token available. User needs to re-authenticate.');
     }
 
