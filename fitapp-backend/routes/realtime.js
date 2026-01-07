@@ -3,39 +3,9 @@ const router = express.Router()
 const User = require('../models/User')
 const ChallengeParticipant = require('../models/ChallengeParticipant')
 const jwt = require('jsonwebtoken')
-const fs = require('fs')
-const path = require('path')
 
 // Store active SSE connections
 const activeConnections = new Map()
-
-// Helper function to safely write debug logs
-const writeDebugLog = (location, message, data, hypothesisId) => {
-  try {
-    const logPath = '/Volumes/docker/fitapp/.cursor/debug.log'
-    const logDir = path.dirname(logPath)
-    // Ensure directory exists
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true })
-    }
-    const logEntry = JSON.stringify({
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId
-    }) + '\n'
-    fs.appendFileSync(logPath, logEntry)
-  } catch (logError) {
-    // Silently fail if logging directory doesn't exist (e.g., in Docker container)
-    // Only log to console in development
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('Debug log write failed:', logError.message)
-    }
-  }
-}
 
 // Helper function to verify JWT token
 const verifyToken = (token) => {
@@ -78,10 +48,6 @@ router.get('/events/:googleId', async (req, res) => {
   // Additional header to hint at HTTP/1.1 compatibility
   res.setHeader('X-Protocol-Version', 'HTTP/1.1')
   
-  // #region agent log
-  writeDebugLog('realtime.js:44', 'Setting SSE headers', {headersSet:true,protocol:req.protocol,httpVersion:req.httpVersion}, 'D')
-  // #endregion
-  
   // Flush headers immediately to establish connection
   res.flushHeaders()
   
@@ -93,26 +59,14 @@ router.get('/events/:googleId', async (req, res) => {
     res.flush()
   }
   
-  // #region agent log
-  writeDebugLog('realtime.js:48', 'Initial connection message sent', {connectionId:`${googleId}-${Date.now()}`}, 'B')
-  // #endregion
-  
   // Store connection
   const connectionId = `${googleId}-${Date.now()}`
   activeConnections.set(connectionId, { res, googleId, lastSent: null })
   
   console.log(`✅ SSE connection established for user ${googleId} (${connectionId})`)
   
-  // #region agent log
-  writeDebugLog('realtime.js:53', 'SSE connection stored', {connectionId,activeConnectionsCount:activeConnections.size,resWritable:!res.destroyed && !res.closed}, 'B')
-  // #endregion
-  
   // Send initial data
   try {
-    // #region agent log
-    writeDebugLog('realtime.js:56', 'Before fetching user data for initial send', {connectionId,resWritable:!res.destroyed && !res.closed}, 'B')
-    // #endregion
-    
     const user = await User.findOne({ googleId })
     if (user) {
       const initialData = {
@@ -124,20 +78,12 @@ router.get('/events/:googleId', async (req, res) => {
         }
       }
       
-      // #region agent log
-      writeDebugLog('realtime.js:67', 'Before writing initial data', {connectionId,resWritable:!res.destroyed && !res.closed,dataSize:JSON.stringify(initialData).length}, 'B')
-      // #endregion
-      
       res.write(`data: ${JSON.stringify(initialData)}\n\n`)
       
       // Flush initial data immediately
       if (typeof res.flush === 'function') {
         res.flush()
       }
-      
-      // #region agent log
-      writeDebugLog('realtime.js:70', 'Initial data written', {connectionId,resWritable:!res.destroyed && !res.closed}, 'B')
-      // #endregion
       
       // Update lastSent to prevent duplicate initial send
       const connection = activeConnections.get(connectionId)
@@ -151,9 +97,6 @@ router.get('/events/:googleId', async (req, res) => {
     }
   } catch (error) {
     console.error('Error sending initial data:', error)
-    // #region agent log
-    writeDebugLog('realtime.js:80', 'Error sending initial data', {error:error.message,stack:error.stack,connectionId}, 'B')
-    // #endregion
   }
   
   // Set up MongoDB change stream for user data
@@ -319,9 +262,6 @@ router.get('/events/:googleId', async (req, res) => {
   
   // Clean up on client disconnect
   req.on('close', () => {
-    // #region agent log
-    writeDebugLog('realtime.js:217', 'Request close event', {connectionId,resWritable:!res.destroyed && !res.closed}, 'B')
-    // #endregion
     const connection = activeConnections.get(connectionId)
     if (connection) {
       console.log(`🔌 SSE connection closed for user ${googleId} (${connectionId})`)
@@ -336,9 +276,6 @@ router.get('/events/:googleId', async (req, res) => {
   
   // Handle errors
   req.on('error', (error) => {
-    // #region agent log
-    writeDebugLog('realtime.js:230', 'Request error event', {errorCode:error.code,errorMessage:error.message,connectionId,resWritable:!res.destroyed && !res.closed}, 'A')
-    // #endregion
     // ECONNRESET is normal when client disconnects - don't log as error
     if (error.code === 'ECONNRESET' || error.code === 'EPIPE') {
       const connection = activeConnections.get(connectionId)
@@ -365,9 +302,6 @@ router.get('/events/:googleId', async (req, res) => {
   
   // Also handle response errors
   res.on('error', (error) => {
-    // #region agent log
-    writeDebugLog('realtime.js:254', 'Response error event', {errorCode:error.code,errorMessage:error.message,connectionId,resDestroyed:res.destroyed,resClosed:res.closed}, 'A')
-    // #endregion
     if (error.code !== 'ECONNRESET' && error.code !== 'EPIPE') {
       console.error(`❌ SSE response error for user ${googleId}:`, error)
     }

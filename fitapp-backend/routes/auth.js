@@ -106,19 +106,45 @@ router.get('/auth/google/callback', async (req, res) => {
     console.log(`✅ Got user profile: ${profile.email} (${profile.id})`);
     console.log(`🔑 Has refresh token: ${!!tokens.refresh_token}`);
 
-    // Upsert user in DB with tokens (including refresh token!)
+    // Check if user already exists to preserve custom profile data
+    const existingUser = await User.findOne({ googleId: profile.id });
+    
+    // Build update data - always update tokens and email
+    const updateData = {
+      email: profile.email,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token, // This is the key for 30-day sync!
+      tokenExpiry: tokens.expiry_date
+    };
+    
+    // Preserve custom name and picture if they exist
+    // Custom pictures are data URLs (start with "data:image")
+    const isCustomPicture = existingUser?.picture && existingUser.picture.startsWith('data:image');
+    
+    // Only update name if user doesn't exist (new user)
+    // This preserves any custom name the user has set
+    if (!existingUser) {
+      updateData.name = profile.name;
+    } else {
+      // Preserve existing name (may be custom)
+      updateData.name = existingUser.name || profile.name;
+    }
+    
+    // Only update picture if:
+    // 1. User doesn't exist (new user), OR
+    // 2. User exists but has no picture, OR
+    // 3. User's current picture is NOT a custom picture (data URL)
+    if (!existingUser || !existingUser.picture || !isCustomPicture) {
+      updateData.picture = profile.picture;
+    } else {
+      // Preserve the existing custom picture (data URL)
+      updateData.picture = existingUser.picture;
+    }
+
+    // Upsert user in DB with tokens (preserving custom name/picture)
     const user = await User.findOneAndUpdate(
       { googleId: profile.id },
-      {
-        $set: {
-          name: profile.name,
-          email: profile.email,
-          picture: profile.picture,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token, // This is the key for 30-day sync!
-          tokenExpiry: tokens.expiry_date
-        }
-      },
+      { $set: updateData },
       { upsert: true, new: true }
     );
 

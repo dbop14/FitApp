@@ -506,18 +506,8 @@ export const ChatNotificationProvider = ({ children }) => {
 
   // Subscribe to push notifications when user logs in
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatNotificationContext.jsx:509',message:'Checking Notification API availability',data:{hasUser:!!user?.sub,hasNotificationInWindow:'Notification' in window},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     if (user?.sub && 'Notification' in window && Notification.permission === 'granted') {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatNotificationContext.jsx:510',message:'Notification permission granted - subscribing',data:{permission:Notification.permission},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       subscribeToPushNotifications();
-    } else {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatNotificationContext.jsx:510',message:'Skipping notification subscription',data:{hasUser:!!user?.sub,hasNotification:'Notification' in window,permission:'Notification' in window ? Notification.permission : 'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
     }
   }, [user?.sub, subscribeToPushNotifications]);
 

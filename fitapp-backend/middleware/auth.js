@@ -10,14 +10,6 @@ module.exports = function authenticateJWT(req, res, next) {
   const botSecret = req.headers['x-bot-secret'];
   const expectedBotSecret = process.env.BOT_SECRET || process.env.BOT_PASSWORD;
   if (botSecret && expectedBotSecret && botSecret === expectedBotSecret) {
-    // #region agent log
-    const fs = require('fs');
-    const logPath = process.platform === 'win32' ? '\\\\herring-nas\\docker\\fitapp\\.cursor\\debug.log' : '/Volumes/docker/fitapp/.cursor/debug.log';
-    try {
-      const logEntry = JSON.stringify({location:'middleware/auth.js:12',message:'Bot request authenticated via secret',data:{path:req.path,method:req.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'auth'}) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-    } catch(e) {}
-    // #endregion
     console.log(`✅ Bot request authenticated via secret for ${req.method} ${req.path}`);
     req.user = { isBot: true }; // Set bot user
     return next();

@@ -20,16 +20,6 @@ router.get('/:challengeId/messages', async (req, res) => {
       .sort({ timestamp: 1 })
       .limit(100); // Limit to last 100 messages
     
-    // #region agent log
-    const fs = require('fs');
-    const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-    try {
-      const cardMessages = messages.filter(m => m.messageType && m.messageType !== 'text');
-      const logEntry = JSON.stringify({location:'fitapp-backend/routes/chat.js:20',message:'messages fetched from DB',data:{totalMessages:messages.length,cardMessages:cardMessages.length,cardTypes:cardMessages.map(m=>m.messageType),hasWelcomeCard:cardMessages.some(m=>m.messageType==='welcomeCard'),sampleMessage:cardMessages[0]?{messageType:cardMessages[0].messageType,hasCardData:!!cardMessages[0].cardData}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'}) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-    } catch(e) {}
-    // #endregion
-    
     res.json(messages);
   } catch (err) {
     console.error('❌ Error fetching chat messages:', err);
@@ -41,15 +31,6 @@ router.get('/:challengeId/messages', async (req, res) => {
 router.post('/:challengeId/messages', async (req, res) => {
   const { challengeId } = req.params;
   const { sender, message, isBot = false, isSystem = false, isOwn = false, userId, userEmail } = req.body;
-  
-  // #region agent log
-  const fs = require('fs');
-  const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-  try {
-    const logEntry = JSON.stringify({location:'chat.js:30',message:'POST message request',data:{challengeId,sender,hasUserId:!!userId,hasUserEmail:!!userEmail,userId,userEmail,isBot,isSystem},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'}) + '\n';
-    fs.appendFileSync(logPath, logEntry);
-  } catch(e) {}
-  // #endregion
   
   console.log('📝 Chat message request:', {
     challengeId,
@@ -116,13 +97,6 @@ router.post('/:challengeId/messages', async (req, res) => {
       
       await newMessage.save();
       
-      // #region agent log
-      try {
-        const logEntry = JSON.stringify({location:'chat.js:92',message:'message saved with userId',data:{messageId:newMessage._id,challengeId,sender:verifiedSender,userId:newMessage.userId,storedUserId:newMessage.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'}) + '\n';
-        fs.appendFileSync(logPath, logEntry);
-      } catch(e) {}
-      // #endregion
-      
       console.log('✅ Chat message saved successfully:', { messageId: newMessage._id, challengeId, sender: verifiedSender, userId: newMessage.userId });
       
       // Send push notifications to all participants except the sender
@@ -145,27 +119,12 @@ router.post('/:challengeId/messages', async (req, res) => {
         }
       } catch (pushError) {
         console.error('❌ Error sending push notifications:', pushError);
-        // #region agent log
-        const fs = require('fs');
-        const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-        try {
-          const logEntry = JSON.stringify({location:'chat.js:155',message:'Push notification error',data:{error:pushError.message,stack:pushError.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
         // Don't fail the request if push notifications fail
       }
       
       res.status(201).json(newMessage);
     } else {
       console.log('🤖 Processing bot/system message or message without userId/userEmail');
-      
-      // #region agent log
-      try {
-        const logEntry = JSON.stringify({location:'chat.js:97',message:'processing message without userId',data:{challengeId,sender,hasUserId:!!userId,hasUserEmail:!!userEmail,isBot,isSystem,reason:!userId || !userEmail ? 'missing userId/userEmail' : 'bot/system'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'}) + '\n';
-        fs.appendFileSync(logPath, logEntry);
-      } catch(e) {}
-      // #endregion
       
       // For bot and system messages, no verification needed
       const newMessage = new ChatMessage({
@@ -183,13 +142,6 @@ router.post('/:challengeId/messages', async (req, res) => {
       });
       
       await newMessage.save();
-      
-      // #region agent log
-      try {
-        const logEntry = JSON.stringify({location:'chat.js:111',message:'bot/system message saved',data:{messageId:newMessage._id,challengeId,sender,storedUserId:newMessage.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'}) + '\n';
-        fs.appendFileSync(logPath, logEntry);
-      } catch(e) {}
-      // #endregion
       
       console.log('✅ Bot/system message saved successfully:', { messageId: newMessage._id, challengeId, sender, userId: newMessage.userId });
       
@@ -210,14 +162,6 @@ router.post('/:challengeId/messages', async (req, res) => {
         }
       } catch (pushError) {
         console.error('❌ Error sending push notifications:', pushError);
-        // #region agent log
-        const fs = require('fs');
-        const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-        try {
-          const logEntry = JSON.stringify({location:'chat.js:210',message:'Bot push notification error',data:{error:pushError.message,stack:pushError.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'push-missing'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
         // Don't fail the request if push notifications fail
       }
       

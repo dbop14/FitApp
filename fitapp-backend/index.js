@@ -1398,21 +1398,6 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
         }
       }
       
-      // #region agent log
-      console.log(`🔍 Google Fit sync - checking for manual entries:`, {
-        googleId,
-        normalizedDate: normalizedDate.toISOString(),
-        normalizedDateStr: normalizedDate.toISOString().split('T')[0],
-        normalizedDateTimestamp: normalizedDate.getTime(),
-        hasManualEntry: !!manualWeightEntry,
-        manualWeight: manualWeightEntry?.weight,
-        manualEntrySource: manualWeightEntry?.source,
-        allEntriesCount: allEntriesToday.length,
-        allEntries: allEntriesToday.map(e => ({ source: e.source, weight: e.weight, date: e.date?.toISOString() })),
-        googleFitWeight: weight
-      });
-      // #endregion
-      
       const participants = await ChallengeParticipant.find({ userId: googleId });
       console.log(`🔍 Found ${participants.length} challenge participations for user ${user.email}`);
       
@@ -1476,12 +1461,6 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
           console.log(`📊 Keeping existing participant.lastWeight: ${participant.lastWeight || 'null'} (manualEntry: ${!!manualWeightEntry}, recentManualEntry: ${!!recentManualEntry}, googleFitWeight: ${weight || 'null'})`);
         }
         
-        // #region agent log
-        if (originalLastWeight !== participant.lastWeight) {
-          console.log(`📊 Weight changed during sync: ${originalLastWeight || 'null'} → ${participant.lastWeight || 'null'}, manualEntry: ${!!manualWeightEntry}`);
-        }
-        // #endregion
-        
         // CRITICAL: Ensure startingWeight is never overwritten (it's set once on first weigh-in day)
         if (participant.startingWeight !== originalStartingWeight) {
           console.log(`⚠️ WARNING: startingWeight was changed during sync, restoring original value`);
@@ -1519,20 +1498,6 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
           userId: googleId,
           date: normalizedDate
         });
-        
-        // #region agent log
-        console.log(`🔍 Google Fit sync - FitnessHistory check:`, {
-          googleId,
-          normalizedDate: normalizedDate.toISOString(),
-          normalizedDateStr: normalizedDate.toISOString().split('T')[0],
-          hasManualEntry: !!manualEntry,
-          manualWeight: manualEntry?.weight,
-          hasExistingEntry: !!existingEntry,
-          existingSource: existingEntry?.source,
-          existingWeight: existingEntry?.weight,
-          googleFitWeight: weight
-        });
-        // #endregion
         
         // CRITICAL: Never overwrite manual entries - they take absolute precedence
         if (manualEntry) {
@@ -2100,17 +2065,25 @@ app.post('/api/save-user', async (req, res) => {
   }
 
   try {
-    // Check if user already exists to preserve custom profile picture
+    // Check if user already exists to preserve custom profile data
     const existingUser = await User.findOne({ googleId });
     
     const updateData = {
-      name,
       email,
       accessToken,
       refreshToken,
       tokenExpiry,
       lastSync: new Date()
     };
+    
+    // Preserve custom name if user exists (they may have changed it)
+    // Only update name if user doesn't exist (new user)
+    if (!existingUser) {
+      updateData.name = name;
+    } else {
+      // Preserve existing name (may be custom)
+      updateData.name = existingUser.name || name;
+    }
     
     // Only update picture if:
     // 1. User doesn't exist (new user), OR
@@ -2120,8 +2093,10 @@ app.post('/api/save-user', async (req, res) => {
     const isCustomPicture = existingUser?.picture && existingUser.picture.startsWith('data:image');
     if (!existingUser || !existingUser.picture || !isCustomPicture) {
       updateData.picture = picture;
+    } else {
+      // Preserve the existing custom picture (data URL)
+      updateData.picture = existingUser.picture;
     }
-    // Otherwise, preserve the existing custom picture (data URL)
     
     // Only update steps and weight if they are provided
     if (steps !== undefined) updateData.steps = steps;

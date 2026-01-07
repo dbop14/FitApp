@@ -3,33 +3,6 @@ import { useContext, useEffect, useRef } from 'react'
 import { UserContext } from '../context/UserContext'
 import { fetchWithAuth, getApiUrl } from '../utils/apiService'
 
-// Helper function to silently send analytics without logging errors
-// Disabled by default - set localStorage flag 'enable_analytics' to 'true' to enable
-const silentAnalytics = (url, data) => {
-  // Only send if explicitly enabled via localStorage flag
-  // Check localStorage safely in case it's not available
-  let analyticsEnabled = false
-  try {
-    analyticsEnabled = localStorage.getItem('enable_analytics') === 'true'
-  } catch (e) {
-    // localStorage not available, disable analytics
-  }
-  
-  if (!analyticsEnabled) {
-    return // Don't make requests if analytics is disabled
-  }
-  
-  // Use fetch with keepalive and catch to minimize error logging
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    keepalive: true
-  }).catch(() => {
-    // Silently ignore errors - analytics service may not be available
-  })
-}
-
 export const useUserData = () => {
   const { user, setUser } = useContext(UserContext)
   const queryClient = useQueryClient()

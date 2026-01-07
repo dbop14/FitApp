@@ -90,32 +90,8 @@ async function sendPushNotification(userId, title, body, data = {}) {
   try {
     const subscriptions = await PushSubscription.find({ userId });
     
-    // #region agent log
-    const fs = require('fs');
-    const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-    try {
-      const subscriptionInfo = subscriptions.map(sub => ({
-        endpoint: (sub.endpoint || '').substring(0, 50),
-        isFCM: (sub.endpoint || '').includes('fcm.googleapis.com'),
-        isAPNS: (sub.endpoint || '').includes('push.apple.com'),
-        createdAt: sub.createdAt,
-        lastUsed: sub.lastUsed
-      }));
-      const logEntry = JSON.stringify({location:'routes/push.js:92',message:'Found push subscriptions',data:{userId,count:subscriptions.length,subscriptions:subscriptionInfo},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'android'}) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-    } catch(e) {}
-    // #endregion
-    
     if (subscriptions.length === 0) {
       console.log(`⚠️ No push subscriptions found for user ${userId}`);
-      // #region agent log
-      const fs = require('fs');
-      const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-      try {
-        const logEntry = JSON.stringify({location:'routes/push.js:97',message:'No subscriptions found',data:{userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'android'}) + '\n';
-        fs.appendFileSync(logPath, logEntry);
-      } catch(e) {}
-      // #endregion
       return;
     }
     
@@ -145,18 +121,6 @@ async function sendPushNotification(userId, title, body, data = {}) {
 
     const promises = subscriptions.map(async (subscription) => {
       try {
-        // #region agent log
-        const fs = require('fs');
-        const logPath = '/volume1/docker/fitapp/.cursor/debug.log';
-        try {
-          const endpointInfo = subscription.endpoint || 'unknown';
-          const isFCM = endpointInfo.includes('fcm.googleapis.com') || endpointInfo.includes('android');
-          const isAPNS = endpointInfo.includes('push.apple.com') || endpointInfo.includes('ios');
-          const logEntry = JSON.stringify({location:'routes/push.js:110',message:'Sending push notification',data:{userId,endpoint:endpointInfo.substring(0,50),isFCM,isAPNS,subscriptionId:subscription._id.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'android'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
-        
         // Platform-specific options for better delivery when phone is locked
         const isFCM = subscription.endpoint.includes('fcm.googleapis.com');
         const isAPNS = subscription.endpoint.includes('push.apple.com');
@@ -191,13 +155,6 @@ async function sendPushNotification(userId, title, body, data = {}) {
         const deviceType = endpointInfo.includes('fcm.googleapis.com') ? 'Android' : 
                           endpointInfo.includes('push.apple.com') ? 'iOS' : 'Unknown';
         console.log(`✅ Push notification sent to user ${userId} (${deviceType})`);
-        
-        // #region agent log
-        try {
-          const logEntry = JSON.stringify({location:'routes/push.js:130',message:'Push notification sent successfully',data:{userId,deviceType,endpoint:endpointInfo.substring(0,50),subscriptionId:subscription._id.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'android'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
       } catch (error) {
         const endpointInfo = subscription.endpoint || 'unknown';
         const deviceType = endpointInfo.includes('fcm.googleapis.com') ? 'Android' : 
@@ -206,13 +163,6 @@ async function sendPushNotification(userId, title, body, data = {}) {
         console.error(`   Endpoint: ${endpointInfo.substring(0, 100)}`);
         console.error(`   Error code: ${error.statusCode || error.code}`);
         console.error(`   Error details:`, error.body || error.message);
-        
-        // #region agent log
-        try {
-          const logEntry = JSON.stringify({location:'routes/push.js:140',message:'Push notification failed',data:{userId,deviceType,endpoint:endpointInfo.substring(0,50),error:error.message,statusCode:error.statusCode,code:error.code,errorBody:error.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'android'}) + '\n';
-          fs.appendFileSync(logPath, logEntry);
-        } catch(e) {}
-        // #endregion
         
         // If subscription is invalid, remove it
         if (error.statusCode === 410 || error.statusCode === 404) {
