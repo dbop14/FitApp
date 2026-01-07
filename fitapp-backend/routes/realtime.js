@@ -316,6 +316,9 @@ router.get('/events/:googleId', async (req, res) => {
 
 // Helper function to broadcast updates (can be called from other routes)
 const broadcastUserUpdate = (googleId, data) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/realtime.js:318',message:'SSE broadcast called',data:{googleId,steps:data.steps,weight:data.weight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   const connections = Array.from(activeConnections.values())
     .filter(conn => conn.googleId === googleId && conn.res)
   
@@ -339,6 +342,9 @@ const broadcastUserUpdate = (googleId, data) => {
             lastSync: data.lastSync
           }
           console.log(`📡 Broadcasted update to ${googleId}`)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/realtime.js:336',message:'SSE broadcast sent',data:{googleId,steps:data.steps,weight:data.weight,lastSentSteps:conn.lastSent?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
         } else {
           // Connection is dead, find and remove it
           const connectionId = Array.from(activeConnections.entries())

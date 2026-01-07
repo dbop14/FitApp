@@ -17,6 +17,10 @@ router.post('/userdata', async (req, res) => {
   
   console.log(`📥 POST /api/user/userdata received:`, { googleId, email, steps, weight, date, hasDate: !!date });
   
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:18',message:'POST /api/user/userdata received',data:{googleId,steps,weight,date,hasDate:!!date},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  
   try {
     // Check if user already exists to preserve custom profile picture
     const existingUser = await User.findOne({ googleId });
@@ -28,6 +32,10 @@ router.post('/userdata', async (req, res) => {
     // Check if this is today's data or historical data
     const today = FitnessHistory.normalizeDate(new Date());
     const isToday = targetDate.getTime() === today.getTime();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:32',message:'Date check result',data:{targetDate:targetDate.toISOString(),today:today.toISOString(),isToday,steps,existingUserSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     
     // Only update user's current steps/weight if this is today's data
     // Historical data should only update FitnessHistory, not the user's current state
@@ -53,9 +61,15 @@ router.post('/userdata', async (req, res) => {
       updateFields.steps = steps;
       updateFields.weight = weight;
       console.log(`🔄 Updating user's current data for ${email}: steps=${steps}, weight=${weight}`);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:54',message:'Updating today user steps',data:{email,steps,weight,previousSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     } else {
       // For historical data, preserve existing user steps/weight (don't overwrite with historical values)
       console.log(`📅 Historical data for ${email} on ${dateStr}: steps=${steps}, weight=${weight} - NOT updating user's current state`);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:58',message:'Historical data - NOT updating user steps',data:{email,dateStr,steps,weight,existingSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     }
     
     const user = await User.findOneAndUpdate(
@@ -63,6 +77,10 @@ router.post('/userdata', async (req, res) => {
       { $set: updateFields },
       { upsert: true, new: true }
     );
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:65',message:'User saved to DB',data:{email,steps:user.steps,weight:user.weight,isToday},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
 
     if (isToday) {
       console.log(`🔄 Updated user data for ${email}: steps=${steps}, weight=${weight}`);
@@ -414,7 +432,7 @@ router.get('/userdata', async (req, res) => {
       return bucketStartMillis >= todayStart.getTime();
     });
     const stepsData = todayBucket?.dataset?.find(d => d.dataTypeName === 'com.google.step_count.delta');
-    const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
+    const stepsFromGoogleFit = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
     
     // Get the MOST RECENT weight from the last 7 days (not just today's)
     let weight = null;
@@ -433,19 +451,25 @@ router.get('/userdata', async (req, res) => {
       }
     }
 
+    // CRITICAL FIX: Only update user's steps if Google Fit returns a valid (non-zero) step count
+    // If Google Fit returns 0 or no data, preserve the existing user.steps value
+    // This prevents overwriting correct step data with 0 when Google Fit API is incomplete
+    const steps = stepsFromGoogleFit > 0 ? stepsFromGoogleFit : (user.steps || 0);
+    
     // Update user in DB
     user.steps = steps;
     user.weight = weight;
     user.lastSync = new Date();
     await user.save();
 
-    // Store historical data for today
+    // Store historical data for today - use stepsFromGoogleFit (not the preserved user.steps)
+    // This ensures history reflects what Google Fit actually returned, even if it's 0
     const today = FitnessHistory.normalizeDate(new Date());
     await FitnessHistory.findOneAndUpdate(
       { userId: googleId, date: today },
       {
         $set: {
-          steps: steps || 0,
+          steps: stepsFromGoogleFit || 0,
           weight: weight ? Math.round(weight * 2.20462 * 100) / 100 : null, // Convert kg to lbs
           source: 'google-fit',
           updatedAt: new Date()
@@ -453,7 +477,7 @@ router.get('/userdata', async (req, res) => {
       },
       { upsert: true }
     );
-    console.log(`📊 Stored Google Fit history for ${user.email} on ${today.toISOString()}: steps=${steps}, weight=${weight ? Math.round(weight * 2.20462 * 100) / 100 : null}`);
+    console.log(`📊 Stored Google Fit history for ${user.email} on ${today.toISOString()}: steps=${stepsFromGoogleFit}, weight=${weight ? Math.round(weight * 2.20462 * 100) / 100 : null} (user.steps preserved as ${steps})`);
 
     // Broadcast update via SSE
     broadcastUserUpdate(user.googleId, {
