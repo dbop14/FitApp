@@ -88,3 +88,4 @@ coverage/
 *.cache
 .cache/
 
+config
