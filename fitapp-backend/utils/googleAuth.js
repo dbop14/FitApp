@@ -35,22 +35,26 @@ async function ensureValidGoogleTokens(user) {
     expiry_date: user.tokenExpiry
   });
 
-  // Proactive refresh: refresh if token is expired OR will expire within 1 day
-  // This ensures tokens stay valid for 30 days after login
+  // Check token validity
   const now = Date.now();
   const oneDayInMs = 24 * 60 * 60 * 1000; // 1 day in milliseconds
-  const shouldRefresh = !user.tokenExpiry || user.tokenExpiry < (now + oneDayInMs);
+  const isExpired = !user.tokenExpiry || user.tokenExpiry < now;
+  const expiresSoon = user.tokenExpiry && user.tokenExpiry < (now + oneDayInMs);
+  const shouldRefresh = expiresSoon && user.refreshToken; // Only refresh if we have a refresh token
   // #region agent log
-  try{const logPath=path.join(__dirname,'../../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'googleAuth.js:40',message:'Token refresh check',data:{now,tokenExpiry:user.tokenExpiry,shouldRefresh,hasRefreshToken:!!user.refreshToken,timeUntilExpiry:user.tokenExpiry?Math.round((user.tokenExpiry-now)/(60*60*1000)):'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})+'\n');}catch(e){}
+  try{const logPath=path.join(__dirname,'../../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'googleAuth.js:40',message:'Token refresh check',data:{now,tokenExpiry:user.tokenExpiry,isExpired,expiresSoon,hasRefreshToken:!!user.refreshToken,shouldRefresh,timeUntilExpiry:user.tokenExpiry?Math.round((user.tokenExpiry-now)/(60*60*1000)):'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})+'\n');}catch(e){}
   // #endregion
 
+  // If token is expired and no refresh token, user needs to re-authenticate
+  if (isExpired && !user.refreshToken) {
+    // #region agent log
+    try{const logPath=path.join(__dirname,'../../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'googleAuth.js:47',message:'Token expired and no refresh token',data:{tokenExpiry:user.tokenExpiry,now,isExpired:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
+    // #endregion
+    throw new Error('No refresh token available. User needs to re-authenticate.');
+  }
+
+  // If token needs refresh and we have a refresh token, refresh it
   if (shouldRefresh) {
-    if (!user.refreshToken) {
-      // #region agent log
-      try{const logPath=path.join(__dirname,'../../.cursor/debug.log');fs.appendFileSync(logPath,JSON.stringify({location:'googleAuth.js:48',message:'No refresh token available',data:{tokenExpiry:user.tokenExpiry,now,isExpired:user.tokenExpiry?user.tokenExpiry<now:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
-      // #endregion
-      throw new Error('No refresh token available. User needs to re-authenticate.');
-    }
 
     try {
       const timeUntilExpiry = user.tokenExpiry ? Math.round((user.tokenExpiry - now) / (60 * 60 * 1000)) : 'unknown';
