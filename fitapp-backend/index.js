@@ -3075,7 +3075,7 @@ app.post('/api/admin/force-remove-from-test-leaderboard', async (req, res) => {
 });
 
 app.use('/api/user', authenticateJWT, userRoutes);
-// app.use('/api', authRoutes); // Removed to avoid route conflicts with /api/auth/token
+app.use('/api', authRoutes); // OAuth2 routes (must be before /api/auth/token to avoid conflicts)
 app.use('/api/challenge', challengeRoutes);
 app.use('/api/realtime', realtimeRoutes.router);
 

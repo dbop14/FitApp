@@ -96,106 +96,18 @@ const GoogleLoginButton = ({ onComplete }) => {
   };
 
   const handleGoogleLogin = () => {
-    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-      console.error('❌ Google Identity Services not loaded or OAuth2 not available', {
-        hasGoogle: !!window.google,
-        hasAccounts: !!(window.google && window.google.accounts),
-        hasOAuth2: !!(window.google && window.google.accounts && window.google.accounts.oauth2)
-      })
-      return
-    }
-
-    // Get client_id from environment variable (required)
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    if (!clientId) {
-      console.error('VITE_GOOGLE_CLIENT_ID is not set in environment variables')
-      return
-    }
+    // Use backend OAuth2 flow instead of Google Identity Services
+    // This allows us to get refresh tokens for 30-day authentication
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
+    const oauthUrl = `${apiUrl}/api/auth/google`;
     
-    if (!clientId || clientId.trim() === '') {
-      console.error('❌ Google Client ID is missing')
-      alert('Google authentication is not configured. Please contact support.')
-      return
-    }
-
-    // Validate client_id format (should end with .apps.googleusercontent.com)
-    if (!clientId.includes('.apps.googleusercontent.com')) {
-      console.error('❌ Invalid Google Client ID format:', clientId)
-      alert('Google authentication configuration error. Please contact support.')
-      return
-    }
-
-    console.log('🔐 Starting complete Google authentication with Fit permissions...')
-    console.log('🔑 Using Client ID:', clientId.substring(0, 20) + '...')
-
-    try {
-      // Use OAuth2 popup for complete permissions (including Google Fit)
-      const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: 'https://www.googleapis.com/auth/fitness.activity.read https://www.googleapis.com/auth/fitness.body.read https://www.googleapis.com/auth/userinfo.profile openid email profile',
-        include_granted_scopes: true,
-        callback: async (response) => {
-        try {
-          console.log('🎉 Complete OAuth response received:', response);
-          
-          if (response.access_token) {
-            // Get user profile using the access token
-            console.log('👤 Fetching user profile with access token...');
-            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-              headers: {
-                Authorization: `Bearer ${response.access_token}`
-              }
-            });
-
-            if (profileResponse.ok) {
-              const userProfile = await profileResponse.json();
-              console.log('✅ User profile fetched:', userProfile);
-
-              const completeUserData = {
-                sub: userProfile.id,
-                name: userProfile.name,
-                email: userProfile.email,
-                picture: userProfile.picture,
-                given_name: userProfile.given_name,
-                family_name: userProfile.family_name,
-                email_verified: userProfile.verified_email
-              };
-
-              console.log('👤 Complete user data with profile:', completeUserData);
-              
-              // Get JWT token from backend (returns both token and user data from database)
-              const jwtResult = await getJWTToken(completeUserData);
-              
-              // Use user data from database (which includes custom picture/name) instead of Google OAuth data
-              // jwtResult.user is already in frontend format (sub instead of googleId)
-              const dbUserData = jwtResult?.user || completeUserData;
-              
-              console.log('👤 Using database user data (preserves custom picture/name):', dbUserData);
-              
-              // Call the onLogin callback with database user data (preserves custom picture/name)
-              onComplete?.(dbUserData, response.access_token, response.expires_in, jwtResult?.token)
-              
-            } else {
-              console.error('❌ Failed to fetch user profile');
-              throw new Error('Failed to fetch user profile');
-            }
-          } else {
-            console.error('❌ No access token in response');
-            throw new Error('No access token received');
-          }
-          
-        } catch (error) {
-          console.error('❌ Error processing complete Google login:', error);
-        }
-        }
-      });
-
-      // Request access token (this will show the popup with all permissions)
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    } catch (error) {
-      console.error('❌ Error initializing Google OAuth token client:', error);
-      alert('Failed to initialize Google authentication. Please try again or contact support.');
-    }
+    console.log('🔐 Starting backend OAuth2 flow...');
+    console.log('🔄 Redirecting to:', oauthUrl);
+    
+    // Redirect to backend OAuth endpoint
+    // Backend will redirect to Google, then back to /api/auth/google/callback,
+    // which will then redirect to frontend /auth/callback with JWT token
+    window.location.href = oauthUrl;
   };
 
   if (!isGoogleLoaded) {

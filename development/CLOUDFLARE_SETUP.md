@@ -42,7 +42,17 @@ Make sure your `.env` file has:
 
 ```env
 VITE_API_URL=https://fitappbackenddev.herringm.com
-GOOGLE_REDIRECT_URI=https://fitappdev.herringm.com/api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://fitappbackenddev.herringm.com/api/auth/google/callback
+FRONTEND_URL=https://fitappdev.herringm.com
+JWT_SECRET=your_jwt_secret_here
+```
+
+**Note:** For local development, use:
+```env
+VITE_API_URL=http://localhost:3001
+GOOGLE_REDIRECT_URI=http://localhost:3001/api/auth/google/callback
+FRONTEND_URL=http://localhost:5174
+JWT_SECRET=your_jwt_secret_here
 ```
 
 ## Google OAuth Setup

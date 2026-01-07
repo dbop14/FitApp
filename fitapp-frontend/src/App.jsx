@@ -5,6 +5,7 @@ import { ChallengeProvider } from './context/ChallengeContext'
 import { ChatNotificationProvider } from './context/ChatNotificationContext'
 import { useVisibilityRefetch } from './hooks/useVisibilityRefetch'
 import AuthPage from './pages/AuthPage'
+import OAuthCallback from './pages/OAuthCallback'
 import Dashboard from './pages/Dashboard'
 import Leaderboard from './pages/Leaderboard'
 import Challenge from './pages/Challenge'
@@ -61,6 +62,9 @@ const App = () => {
             {/* ❌ Auth/Login page does NOT include Navbar */}
             <Route path="/login" element={<AuthPage />} />
             <Route path="/auth" element={<Navigate to="/login" replace />} />
+            
+            {/* OAuth callback route - handles redirect from backend after Google authentication */}
+            <Route path="/auth/callback" element={<OAuthCallback />} />
             
             {/* Public Home page for Google verification */}
             <Route path="/home" element={<Home />} />
