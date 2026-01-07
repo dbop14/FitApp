@@ -96,6 +96,11 @@ See `.env.example` for all required environment variables. Copy it to `.env` and
 - Verify `.env` file exists and has correct values
 - Check logs: `docker-compose logs`
 
+### OAuth "deleted_client" error
+- Your Google OAuth client was deleted - see `UPDATE_GOOGLE_OAUTH.md` for instructions
+- Update `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` file
+- Restart containers after updating credentials
+
 ### Changes not reflecting
 - Make sure volumes are mounted correctly
 - Restart the service: `docker-compose restart [service]`

@@ -70,7 +70,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5174}
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_in_production}
       - MATRIX_HOMESERVER_URL=http://synapse:8008
       - MATRIX_SERVER_NAME=fitapp.local
       - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}

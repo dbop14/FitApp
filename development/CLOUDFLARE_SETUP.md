@@ -67,8 +67,9 @@ If you're using Google OAuth, you'll need to configure your OAuth 2.0 Client in 
    - Go to **APIs & Services** → **Credentials**
 
 2. **Edit your OAuth 2.0 Client ID:**
-   - Find your OAuth client: `200010665728-2vbrbqaqi1jmpps0m8tallirllsa84hd.apps.googleusercontent.com`
+   - Find your OAuth client in the list
    - Click **Edit** (pencil icon)
+   - **Note:** If your client was deleted, create a new OAuth 2.0 Client ID
 
 3. **Add Authorized JavaScript origins:**
    These are required for the client-side Google Identity Services flow:

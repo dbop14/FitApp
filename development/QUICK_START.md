@@ -18,9 +18,15 @@
 
 3. **Fill in required values in .env:**
    - `BOT_PASSWORD` - Your bot password
-   - `GOOGLE_CLIENT_ID` - Your Google OAuth client ID
-   - `GOOGLE_CLIENT_SECRET` - Your Google OAuth secret
+   - `GOOGLE_CLIENT_ID` - Your Google OAuth client ID (get from Google Cloud Console)
+   - `GOOGLE_CLIENT_SECRET` - Your Google OAuth secret (get from Google Cloud Console)
+   - `GOOGLE_REDIRECT_URI` - OAuth callback URL (e.g., `https://fitappbackenddev.herringm.com/api/auth/google/callback`)
+   - `FRONTEND_URL` - Frontend URL (e.g., `https://fitappdev.herringm.com` or `http://localhost:5174`)
+   - `JWT_SECRET` - Secret key for JWT tokens (use a strong random string in production)
    - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` - Push notification keys
+   - `VITE_GOOGLE_CLIENT_ID` - Same as `GOOGLE_CLIENT_ID` (for frontend)
+   
+   **Note:** If you see "deleted_client" error, see `UPDATE_GOOGLE_OAUTH.md` for instructions to get new credentials.
 
 4. **Deploy:**
    ```bash

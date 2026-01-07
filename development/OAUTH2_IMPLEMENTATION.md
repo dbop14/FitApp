@@ -65,8 +65,10 @@ GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
 GOOGLE_REDIRECT_URI=https://fitappbackenddev.herringm.com/api/auth/google/callback
 FRONTEND_URL=https://fitappdev.herringm.com
-JWT_SECRET=your_jwt_secret_here
+JWT_SECRET=your_jwt_secret_here  # Use a strong random string (defaults to 'your_jwt_secret_change_in_production' if not set)
 ```
+
+**Note:** `JWT_SECRET` has a default value in docker-compose.yml for development, but you should set a strong random string in your `.env` file for security.
 
 ### Frontend (.env)
 ```env
