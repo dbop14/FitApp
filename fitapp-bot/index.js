@@ -278,22 +278,6 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
       if (sameTypeForUserToday) {
         console.log(`⏭️  Duplicate message detected (same type for user today): messageType=${messageType}, userId=${userId}, challengeId=${challengeId}`);
         return true;
-      } else {
-        // Also check if ANY stepGoalCard was ever sent to this user for this challenge (not just today)
-        // This prevents re-sending milestone cards after container restarts
-        if (messageType === 'stepGoalCard' && userId) {
-          const anyStepGoalCard = await ChatMessage.findOne({
-            challengeId: challengeId.toString(),
-            sender: botName,
-            isBot: true,
-            messageType: 'stepGoalCard',
-            userId: userId
-          });
-          if (anyStepGoalCard) {
-            console.log(`⏭️  Duplicate message detected (stepGoalCard already sent to user): userId=${userId}, challengeId=${challengeId}`);
-            return true;
-          }
-        }
       }
     }
 
@@ -640,7 +624,7 @@ const sendDailyStepUpdate = async () => {
         message,
         challenge._id,
         botName,
-        'dailyStepUpdateCard'
+        'text'
       );
       console.log(`   ✅ Daily step update sent for challenge ${challenge.name}`);
     }
@@ -1211,6 +1195,12 @@ const setupCronJobs = () => {
     sendDailyStepUpdate();
   });
 
+  // Daily step updates at 6 PM
+  cron.schedule('0 18 * * *', () => {
+    console.log('📊 Running daily step update (6 PM)...');
+    sendDailyStepUpdate();
+  });
+
   // Daily step updates at 9 PM
   cron.schedule('0 21 * * *', () => {
     console.log('📊 Running daily step update (evening)...');
@@ -1257,7 +1247,7 @@ const setupCronJobs = () => {
 
   console.log('✅ Cron jobs and monitoring intervals set up');
   console.log('📋 Scheduled cron jobs:');
-  console.log('   - Daily step updates: 12:00 PM and 9:00 PM');
+  console.log('   - Daily step updates: 12:00 PM, 6:00 PM, and 9:00 PM');
   console.log('   - Weigh-in reminders: 8:00 AM');
   console.log('   - Weight loss celebrations: 9:00 AM');
   console.log('   - Challenge winners: 10:00 AM');
