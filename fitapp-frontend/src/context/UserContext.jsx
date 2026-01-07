@@ -33,11 +33,6 @@ export const UserProvider = ({ children }) => {
     const bufferTime = 30 * 60 * 1000; // 30 minutes buffer
     const expiryTime = parseInt(expiry, 10);
     const isExpired = Date.now() > (expiryTime - bufferTime);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:30',message:'isTokenExpired check',data:{hasExpiry:!!expiry,expiryValue:expiry,expiryParsed:expiryTime,now:Date.now(),isExpired,timeUntilExpiry:expiryTime-Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     return isExpired;
   }
 
@@ -53,20 +48,12 @@ export const UserProvider = ({ children }) => {
     const token = localStorage.getItem('fitapp_access_token');
     const expiry = localStorage.getItem('fitapp_access_token_expiry');
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:45',message:'hasValidGoogleFitPermissions check',data:{hasToken:!!token,hasExpiry:!!expiry,expiryValue:expiry,expiryParsed:expiry?parseInt(expiry,10):null,now:Date.now(),userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    if (!token || !expiry) return false
+    if (!token || !expiry) return false;
     
     // Check if token is expired (with 30 minute buffer to match isTokenExpired)
     const bufferTime = 30 * 60 * 1000; // 30 minutes
     const expiryTime = parseInt(expiry, 10);
     const isValid = Date.now() < (expiryTime - bufferTime);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:53',message:'Token validity check result',data:{isValid,expiryTime,now:Date.now(),timeUntilExpiry:expiryTime-Date.now(),hoursUntilExpiry:(expiryTime-Date.now())/(1000*60*60)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     
     return isValid;
   }
@@ -267,18 +254,9 @@ export const UserProvider = ({ children }) => {
     
     // Only save access token if we have one (for Google Fit scopes)
     if (accessToken) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:251',message:'Saving access token - before setItem',data:{hasAccessToken:!!accessToken,expiryTime:expiryTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       localStorage.setItem('fitapp_access_token', accessToken);
       const finalExpiryTime = expiryTime || (Date.now() + 24 * 3600 * 1000); // fallback: 24 hours from now
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:254',message:'Before setItem expiry - checking for semicolon issue',data:{finalExpiryTime:finalExpiryTime,expiryTimeString:finalExpiryTime.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       localStorage.setItem('fitapp_access_token_expiry', finalExpiryTime.toString());
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:254',message:'After setItem expiry - semicolon added',data:{success:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       // Save token to backend so backend can use it for future refreshes
       // Do this asynchronously so it doesn't block the login flow
