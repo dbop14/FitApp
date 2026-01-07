@@ -17,31 +17,9 @@ const oauth2Client = new google.auth.OAuth2(
   REDIRECT_URI
 );
 
+
 // 1. Start OAuth flow
 router.get('/auth/google', (req, res) => {
-  // #region agent log
-  const fs = require('fs');
-  const path = require('path');
-  try {
-    const logPath = path.join(__dirname, '../../.cursor/debug.log');
-    fs.appendFileSync(logPath, JSON.stringify({
-      location: 'routes/auth.js:20',
-      message: 'OAuth flow start - checking credentials',
-      data: {
-        hasClientId: !!CLIENT_ID,
-        clientIdPrefix: CLIENT_ID ? CLIENT_ID.substring(0, 20) + '...' : 'MISSING',
-        hasClientSecret: !!CLIENT_SECRET,
-        redirectUri: REDIRECT_URI,
-        clientIdLength: CLIENT_ID ? CLIENT_ID.length : 0
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'A'
-    }) + '\n');
-  } catch (e) {}
-  // #endregion
-  
   if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID' || !CLIENT_SECRET || CLIENT_SECRET === 'YOUR_CLIENT_SECRET') {
     console.error('❌ OAuth credentials not configured properly');
     console.error('CLIENT_ID:', CLIENT_ID ? CLIENT_ID.substring(0, 20) + '...' : 'MISSING');
@@ -61,7 +39,6 @@ router.get('/auth/google', (req, res) => {
     scope: scopes
   });
   console.log('🔐 Redirecting to Google OAuth consent screen');
-  console.log('🔑 Using Client ID:', CLIENT_ID.substring(0, 20) + '...');
   res.redirect(url);
 });
 
@@ -70,14 +47,51 @@ router.get('/auth/google/callback', async (req, res) => {
   const code = req.query.code;
   const error = req.query.error;
   
+  // Determine correct frontend URL based on request hostname, FRONTEND_URL, and GOOGLE_REDIRECT_URI
+  // Priority: Request hostname (most reliable) > FRONTEND_URL > REDIRECT_URI > default
+  let frontendUrl = FRONTEND_URL;
+  
+  const requestHost = req.get('host') || req.hostname || '';
+  
+  // First, check request hostname (most reliable - tells us which backend is handling the request)
+  if (requestHost.includes('fitappbackenddev.herringm.com')) {
+    frontendUrl = 'https://fitappdev.herringm.com';
+  } else if (requestHost.includes('fitappbackend.herringm.com') && !requestHost.includes('fitappbackenddev')) {
+    frontendUrl = 'https://fitapp.herringm.com';
+  } else if (requestHost.includes('localhost:3001')) {
+    frontendUrl = 'http://localhost:5174';
+  } else if (requestHost.includes('localhost:3000')) {
+    frontendUrl = 'http://localhost:5173';
+  }
+  // Fallback to FRONTEND_URL
+  else if (FRONTEND_URL.includes('fitappdev.herringm.com')) {
+    frontendUrl = 'https://fitappdev.herringm.com';
+  } else if (FRONTEND_URL.includes('fitapp.herringm.com') && !FRONTEND_URL.includes('fitappdev')) {
+    frontendUrl = 'https://fitapp.herringm.com';
+  } else if (FRONTEND_URL.includes('localhost:5174')) {
+    frontendUrl = 'http://localhost:5174';
+  } else if (FRONTEND_URL.includes('localhost:5173')) {
+    frontendUrl = 'http://localhost:5173';
+  }
+  // Final fallback to REDIRECT_URI
+  else if (REDIRECT_URI.includes('fitappbackenddev.herringm.com')) {
+    frontendUrl = 'https://fitappdev.herringm.com';
+  } else if (REDIRECT_URI.includes('fitappbackend.herringm.com') && !REDIRECT_URI.includes('fitappbackenddev')) {
+    frontendUrl = 'https://fitapp.herringm.com';
+  } else if (REDIRECT_URI.includes('localhost:3001')) {
+    frontendUrl = 'http://localhost:5174';
+  } else if (REDIRECT_URI.includes('localhost:3000')) {
+    frontendUrl = 'http://localhost:5173';
+  }
+  
   if (error) {
     console.error('❌ OAuth error from Google:', error);
-    return res.redirect(`${FRONTEND_URL}/auth/callback?error=${encodeURIComponent(error)}`);
+    return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(error)}`);
   }
   
   if (!code) {
     console.error('❌ Missing authorization code');
-    return res.redirect(`${FRONTEND_URL}/auth/callback?error=${encodeURIComponent('missing_code')}`);
+    return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent('missing_code')}`);
   }
   
   try {
@@ -123,14 +137,15 @@ router.get('/auth/google/callback', async (req, res) => {
 
     console.log(`🔑 Generated JWT token for frontend`);
 
-    // Redirect to frontend callback with token and user info
-    const redirectUrl = `${FRONTEND_URL}/auth/callback?token=${encodeURIComponent(jwtToken)}&googleId=${user.googleId}&email=${encodeURIComponent(user.email)}`;
-    console.log(`🔄 Redirecting to frontend: ${FRONTEND_URL}/auth/callback`);
+    // Use the frontendUrl determined at the start of the callback handler
+    const redirectUrl = `${frontendUrl}/auth/callback?token=${encodeURIComponent(jwtToken)}&googleId=${user.googleId}&email=${encodeURIComponent(user.email)}`;
+    console.log(`🔄 Redirecting to frontend: ${frontendUrl}/auth/callback`);
     res.redirect(redirectUrl);
   } catch (err) {
     console.error('❌ OAuth callback error:', err);
     const errorMessage = err.message || 'OAuth failed';
-    res.redirect(`${FRONTEND_URL}/auth/callback?error=${encodeURIComponent(errorMessage)}`);
+    // Use the same frontendUrl detected earlier
+    res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(errorMessage)}`);
   }
 });
 
