@@ -19,6 +19,36 @@ const oauth2Client = new google.auth.OAuth2(
 
 // 1. Start OAuth flow
 router.get('/auth/google', (req, res) => {
+  // #region agent log
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const logPath = path.join(__dirname, '../../.cursor/debug.log');
+    fs.appendFileSync(logPath, JSON.stringify({
+      location: 'routes/auth.js:20',
+      message: 'OAuth flow start - checking credentials',
+      data: {
+        hasClientId: !!CLIENT_ID,
+        clientIdPrefix: CLIENT_ID ? CLIENT_ID.substring(0, 20) + '...' : 'MISSING',
+        hasClientSecret: !!CLIENT_SECRET,
+        redirectUri: REDIRECT_URI,
+        clientIdLength: CLIENT_ID ? CLIENT_ID.length : 0
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'A'
+    }) + '\n');
+  } catch (e) {}
+  // #endregion
+  
+  if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID' || !CLIENT_SECRET || CLIENT_SECRET === 'YOUR_CLIENT_SECRET') {
+    console.error('❌ OAuth credentials not configured properly');
+    console.error('CLIENT_ID:', CLIENT_ID ? CLIENT_ID.substring(0, 20) + '...' : 'MISSING');
+    console.error('CLIENT_SECRET:', CLIENT_SECRET ? 'SET' : 'MISSING');
+    return res.status(500).json({ error: 'OAuth not configured. Please check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.' });
+  }
+  
   const scopes = [
     'https://www.googleapis.com/auth/fitness.activity.read',
     'https://www.googleapis.com/auth/fitness.body.read',
@@ -31,6 +61,7 @@ router.get('/auth/google', (req, res) => {
     scope: scopes
   });
   console.log('🔐 Redirecting to Google OAuth consent screen');
+  console.log('🔑 Using Client ID:', CLIENT_ID.substring(0, 20) + '...');
   res.redirect(url);
 });
 

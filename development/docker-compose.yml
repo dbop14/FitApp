@@ -97,6 +97,7 @@ services:
     restart: unless-stopped
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:3001}
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - VITE_MATRIX_URL=http://synapse:8008
     volumes:
       - ../fitapp-frontend:/app
