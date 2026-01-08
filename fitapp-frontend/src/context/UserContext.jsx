@@ -1070,17 +1070,13 @@ export const UserProvider = ({ children }) => {
             lastSync: new Date()
           }))
 
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1066',message:'Frontend: Saving today steps to backend',data:{steps,weight,hasStepsData:!!stepsData,stepsPointCount:stepsData?.point?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
+          // debug instrumentation removed
 
           // Save today's data to backend
           await saveFitnessDataToBackend(steps, weight)
         } else {
           console.log('⚠️ No data for today, setting defaults');
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1076',message:'Frontend: No today bucket - setting steps to 0',data:{todayResponseOk:todayResponse.ok,hasTodayBucket:!!todayBucket},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
+          // debug instrumentation removed
           setUser(prev => ({
             ...prev,
             steps: 0,
@@ -1108,9 +1104,7 @@ export const UserProvider = ({ children }) => {
     const storedUser = JSON.parse(localStorage.getItem('fitapp_user'))
     if (storedUser && storedUser.sub) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1100',message:'Frontend: saveFitnessDataToBackend called',data:{steps,weight,googleId:storedUser.sub},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
+        // debug instrumentation removed
         // Use the same API URL pattern as other components
         const apiUrl = getApiUrl()
         
@@ -1164,15 +1158,11 @@ export const UserProvider = ({ children }) => {
           // Today's data should ONLY be sent via saveFitnessDataToBackend to prevent
           // race conditions where historical sync with steps=0 overwrites correct value
           if (isToday) {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1154',message:'Frontend: Skipping today in historical sync',data:{dateStr,steps:dayData.steps,reason:'Today handled by saveFitnessDataToBackend'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
+            // debug instrumentation removed
             continue
           }
           
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UserContext.jsx:1162',message:'Frontend: saveFitnessHistoryToBackend - sending historical data',data:{dateStr,steps:dayData.steps,weight:dayData.weight,isToday},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
+          // debug instrumentation removed
           
           const requestBody = {
             googleId: storedUser.sub,

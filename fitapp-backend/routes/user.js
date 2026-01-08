@@ -17,9 +17,7 @@ router.post('/userdata', async (req, res) => {
   
   console.log(`📥 POST /api/user/userdata received:`, { googleId, email, steps, weight, date, hasDate: !!date });
   
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:18',message:'POST /api/user/userdata received',data:{googleId,steps,weight,date,hasDate:!!date},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
+  // debug instrumentation removed
   
   try {
     // Check if user already exists to preserve custom profile picture
@@ -33,9 +31,7 @@ router.post('/userdata', async (req, res) => {
     const today = FitnessHistory.normalizeDate(new Date());
     const isToday = targetDate.getTime() === today.getTime();
     
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:32',message:'Date check result',data:{targetDate:targetDate.toISOString(),today:today.toISOString(),isToday,steps,existingUserSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
+    // debug instrumentation removed
     
     // Only update user's current steps/weight if this is today's data
     // Historical data should only update FitnessHistory, not the user's current state
@@ -61,15 +57,11 @@ router.post('/userdata', async (req, res) => {
       updateFields.steps = steps;
       updateFields.weight = weight;
       console.log(`🔄 Updating user's current data for ${email}: steps=${steps}, weight=${weight}`);
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:54',message:'Updating today user steps',data:{email,steps,weight,previousSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+      // debug instrumentation removed
     } else {
       // For historical data, preserve existing user steps/weight (don't overwrite with historical values)
       console.log(`📅 Historical data for ${email} on ${dateStr}: steps=${steps}, weight=${weight} - NOT updating user's current state`);
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:58',message:'Historical data - NOT updating user steps',data:{email,dateStr,steps,weight,existingSteps:existingUser?.steps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
+      // debug instrumentation removed
     }
     
     const user = await User.findOneAndUpdate(
@@ -78,9 +70,7 @@ router.post('/userdata', async (req, res) => {
       { upsert: true, new: true }
     );
     
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:65',message:'User saved to DB',data:{email,steps:user.steps,weight:user.weight,isToday},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
+    // debug instrumentation removed
 
     if (isToday) {
       console.log(`🔄 Updated user data for ${email}: steps=${steps}, weight=${weight}`);
@@ -455,10 +445,17 @@ router.get('/userdata', async (req, res) => {
     // If Google Fit returns 0 or no data, preserve the existing user.steps value
     // This prevents overwriting correct step data with 0 when Google Fit API is incomplete
     const steps = stepsFromGoogleFit > 0 ? stepsFromGoogleFit : (user.steps || 0);
-    
+
+    // Preserve previous values so we can decide whether to broadcast later
+    const previousSteps = user.steps;
+    const previousWeight = user.weight;
+
     // Update user in DB
     user.steps = steps;
-    user.weight = weight;
+    // Only update user's weight if Google Fit returned a valid weight (non-null)
+    if (weight !== null && weight !== undefined) {
+      user.weight = weight;
+    }
     user.lastSync = new Date();
     await user.save();
 
@@ -470,25 +467,36 @@ router.get('/userdata', async (req, res) => {
       {
         $set: {
           steps: stepsFromGoogleFit || 0,
-          weight: weight ? Math.round(weight * 2.20462 * 100) / 100 : null, // Convert kg to lbs
+          // `weight` is already converted to lbs above when extracted from buckets,
+          // so don't convert again — just store the value if present
+          weight: (weight !== null && weight !== undefined) ? weight : null,
           source: 'google-fit',
           updatedAt: new Date()
         }
       },
       { upsert: true }
     );
-    console.log(`📊 Stored Google Fit history for ${user.email} on ${today.toISOString()}: steps=${stepsFromGoogleFit}, weight=${weight ? Math.round(weight * 2.20462 * 100) / 100 : null} (user.steps preserved as ${steps})`);
+    console.log(`📊 Stored Google Fit history for ${user.email} on ${today.toISOString()}: steps=${stepsFromGoogleFit}, weight=${(weight !== null && weight !== undefined) ? weight : null} (user.steps preserved as ${steps})`);
 
-    // Broadcast update via SSE
-    broadcastUserUpdate(user.googleId, {
-      steps: user.steps,
-      weight: user.weight,
-      lastSync: user.lastSync
-    });
+    // Broadcast update via SSE only if something actually changed to avoid UI bouncing
+    const didStepsChange = user.steps !== previousSteps;
+    const didWeightChange = user.weight !== previousWeight;
+    if (didStepsChange || didWeightChange) {
+      broadcastUserUpdate(user.googleId, {
+        steps: user.steps,
+        weight: user.weight,
+        lastSync: user.lastSync
+      });
+    } else {
+      // Still log that we skipped broadcast because nothing changed
+      console.log(`📡 No user state change for ${user.email}; skipping SSE broadcast`);
+    }
+    // Return values: prefer Google Fit value when present, otherwise return stored DB value
+    const weightToReturn = (weight !== null && weight !== undefined) ? weight : (user.weight || null);
 
     res.json({ 
       steps, 
-      weight, 
+      weight: weightToReturn, 
       lastSync: user.lastSync,
       name: user.name || null,
       picture: user.picture || null
