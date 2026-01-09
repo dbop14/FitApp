@@ -62,13 +62,27 @@ function roundWeightLossPoints(percentage) {
   }
 }
 
-// Helper function to check if 24 hours have passed since timestamp
+// Helper function to check if a new calendar day has started since the last point was earned.
+// This allows earning one point per day based on calendar date, not a 24-hour window.
 function has24HoursPassed(timestamp) {
   if (!timestamp) return true; // No previous point, so eligible
+
+  // This logic is timezone-dependent. The backend seems to use a hardcoded offset for EDT (UTC-4).
+  // We will use that to determine day boundaries. A more robust solution would store user-specific timezones.
+  const timezoneOffset = -4 * 60 * 60 * 1000;
+
+  // Get the start of the current day in the user's assumed timezone
   const now = new Date();
-  const timeDiff = now.getTime() - timestamp.getTime();
-  const hoursDiff = timeDiff / (1000 * 60 * 60);
-  return hoursDiff >= 24;
+  // Create a new Date object representing the time in the target timezone, but as a UTC date
+  const nowInTimezone = new Date(now.getTime() + timezoneOffset);
+  const startOfToday = new Date(Date.UTC(nowInTimezone.getUTCFullYear(), nowInTimezone.getUTCMonth(), nowInTimezone.getUTCDate()));
+
+  // Get the start of the day of the last point in the user's assumed timezone
+  const lastPointDate = new Date(timestamp);
+  const lastPointInTimezone = new Date(lastPointDate.getTime() + timezoneOffset);
+  const startOfLastPointDay = new Date(Date.UTC(lastPointInTimezone.getUTCFullYear(), lastPointInTimezone.getUTCMonth(), lastPointInTimezone.getUTCDate()));
+
+  return startOfToday.getTime() > startOfLastPointDay.getTime();
 }
 
 // Helper function to check if challenge has ended

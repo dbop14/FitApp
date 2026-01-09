@@ -6,7 +6,7 @@ const ChallengeParticipantSchema = new mongoose.Schema({
   startingWeight: { type: Number, required: false }, // Optional for future challenges
   lastWeight: { type: Number },
   lastStepDate: { type: Date },
-  lastStepPointTimestamp: { type: Date }, // Timestamp when last step point was earned (for 24-hour window)
+  lastStepPointTimestamp: { type: Date }, // Timestamp when last step point was earned (used to check for new calendar day)
   lastStepCount: { type: Number },
   points: { type: Number, default: 0 },
   stepGoalPoints: { type: Number, default: 0 }, // Track step goal points separately
