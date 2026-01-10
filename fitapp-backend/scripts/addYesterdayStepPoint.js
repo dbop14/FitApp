@@ -6,8 +6,8 @@ async function addYesterdayStepPoint() {
   try {
     console.log('🔄 Adding yesterday\'s step goal point for Dylan...');
     
-    const userId = '105044462574652357380'; // Dylan's Google ID
-    const challengeId = '6896b45176d78ebc85d22bf7'; // Challenge ID from logs
+    const userId = '108452956929429773201'; // Dylan's Google ID
+    const challengeId = '695aeac3f3d5d69eab7e9d3e'; // Challenge ID from logs
     
     // Find the participant record
     const participant = await ChallengeParticipant.findOne({ 
@@ -62,7 +62,7 @@ async function addYesterdayStepPoint() {
 // Connect to MongoDB and run the script
 async function main() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fitapp');
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fitapp');
     console.log('✅ Connected to MongoDB');
     
     await addYesterdayStepPoint();

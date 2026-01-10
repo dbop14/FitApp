@@ -1,14 +1,11 @@
 const mongoose = require('mongoose');
-const ChallengeParticipant = require('../models/ChallengeParticipant');
+const ChallengeParticipant = require('./models/ChallengeParticipant');
 
-// Script to manually add a step goal point to a specific user
-async function addStepPoint() {
+// Script to add a step goal point for a user in a challenge
+async function addStepPoint(userId, challengeId) {
   try {
-    console.log('🔄 Adding step goal point for Dylan...');
-    
-    const userId = '105044462574652357380'; // Dylan's Google ID
-    const challengeId = '6896b45176d78ebc85d22bf7'; // Challenge ID from logs
-    
+    console.log(`🔄 Adding step goal point for user ${userId} in challenge ${challengeId}...`);
+
     // Find the participant record
     const participant = await ChallengeParticipant.findOne({ 
       userId: userId, 
@@ -24,20 +21,12 @@ async function addStepPoint() {
       points: participant.points,
       stepGoalPoints: participant.stepGoalPoints,
       stepGoalDaysAchieved: participant.stepGoalDaysAchieved,
-      lastStepCount: participant.lastStepCount,
-      lastStepDate: participant.lastStepDate
     });
     
-    // Add the point
+    // Add the additional step goal point
     participant.points += 1;
-    participant.stepGoalPoints = (participant.stepGoalPoints || 0) + 1;
-    participant.stepGoalDaysAchieved = (participant.stepGoalDaysAchieved || 0) + 1;
-    
-    // Set the step date to today to maintain consistency
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    participant.lastStepDate = today;
-    participant.lastStepCount = 6684; // Set to actual step count
+    participant.stepGoalPoints += 1;
+    participant.stepGoalDaysAchieved += 1;
     
     await participant.save();
     
@@ -46,8 +35,6 @@ async function addStepPoint() {
       points: participant.points,
       stepGoalPoints: participant.stepGoalPoints,
       stepGoalDaysAchieved: participant.stepGoalDaysAchieved,
-      lastStepCount: participant.lastStepCount,
-      lastStepDate: participant.lastStepDate
     });
     
   } catch (error) {
@@ -58,10 +45,15 @@ async function addStepPoint() {
 // Connect to MongoDB and run the script
 async function main() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fitapp');
+    // It's good practice to use environment variables for connection strings
+    const dbUri = process.env.MONGO_URI || 'mongodb://mongoosedb:27017/fitapp';
+    await mongoose.connect(dbUri);
     console.log('✅ Connected to MongoDB');
     
-    await addStepPoint();
+    const userId = '108452956929429773201';
+    const challengeId = '695aeac3f3d5d69eab7e9d3e';
+    
+    await addStepPoint(userId, challengeId);
     
     await mongoose.disconnect();
     console.log('✅ Disconnected from MongoDB');

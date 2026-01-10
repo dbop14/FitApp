@@ -235,23 +235,25 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
       }
     }
 
-    // For messages without userId (like dailyStepUpdateCard, weighInReminderCard, startReminderCard),
-    // check if any message of the same type was sent today
+    // For messages without userId that should only be sent once per day
     if (!userId && messageType) {
-      const sameTypeToday = await ChatMessage.findOne({
-        challengeId: challengeId.toString(),
-        sender: botName,
-        isBot: true,
-        messageType: messageType,
-        timestamp: {
-          $gte: todayStart,
-          $lt: todayEnd
-        }
-      });
+      const singleSendTypes = ['weighInReminderCard', 'startReminderCard', 'winnerCard', 'leaveCard'];
+      if (singleSendTypes.includes(messageType)) {
+        const sameTypeToday = await ChatMessage.findOne({
+          challengeId: challengeId.toString(),
+          sender: botName,
+          isBot: true,
+          messageType: messageType,
+          timestamp: {
+            $gte: todayStart,
+            $lt: todayEnd
+          }
+        });
 
-      if (sameTypeToday) {
-        console.log(`⏭️  Duplicate message detected (same type today): messageType=${messageType}, challengeId=${challengeId}`);
-        return true;
+        if (sameTypeToday) {
+          console.log(`⏭️  Duplicate message detected (single-send type '${messageType}' already sent today): challengeId=${challengeId}`);
+          return true;
+        }
       }
     }
 
@@ -1125,47 +1127,51 @@ const sendChallengeStartReminders = async () => {
 
 // Set up cron jobs
 const setupCronJobs = () => {
+  const cronOptions = {
+    timezone: "America/New_York"
+  };
+
   // Daily step updates at 12 PM (noon)
   cron.schedule('0 12 * * *', () => {
     console.log('📊 Running daily step update (noon)...');
     sendDailyStepUpdate();
-  });
+  }, cronOptions);
 
   // Daily step updates at 6 PM
   cron.schedule('0 18 * * *', () => {
     console.log('📊 Running daily step update (6 PM)...');
     sendDailyStepUpdate();
-  });
+  }, cronOptions);
 
   // Daily step updates at 9 PM
   cron.schedule('0 21 * * *', () => {
     console.log('📊 Running daily step update (evening)...');
     sendDailyStepUpdate();
-  });
+  }, cronOptions);
 
   // Weigh-in reminders - check daily at 8 AM
   cron.schedule('0 8 * * *', () => {
     console.log('⚖️  Checking for weigh-in reminders...');
     sendWeighInReminder();
-  });
+  }, cronOptions);
 
   // Weight loss celebrations - check daily at 9 AM (after weigh-in day)
   cron.schedule('0 9 * * *', () => {
     console.log('🎉 Checking for weight loss celebrations...');
     checkWeightLossCelebrations();
-  });
+  }, cronOptions);
 
   // Challenge winner announcements - check daily at 10 AM
   cron.schedule('0 10 * * *', () => {
     console.log('🏆 Checking for challenge winners...');
     announceChallengeWinner();
-  });
+  }, cronOptions);
 
   // Challenge start reminders - check daily at 8 AM
   cron.schedule('0 8 * * *', () => {
     console.log('📅 Checking for challenge start reminders...');
     sendChallengeStartReminders();
-  });
+  }, cronOptions);
 
   // Check for new participants every 2 minutes (more frequent to catch new joins)
   console.log('⏰ Setting up interval for checkNewParticipants (every 2 minutes)');

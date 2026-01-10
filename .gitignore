@@ -89,3 +89,8 @@ coverage/
 .cache/
 
 config
+fitapp-backend/remove-step-update-message.js
+fitapp-backend/addYesterdayStepPoint.js
+fitapp-backend/scripts/addStepPoint.js
+fitapp-backend/scripts/addYesterdayStepPoint.js
+fitapp-backend/scripts/addStepPoint.js
