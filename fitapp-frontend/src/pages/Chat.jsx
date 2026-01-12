@@ -38,11 +38,13 @@ const Chat = () => {
   const [showCompletedChallenges, setShowCompletedChallenges] = useState(false);
   const [viewingChat, setViewingChat] = useState(false);
   
-  // State for current chat - cache by challenge ID
+  // State for current chat - load from cache immediately if available
   const [messages, setMessages] = useState(() => {
-    // Messages will be loaded per challenge, so we don't initialize from cache here
+    // Try to load from cache on initial mount if we have an active challenge
+    // This will be updated when activeChallenge changes
     return []
   });
+  const initializedChallengesRef = useRef(new Set()); // Track which challenges have been initialized
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,10 +74,35 @@ const Chat = () => {
     }
   }, [userChallenges, completedChallenges])
   
-  // Cache messages when they change (per challenge)
+  // Load cached messages immediately when active challenge changes
+  useEffect(() => {
+    if (activeChallenge?._id) {
+      // Load from cache immediately (synchronously) for instant display
+      const cachedMessages = chatService.loadFromCache(activeChallenge._id);
+      if (cachedMessages.length > 0) {
+        setMessages(cachedMessages);
+        setIsConnected(true);
+        setLoading(false);
+        // Update last seen message count
+        lastSeenMessageCountRef.current = cachedMessages.length;
+      } else {
+        // No cache, show loading state
+        setLoading(true);
+      }
+    } else {
+      // No active challenge, clear messages
+      setMessages([]);
+    }
+  }, [activeChallenge?._id]);
+
+  // Cache messages when they change (per challenge) - chatService handles this, but we also update sessionStorage for compatibility
   useEffect(() => {
     if (activeChallenge?._id && messages.length >= 0) {
       try {
+        // Update chatService cache (localStorage)
+        chatService.saveToCache(activeChallenge._id, messages);
+        
+        // Also update sessionStorage for backward compatibility
         const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
         sessionStorage.setItem(cacheKey, JSON.stringify({
           messages,
@@ -282,12 +309,12 @@ const Chat = () => {
     }
   }, [userChallenges.length, completedChallenges.length, viewingChat, activeChallenge]);
 
-  // Initialize chat when active challenge changes (only if not already initialized)
+  // Initialize chat when active challenge changes
   useEffect(() => {
-    if (activeChallenge?._id && !initializedChallengesRef.current.has(activeChallenge._id)) {
+    if (activeChallenge) {
       initializeChat();
     }
-  }, [activeChallenge?._id]);
+  }, [activeChallenge]);
 
   // Set up periodic refresh for new messages
   useEffect(() => {
@@ -368,30 +395,7 @@ const Chat = () => {
       return;
     }
     
-    // If already initialized, just load from cache and return
-    if (initializedChallengesRef.current.has(activeChallenge._id)) {
-      try {
-        const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
-        const cached = sessionStorage.getItem(cacheKey)
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          if (parsed.messages) {
-            setMessages(parsed.messages)
-            setIsConnected(true)
-            setLoading(false)
-            // Update last seen message count
-            if (parsed.messages.length > 0) {
-              lastSeenMessageCountRef.current = parsed.messages.length;
-            }
-            return; // Don't fetch again if already initialized
-          }
-        }
-      } catch (e) {
-        // Ignore cache errors, continue to fetch if cache is invalid
-      }
-    }
-    
-    // Check cache first for initial load
+    // Check cache first
     try {
       const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
       const cached = sessionStorage.getItem(cacheKey)
@@ -416,6 +420,7 @@ const Chat = () => {
       setError(null);
       
       // Load existing messages from cache/API
+      // fetchMessages will use cache if it's fresh (< 2 minutes), otherwise fetch from API
       const existingMessages = await chatService.fetchMessages(activeChallenge._id, false);
       
       setMessages(existingMessages || []);
@@ -427,7 +432,10 @@ const Chat = () => {
       
       // Set connected state
       setIsConnected(true);
-      hasEverBeenReadyRef.current = true
+      hasEverBeenReadyRef.current = true;
+      
+      // Mark this challenge as initialized
+      initializedChallengesRef.current.add(activeChallenge._id);
       
       // Mark this challenge as initialized
       initializedChallengesRef.current.add(activeChallenge._id);
@@ -435,6 +443,8 @@ const Chat = () => {
     } catch (error) {
       console.error('Error initializing chat:', error);
       setError('Failed to load chat messages');
+      // If error, still mark as initialized to prevent retry loops
+      initializedChallengesRef.current.add(activeChallenge._id);
     } finally {
       setLoading(false);
     }
@@ -493,8 +503,6 @@ const Chat = () => {
     setActiveChallenge(challenge);
     // Reset the manual close flag when user selects a challenge
     userManuallyClosedChatRef.current = false;
-    // Reset initial load flag for new challenge
-    isInitialLoadRef.current = true;
     setViewingChat(true);
   };
 
