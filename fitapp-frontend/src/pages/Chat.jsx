@@ -120,7 +120,6 @@ const Chat = () => {
   const inputRef = useRef(null);
   const lastSeenMessageCountRef = useRef(0); // Track last seen message count to detect new messages
   const isAtBottomRef = useRef(true); // Track if user is at bottom of messages
-  const initializedChallengesRef = useRef(new Set()); // Track which challenges have been initialized
   const isInitialLoadRef = useRef(true); // Track if this is the initial load for the current challenge
 
   // Check if user is at bottom of messages
@@ -433,9 +432,6 @@ const Chat = () => {
       // Set connected state
       setIsConnected(true);
       hasEverBeenReadyRef.current = true;
-      
-      // Mark this challenge as initialized
-      initializedChallengesRef.current.add(activeChallenge._id);
       
       // Mark this challenge as initialized
       initializedChallengesRef.current.add(activeChallenge._id);
