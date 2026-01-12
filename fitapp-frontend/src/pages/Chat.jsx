@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useRef, useCallback, Fragment } from 'react';
+import React, { useContext, useEffect, useLayoutEffect, useState, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import { ChallengeContext } from '../context/ChallengeContext';
@@ -93,65 +93,8 @@ const Chat = () => {
   const inputRef = useRef(null);
   const lastSeenMessageCountRef = useRef(0); // Track last seen message count to detect new messages
   const isAtBottomRef = useRef(true); // Track if user is at bottom of messages
-
-  const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      // Use scrollIntoView with block: 'end' to ensure it scrolls to the very bottom
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end',
-        inline: 'nearest'
-      });
-    }
-  }, []);
-  
-  // Hide navigation bar when input is focused
-  useEffect(() => {
-    if (isInputFocused && viewingChat) {
-      // Hide navigation bar by adding class to body and html
-      document.body.classList.add('chat-input-focused');
-      document.documentElement.classList.add('chat-input-focused');
-      
-      // Also directly target the navigation element as fallback for mobile
-      const navElement = document.querySelector('.bottom-navigation');
-      if (navElement) {
-        navElement.style.transform = 'translateY(100%)';
-        navElement.style.pointerEvents = 'none';
-      }
-      
-      // Scroll to bottom when keyboard appears - use longer delay for mobile
-      setTimeout(() => {
-        scrollToBottom();
-        // Also try scrolling the container directly as fallback
-        if (messagesContainerRef.current && messagesEndRef.current) {
-          const container = messagesContainerRef.current;
-          const scrollHeight = container.scrollHeight;
-          const clientHeight = container.clientHeight;
-          container.scrollTop = scrollHeight - clientHeight;
-        }
-      }, 300);
-    } else {
-      document.body.classList.remove('chat-input-focused');
-      document.documentElement.classList.remove('chat-input-focused');
-      
-      // Restore navigation element
-      const navElement = document.querySelector('.bottom-navigation');
-      if (navElement) {
-        navElement.style.removeProperty('transform');
-        navElement.style.removeProperty('pointer-events');
-      }
-    }
-    
-    return () => {
-      document.body.classList.remove('chat-input-focused');
-      document.documentElement.classList.remove('chat-input-focused');
-      const navElement = document.querySelector('.bottom-navigation');
-      if (navElement) {
-        navElement.style.removeProperty('transform');
-        navElement.style.removeProperty('pointer-events');
-      }
-    };
-  }, [isInputFocused, viewingChat, scrollToBottom]);
+  const initializedChallengesRef = useRef(new Set()); // Track which challenges have been initialized
+  const isInitialLoadRef = useRef(true); // Track if this is the initial load for the current challenge
 
   // Check if user is at bottom of messages
   const checkIfAtBottom = useCallback(() => {
@@ -178,6 +121,67 @@ const Chat = () => {
     return isAtBottom;
   }, [messages.length, unreadCount, markAllAsRead]);
 
+  // Instant scroll to bottom (no animation) - for initial load
+  const scrollToBottomInstant = useCallback(() => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+      checkIfAtBottom();
+    }
+  }, [checkIfAtBottom]);
+
+  // Smooth scroll to bottom - for new messages while viewing
+  const scrollToBottomSmooth = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end',
+        inline: 'nearest'
+      });
+    }
+  }, []);
+  
+  // Hide navigation bar when input is focused
+  useEffect(() => {
+    if (isInputFocused && viewingChat) {
+      // Hide navigation bar by adding class to body and html
+      document.body.classList.add('chat-input-focused');
+      document.documentElement.classList.add('chat-input-focused');
+      
+      // Also directly target the navigation element as fallback for mobile
+      const navElement = document.querySelector('.bottom-navigation');
+      if (navElement) {
+        navElement.style.transform = 'translateY(100%)';
+        navElement.style.pointerEvents = 'none';
+      }
+      
+      // Scroll to bottom when keyboard appears - use longer delay for mobile
+      setTimeout(() => {
+        scrollToBottomInstant();
+      }, 300);
+    } else {
+      document.body.classList.remove('chat-input-focused');
+      document.documentElement.classList.remove('chat-input-focused');
+      
+      // Restore navigation element
+      const navElement = document.querySelector('.bottom-navigation');
+      if (navElement) {
+        navElement.style.removeProperty('transform');
+        navElement.style.removeProperty('pointer-events');
+      }
+    }
+    
+    return () => {
+      document.body.classList.remove('chat-input-focused');
+      document.documentElement.classList.remove('chat-input-focused');
+      const navElement = document.querySelector('.bottom-navigation');
+      if (navElement) {
+        navElement.style.removeProperty('transform');
+        navElement.style.removeProperty('pointer-events');
+      }
+    };
+  }, [isInputFocused, viewingChat, scrollToBottomInstant]);
+
   // Track scroll position to detect when user is at bottom
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -194,34 +198,32 @@ const Chat = () => {
     };
   }, [checkIfAtBottom]);
 
-  useEffect(() => {
-    // Scroll to bottom when messages change
-    scrollToBottom();
-    // Also ensure we can scroll to the very bottom with a small delay
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
+  // Set initial scroll position to bottom (no animation) - runs before paint
+  useLayoutEffect(() => {
+    if (viewingChat && messagesContainerRef.current && messages.length > 0) {
+      // On initial load, set scroll position instantly without animation
+      if (isInitialLoadRef.current) {
         const container = messagesContainerRef.current;
         container.scrollTop = container.scrollHeight;
-        // Check if we're at bottom after scrolling
         checkIfAtBottom();
-      }
-    }, 100);
-  }, [messages, scrollToBottom, checkIfAtBottom]);
-  
-  // Ensure scroll to bottom when viewing chat
-  useEffect(() => {
-    if (viewingChat && activeChallenge) {
-      setTimeout(() => {
-        scrollToBottom();
-        if (messagesContainerRef.current) {
+        isInitialLoadRef.current = false;
+      } else {
+        // For new messages while viewing, only scroll if user is at bottom
+        if (isAtBottomRef.current) {
           const container = messagesContainerRef.current;
           container.scrollTop = container.scrollHeight;
-          // Check if at bottom and clear unread count
           checkIfAtBottom();
         }
-      }, 200);
+      }
     }
-  }, [viewingChat, activeChallenge?._id, scrollToBottom, checkIfAtBottom]);
+  }, [messages.length, viewingChat, checkIfAtBottom]);
+
+  // Reset initial load flag when challenge changes
+  useEffect(() => {
+    if (activeChallenge?._id) {
+      isInitialLoadRef.current = true;
+    }
+  }, [activeChallenge?._id]);
 
   // Ensure scroll container is focusable and scrollable on mount
   useEffect(() => {
@@ -230,29 +232,8 @@ const Chat = () => {
       messagesContainerRef.current.setAttribute('tabindex', '-1');
       // Ensure it can receive focus programmatically
       messagesContainerRef.current.style.outline = 'none';
-      
-      // Force a reflow to ensure the container is properly rendered and scrollable
-      // This fixes the issue where scrolling doesn't work until after clicking the input
-      setTimeout(() => {
-        if (messagesContainerRef.current) {
-          // Trigger a layout recalculation
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollTop;
-        }
-      }, 100);
     }
-  }, [viewingChat, messages.length]);
-
-  // Scroll to bottom when entering chat view or when active challenge changes
-  useEffect(() => {
-    if (viewingChat && activeChallenge && messagesContainerRef.current) {
-      // Scroll to bottom when entering chat view to show recent messages
-      setTimeout(() => {
-        scrollToBottom();
-        // Check if at bottom and clear unread count when entering chat
-        checkIfAtBottom();
-      }, 100);
-    }
-  }, [viewingChat, activeChallenge?._id, scrollToBottom, checkIfAtBottom]);
+  }, [viewingChat]);
 
   // Fetch user challenges on component mount
   useEffect(() => {
@@ -301,12 +282,12 @@ const Chat = () => {
     }
   }, [userChallenges.length, completedChallenges.length, viewingChat, activeChallenge]);
 
-  // Initialize chat when active challenge changes
+  // Initialize chat when active challenge changes (only if not already initialized)
   useEffect(() => {
-    if (activeChallenge) {
+    if (activeChallenge?._id && !initializedChallengesRef.current.has(activeChallenge._id)) {
       initializeChat();
     }
-  }, [activeChallenge]);
+  }, [activeChallenge?._id]);
 
   // Set up periodic refresh for new messages
   useEffect(() => {
@@ -387,7 +368,30 @@ const Chat = () => {
       return;
     }
     
-    // Check cache first
+    // If already initialized, just load from cache and return
+    if (initializedChallengesRef.current.has(activeChallenge._id)) {
+      try {
+        const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+        const cached = sessionStorage.getItem(cacheKey)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed.messages) {
+            setMessages(parsed.messages)
+            setIsConnected(true)
+            setLoading(false)
+            // Update last seen message count
+            if (parsed.messages.length > 0) {
+              lastSeenMessageCountRef.current = parsed.messages.length;
+            }
+            return; // Don't fetch again if already initialized
+          }
+        }
+      } catch (e) {
+        // Ignore cache errors, continue to fetch if cache is invalid
+      }
+    }
+    
+    // Check cache first for initial load
     try {
       const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
       const cached = sessionStorage.getItem(cacheKey)
@@ -424,6 +428,9 @@ const Chat = () => {
       // Set connected state
       setIsConnected(true);
       hasEverBeenReadyRef.current = true
+      
+      // Mark this challenge as initialized
+      initializedChallengesRef.current.add(activeChallenge._id);
       
     } catch (error) {
       console.error('Error initializing chat:', error);
@@ -486,6 +493,8 @@ const Chat = () => {
     setActiveChallenge(challenge);
     // Reset the manual close flag when user selects a challenge
     userManuallyClosedChatRef.current = false;
+    // Reset initial load flag for new challenge
+    isInitialLoadRef.current = true;
     setViewingChat(true);
   };
 
