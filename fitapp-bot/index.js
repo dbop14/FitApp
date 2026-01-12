@@ -1,6 +1,7 @@
 const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 // Import models
@@ -1125,27 +1126,76 @@ const sendChallengeStartReminders = async () => {
   }
 };
 
+// Sync all users' data from Google Fit
+const syncAllUsersData = async () => {
+  console.log('🔄 Starting daily sync of all users data...');
+  if (!mongoConnected) {
+    console.error('❌ Cannot sync user data: MongoDB not connected.');
+    return;
+  }
+
+  try {
+    const users = await User.find({});
+    console.log(`🔍 Found ${users.length} users to sync.`);
+
+    for (const user of users) {
+      if (user.googleId) {
+        try {
+          const response = await fetch(`http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`);
+          if (response.ok) {
+            console.log(`✅ Successfully synced data for user ${user.email}`);
+          } else {
+            console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
+          }
+        } catch (err) {
+          console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
+        }
+      }
+    }
+    console.log('✅ Finished daily sync of all users data.');
+  } catch (err) {
+    console.error('❌ Error fetching users for sync:', err.message);
+  }
+};
+
+// Sync all users' steps (currently syncs all data)
+const syncAllUsersSteps = async () => {
+  // This function is an alias for syncAllUsersData because the backend endpoint syncs all data at once.
+  console.log('🔄 Starting pre-update sync of all users steps...');
+  await syncAllUsersData();
+  console.log('✅ Finished pre-update sync of all users steps.');
+};
+
 // Set up cron jobs
 const setupCronJobs = () => {
   const cronOptions = {
     timezone: "America/New_York"
   };
 
+  // Daily sync at 12 AM (midnight)
+  cron.schedule('0 0 * * *', () => {
+    console.log('🔄 Running daily user data sync (midnight)...');
+    syncAllUsersData();
+  }, cronOptions);
+
   // Daily step updates at 12 PM (noon)
-  cron.schedule('0 12 * * *', () => {
+  cron.schedule('0 12 * * *', async () => {
     console.log('📊 Running daily step update (noon)...');
+    await syncAllUsersSteps();
     sendDailyStepUpdate();
   }, cronOptions);
 
   // Daily step updates at 6 PM
-  cron.schedule('0 18 * * *', () => {
+  cron.schedule('0 18 * * *', async () => {
     console.log('📊 Running daily step update (6 PM)...');
+    await syncAllUsersSteps();
     sendDailyStepUpdate();
   }, cronOptions);
 
   // Daily step updates at 9 PM
-  cron.schedule('0 21 * * *', () => {
+  cron.schedule('0 21 * * *', async () => {
     console.log('📊 Running daily step update (evening)...');
+    await syncAllUsersSteps();
     sendDailyStepUpdate();
   }, cronOptions);
 
@@ -1189,6 +1239,7 @@ const setupCronJobs = () => {
 
   console.log('✅ Cron jobs and monitoring intervals set up');
   console.log('📋 Scheduled cron jobs:');
+  console.log('   - Daily user data sync: 12:00 AM');
   console.log('   - Daily step updates: 12:00 PM, 6:00 PM, and 9:00 PM');
   console.log('   - Weigh-in reminders: 8:00 AM');
   console.log('   - Weight loss celebrations: 9:00 AM');
