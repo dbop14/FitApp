@@ -3,6 +3,7 @@ const app = express()
 const PORT = 3000
 const cors = require('cors')
 const { google } = require('googleapis')
+const cron = require('node-cron')
 
 // CORS allowed origins - includes both production and development domains
 const allowedOrigins = [
@@ -123,6 +124,42 @@ mongoose.connection.on('connected', () => {
 mongoose.connection.on('reconnected', () => {
   console.log('✅ MongoDB reconnected');
 });
+
+// Scheduled job to reset all users' steps to 0 at midnight every day
+// Runs at 00:00:00 (midnight) in the server's timezone
+cron.schedule('0 0 * * *', async () => {
+  try {
+    console.log('🔄 Starting daily step reset at midnight...');
+    
+    // Reset all users' steps to 0
+    const result = await User.updateMany(
+      {},
+      { $set: { steps: 0 } }
+    );
+    
+    console.log(`✅ Daily step reset completed: ${result.modifiedCount} users' steps reset to 0`);
+    
+    // Broadcast update to all connected clients via SSE
+    // Note: This will notify all users that their steps have been reset
+    // The frontend should handle this gracefully by showing 0 steps
+    const allUsers = await User.find({});
+    for (const user of allUsers) {
+      broadcastUserUpdate(user.googleId, {
+        steps: 0,
+        weight: user.weight,
+        lastSync: user.lastSync
+      });
+    }
+    
+    console.log(`📡 Broadcasted step reset updates to ${allUsers.length} users`);
+  } catch (error) {
+    console.error('❌ Error during daily step reset:', error);
+  }
+}, {
+  timezone: "America/New_York" // Adjust timezone as needed (EDT/EST)
+});
+
+console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
 
 // Increase JSON body size limit to 1MB to accommodate profile photos
 // Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)

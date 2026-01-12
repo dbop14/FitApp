@@ -441,10 +441,13 @@ router.get('/userdata', async (req, res) => {
       }
     }
 
-    // CRITICAL FIX: Only update user's steps if Google Fit returns a valid (non-zero) step count
-    // If Google Fit returns 0 or no data, preserve the existing user.steps value
-    // This prevents overwriting correct step data with 0 when Google Fit API is incomplete
-    const steps = stepsFromGoogleFit > 0 ? stepsFromGoogleFit : (user.steps || 0);
+    // After midnight reset, steps are set to 0 for all users
+    // When syncing, always use Google Fit data if available (even if 0), as 0 is valid for a new day
+    // Only preserve existing steps if Google Fit returns no data (null/undefined)
+    // This ensures that after midnight reset, the 0 value gets updated with actual Google Fit data when user syncs
+    const steps = stepsFromGoogleFit !== null && stepsFromGoogleFit !== undefined 
+      ? stepsFromGoogleFit 
+      : (user.steps || 0);
 
     // Preserve previous values so we can decide whether to broadcast later
     const previousSteps = user.steps;
