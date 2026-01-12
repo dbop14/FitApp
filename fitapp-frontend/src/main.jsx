@@ -83,14 +83,42 @@ if (!rootElement) {
   }
 }
 
-// Register service worker for PWA notifications
+// Register service worker for PWA notifications + update prompt
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     const swUrl = '/sw.js';
     navigator.serviceWorker.register(swUrl)
       .then((registration) => {
         console.log('✅ Service Worker registered successfully:', registration.scope);
-        
+
+        // Guard to avoid multiple reloads
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          console.log('🔄 Controller changed, reloading to latest version...');
+          window.location.reload();
+        });
+
+        // Show "update available" prompt when a new SW is installed
+        registration.onupdatefound = () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('🆕 Update available: prompting user to refresh');
+              const shouldRefresh = window.confirm('A new version of FitApp is available. Refresh now?');
+              if (shouldRefresh) {
+                // Ask the waiting worker to activate immediately; controllerchange will reload.
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              } else {
+                console.log('⏭️ User chose to stay on current version until next load.');
+              }
+            }
+          });
+        };
+
         // Check if service worker is active
         if (registration.active) {
           console.log('✅ Service Worker is active');
