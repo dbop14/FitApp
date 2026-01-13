@@ -152,20 +152,28 @@ router.post('/userdata', async (req, res) => {
       
       const has24HoursPassed = (timestamp) => {
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:150',message:'has24HoursPassed entry',data:{timestamp:timestamp?.toISOString(),hasTimestamp:!!timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:150',message:'has24HoursPassed entry',data:{timestamp:timestamp?.toISOString(),hasTimestamp:!!timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         if (!timestamp) {
           // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:152',message:'has24HoursPassed no timestamp',data:{result:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:152',message:'has24HoursPassed no timestamp',data:{result:true},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
           // #endregion
-          return true;
+          return true; // No previous point, so eligible
         }
+
+        // Use calendar day boundaries instead of rolling 24-hour window
+        // This ensures users get one opportunity per calendar day (12 AM - 11:59 PM)
         const now = new Date();
-        const timeDiff = now.getTime() - timestamp.getTime();
-        const hoursDiff = timeDiff / (1000 * 60 * 60);
-        const result = hoursDiff >= 24;
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const lastPointDate = new Date(timestamp);
+        const lastPointDayStart = new Date(lastPointDate);
+        lastPointDayStart.setHours(0, 0, 0, 0);
+        
+        const result = todayStart.getTime() > lastPointDayStart.getTime();
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:156',message:'has24HoursPassed calculation',data:{now:now.toISOString(),timestamp:timestamp.toISOString(),timeDiff,hoursDiff:hoursDiff.toFixed(2),result,isNewCalendarDay:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:165',message:'has24HoursPassed calendar day check',data:{now:now.toISOString(),timestamp:timestamp.toISOString(),todayStart:todayStart.toISOString(),lastPointDayStart:lastPointDayStart.toISOString(),result,isNewCalendarDay:result},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         return result;
       };
