@@ -384,6 +384,8 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
 
 // Track previous step points to detect changes
 const previousStepPoints = new Map(); // challengeId-userId -> stepGoalPoints
+// Track previous weight loss percentages to detect increases
+const previousWeightLossPercentages = new Map(); // challengeId-userId -> weightLossPercentage
 // Track welcomed participants (persist across restarts using participant _id timestamps)
 const welcomedParticipants = new Set(); // challengeId-userId
 // Track announced winners
@@ -473,6 +475,127 @@ const checkStepPointChanges = async () => {
     console.log(`✅ Finished checking step point changes: ${totalChecked} participants checked, ${increasesFound} increases found, ${previousStepPoints.size} tracked in map`);
   } catch (err) {
     console.error('❌ Error checking step point changes:', err.message);
+    console.error(err.stack);
+  }
+};
+
+// Monitor weight loss percentage changes (only on weigh-in days)
+const checkWeightLossPercentageChanges = async () => {
+  console.log('[DEBUG] checkWeightLossPercentageChanges:entry - mongoConnected:', mongoConnected);
+  if (!mongoConnected) {
+    console.log('[DEBUG] checkWeightLossPercentageChanges:earlyReturn - MongoDB not connected');
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const todayDayName = getDayName(now);
+    console.log(`[DEBUG] checkWeightLossPercentageChanges: Today is ${todayDayName}`);
+    
+    // First, get all active challenges and filter by weigh-in day
+    const challenges = await Challenge.find({});
+    const challengesOnWeighInDay = challenges.filter(challenge => {
+      if (!challenge.weighInDay) return false;
+      
+      // Check if challenge is active
+      const startDate = new Date(challenge.startDate);
+      const endDate = new Date(challenge.endDate);
+      if (now < startDate || now > endDate) return false;
+      
+      // Check if today is weigh-in day
+      return isWeighInDay(challenge.weighInDay);
+    });
+    
+    if (challengesOnWeighInDay.length === 0) {
+      console.log(`[DEBUG] checkWeightLossPercentageChanges: No challenges with weigh-in day today (${todayDayName})`);
+      return;
+    }
+    
+    console.log(`[DEBUG] checkWeightLossPercentageChanges: Found ${challengesOnWeighInDay.length} challenges with weigh-in day today`);
+    
+    // Get challenge IDs for filtering
+    const challengeIds = challengesOnWeighInDay.map(c => c._id.toString());
+    
+    // Only check participants in challenges that have weigh-in day today
+    const participants = await ChallengeParticipant.find({
+      challengeId: { $in: challengeIds }
+    });
+    console.log('[DEBUG] checkWeightLossPercentageChanges:participantsFound - count:', participants.length);
+    
+    let totalChecked = 0;
+    let increasesFound = 0;
+    for (const participant of participants) {
+      totalChecked++;
+      const key = `${participant.challengeId}-${participant.userId}`;
+      
+      // Calculate current weight loss percentage
+      let currentWeightLossPercentage = 0;
+      if (participant.startingWeight && participant.lastWeight) {
+        const weightLost = participant.startingWeight - participant.lastWeight;
+        if (weightLost > 0 && participant.startingWeight > 0) {
+          currentWeightLossPercentage = (weightLost / participant.startingWeight) * 100;
+        }
+      }
+      
+      const previousPercentage = previousWeightLossPercentages.get(key) || 0;
+      
+      console.log(`   [${totalChecked}/${participants.length}] Participant ${participant.userId} in challenge ${participant.challengeId}: previous=${previousPercentage.toFixed(2)}%, current=${currentWeightLossPercentage.toFixed(2)}%`);
+
+      // If percentage increased, someone lost more weight
+      if (currentWeightLossPercentage > previousPercentage) {
+        increasesFound++;
+        console.log(`🎉 Weight loss percentage increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPercentage.toFixed(2)}% -> ${currentWeightLossPercentage.toFixed(2)}%`);
+        previousWeightLossPercentages.set(key, currentWeightLossPercentage);
+        
+        // Get challenge and user info
+        const challenge = await Challenge.findById(participant.challengeId);
+        const user = await User.findOne({ googleId: participant.userId });
+        
+        console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
+        if (challenge && challenge.matrixRoomId && user && participant.startingWeight && participant.lastWeight) {
+          // Skip if winner already announced
+          const challengeKey = challenge._id.toString();
+          if (announcedWinners.has(challengeKey)) {
+            console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
+            continue;
+          }
+          console.log(`   ✅ Challenge is active and today is weigh-in day, sending weight loss card to room ${challenge.matrixRoomId}`);
+
+          const userName = user.name || user.email || 'Someone';
+          const firstName = userName.split(' ')[0];
+          const weightLost = participant.startingWeight - participant.lastWeight;
+          const message = `Congratulations ${firstName}! You've lost ${weightLost.toFixed(1)} pounds (${currentWeightLossPercentage.toFixed(1)}% of your starting weight). That's amazing progress - keep up the great work!`;
+          const botName = challenge.botName || 'Fitness Motivator';
+          
+          console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
+          await sendCardMessage(
+            challenge.matrixRoomId,
+            message,
+            challenge._id,
+            botName,
+            'weightLossCard',
+            {
+              userName: firstName,
+              weightLost: weightLost.toFixed(1),
+              weightLossPercentage: currentWeightLossPercentage.toFixed(1),
+              startingWeight: participant.startingWeight,
+              currentWeight: participant.lastWeight
+            },
+            user.picture,
+            participant.userId
+          );
+        } else {
+          console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}, hasWeights=${!!(participant.startingWeight && participant.lastWeight)}`);
+        }
+      } else if (currentWeightLossPercentage !== previousPercentage) {
+        // Update tracking even if percentage didn't increase (in case of reset or decrease)
+        console.log(`   📊 Weight loss percentage changed (not increase): ${participant.userId} - ${previousPercentage.toFixed(2)}% -> ${currentWeightLossPercentage.toFixed(2)}%, updating tracking`);
+        previousWeightLossPercentages.set(key, currentWeightLossPercentage);
+      }
+    }
+    console.log(`✅ Finished checking weight loss percentage changes: ${totalChecked} participants checked, ${increasesFound} increases found, ${previousWeightLossPercentages.size} tracked in map`);
+  } catch (err) {
+    console.error('❌ Error checking weight loss percentage changes:', err.message);
     console.error(err.stack);
   }
 };
@@ -1237,6 +1360,13 @@ const setupCronJobs = () => {
     checkStepPointChanges();
   }, 30 * 1000);
 
+  // Check for weight loss percentage changes every 30 seconds
+  console.log('⏰ Setting up interval for checkWeightLossPercentageChanges (every 30 seconds)');
+  const weightLossInterval = setInterval(() => {
+    console.log(`🔄 [${new Date().toISOString()}] Interval: Checking weight loss percentage changes...`);
+    checkWeightLossPercentageChanges();
+  }, 30 * 1000);
+
   console.log('✅ Cron jobs and monitoring intervals set up');
   console.log('📋 Scheduled cron jobs:');
   console.log('   - Daily user data sync: 12:00 AM');
@@ -1252,6 +1382,10 @@ const setupCronJobs = () => {
     console.log('[DEBUG] Test: Executing checkStepPointChanges after 5 seconds');
     checkStepPointChanges();
   }, 5000);
+  setTimeout(() => {
+    console.log('[DEBUG] Test: Executing checkWeightLossPercentageChanges after 7 seconds');
+    checkWeightLossPercentageChanges();
+  }, 7000);
   setTimeout(() => {
     console.log('[DEBUG] Test: Executing checkNewParticipants after 10 seconds');
     checkNewParticipants();
@@ -1319,19 +1453,51 @@ const start = async () => {
           const key = `${participant.challengeId}-${participant.userId}`;
           const currentPoints = participant.stepGoalPoints || 0;
           previousStepPoints.set(key, currentPoints);
+          
+          // Initialize weight loss percentage tracking from last celebrated card
+          // Check ChatMessage to find the last weight loss card sent for this user
+          let lastCelebratedPercentage = 0;
+          try {
+            const lastWeightLossCard = await ChatMessage.findOne({
+              challengeId: participant.challengeId.toString(),
+              messageType: 'weightLossCard',
+              userId: participant.userId,
+              isBot: true
+            }).sort({ timestamp: -1 }); // Get most recent
+            
+            if (lastWeightLossCard && lastWeightLossCard.cardData && lastWeightLossCard.cardData.weightLossPercentage) {
+              lastCelebratedPercentage = parseFloat(lastWeightLossCard.cardData.weightLossPercentage) || 0;
+              console.log(`   Found last celebrated weight loss percentage for ${participant.userId}: ${lastCelebratedPercentage.toFixed(2)}%`);
+            }
+          } catch (cardErr) {
+            // If we can't find the last card, default to 0 (will check current percentage on first run)
+            console.log(`   No previous weight loss card found for ${participant.userId}, will check current percentage`);
+          }
+          
+          // Set the previous percentage to the last celebrated one
+          // This allows us to detect increases that happened while the bot was down
+          previousWeightLossPercentages.set(key, lastCelebratedPercentage);
         }
         console.log(`✅ Initialized previousStepPoints Map with ${previousStepPoints.size} entries from database`);
+        console.log(`✅ Initialized previousWeightLossPercentages Map with ${previousWeightLossPercentages.size} entries from database (using last celebrated percentages)`);
       } catch (err) {
-        console.error('⚠️  Failed to initialize previousStepPoints from database:', err.message);
+        console.error('⚠️  Failed to initialize tracking maps from database:', err.message);
       }
     }
     
     // Set up cron jobs and monitoring
     setupCronJobs();
     
-    // Initial checks
-    checkNewParticipants();
-    checkStepPointChanges();
+    // Initial checks (with small delay to ensure initialization is complete)
+    console.log('🔄 Running initial checks after startup...');
+    setTimeout(() => {
+      checkNewParticipants();
+      checkStepPointChanges();
+      // Check for weight loss percentage increases that may have been missed while bot was down
+      // This will catch any increases that happened on today's weigh-in day before restart
+      console.log('🎉 Checking for missed weight loss percentage increases on startup...');
+      checkWeightLossPercentageChanges();
+    }, 2000); // 2 second delay to ensure all initialization is complete
     
     if (client) {
       console.log('🤖 Fitness Bot is running!');
