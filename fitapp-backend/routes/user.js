@@ -30,9 +30,6 @@ router.post('/userdata', async (req, res) => {
     // Check if this is today's data or historical data
     const today = FitnessHistory.normalizeDate(new Date());
     const isToday = targetDate.getTime() === today.getTime();
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:32',message:'Date normalization check',data:{targetDate:targetDate.toISOString(),today:today.toISOString(),isToday,dateProvided:!!date,dateValue:date},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     
     // debug instrumentation removed
     
@@ -151,13 +148,7 @@ router.post('/userdata', async (req, res) => {
       };
       
       const has24HoursPassed = (timestamp) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:150',message:'has24HoursPassed entry',data:{timestamp:timestamp?.toISOString(),hasTimestamp:!!timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         if (!timestamp) {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:152',message:'has24HoursPassed no timestamp',data:{result:true},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           return true; // No previous point, so eligible
         }
 
@@ -171,11 +162,7 @@ router.post('/userdata', async (req, res) => {
         const lastPointDayStart = new Date(lastPointDate);
         lastPointDayStart.setHours(0, 0, 0, 0);
         
-        const result = todayStart.getTime() > lastPointDayStart.getTime();
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:165',message:'has24HoursPassed calendar day check',data:{now:now.toISOString(),timestamp:timestamp.toISOString(),todayStart:todayStart.toISOString(),lastPointDayStart:lastPointDayStart.toISOString(),result,isNewCalendarDay:result},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        return result;
+        return todayStart.getTime() > lastPointDayStart.getTime();
       };
       
       // Weight loss points - calculate continuously throughout the challenge
@@ -243,20 +230,7 @@ router.post('/userdata', async (req, res) => {
         
         const now = new Date();
         const lastStepPointTime = participant.lastStepPointTimestamp ? new Date(participant.lastStepPointTimestamp) : null;
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:221',message:'Before has24HoursPassed call',data:{now:now.toISOString(),lastStepPointTime:lastStepPointTime?.toISOString(),lastStepDate:participant.lastStepDate?.toISOString(),isToday},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         const canEarnPoint = has24HoursPassed(lastStepPointTime);
-        // #region agent log
-        const todayStart = new Date(now);
-        todayStart.setHours(0,0,0,0);
-        const lastPointDayStart = lastStepPointTime ? new Date(lastStepPointTime) : null;
-        if (lastPointDayStart) {
-          lastPointDayStart.setHours(0,0,0,0);
-        }
-        const isNewCalendarDay = !lastPointDayStart || todayStart.getTime() > lastPointDayStart.getTime();
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:224',message:'After has24HoursPassed call',data:{canEarnPoint,todayStart:todayStart.toISOString(),lastPointDayStart:lastPointDayStart?.toISOString(),isNewCalendarDay,hoursSinceLastPoint:lastStepPointTime ? ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60)).toFixed(2) : 'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         
         console.log(`🔍 Step goal check for ${email}:`, {
           steps: stepsNum,
@@ -295,16 +269,6 @@ router.post('/userdata', async (req, res) => {
           console.log(`📊 Total points: ${participant.points} (${stepPoints} step + ${weightLossPoints} weight loss)`);
         } else if (!canEarnPoint && stepsNum >= stepGoalNum) {
           const hoursRemaining = 24 - ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60));
-          // #region agent log
-          const todayStart = new Date(now);
-          todayStart.setHours(0,0,0,0);
-          const lastPointDayStart = lastStepPointTime ? new Date(lastStepPointTime) : null;
-          if (lastPointDayStart) {
-            lastPointDayStart.setHours(0,0,0,0);
-          }
-          const isNewCalendarDay = !lastPointDayStart || todayStart.getTime() > lastPointDayStart.getTime();
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes/user.js:260',message:'Step goal met but point denied',data:{stepsNum,stepGoalNum,canEarnPoint,hoursRemaining:hoursRemaining.toFixed(2),isNewCalendarDay,todayStart:todayStart.toISOString(),lastPointDayStart:lastPointDayStart?.toISOString(),lastStepDate:participant.lastStepDate?.toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           console.log(`✅ Step goal met but point already awarded within 24 hours (${hoursRemaining.toFixed(1)} hours remaining until next point eligible)`);
           // Still update total points to ensure consistency
           const stepPoints = participant.stepGoalPoints || 0;
