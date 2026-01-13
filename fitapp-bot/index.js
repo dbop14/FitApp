@@ -462,6 +462,8 @@ const checkStepPointChanges = async () => {
               user.picture,
               participant.userId
             );
+          } else {
+            console.log(`   ⏭️ Skipping - challenge not active (start: ${startDateOnly.toISOString().split('T')[0]}, end: ${endDateOnly.toISOString().split('T')[0]}, today: ${nowDateOnly.toISOString().split('T')[0]})`);
           }
         } else {
           console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
@@ -488,19 +490,24 @@ const checkWeightLossPercentageChanges = async () => {
   }
 
   try {
-    const now = new Date();
-    const todayDayName = getDayName(now);
-    console.log(`[DEBUG] checkWeightLossPercentageChanges: Today is ${todayDayName}`);
+    const now = getCurrentDateInTimezone();
+    const todayDayName = getTodayDayName();
+    console.log(`[DEBUG] checkWeightLossPercentageChanges: Today is ${todayDayName} (America/New_York timezone)`);
     
     // First, get all active challenges and filter by weigh-in day
     const challenges = await Challenge.find({});
     const challengesOnWeighInDay = challenges.filter(challenge => {
       if (!challenge.weighInDay) return false;
       
-      // Check if challenge is active
+      // Check if challenge is active (using timezone-aware date)
       const startDate = new Date(challenge.startDate);
       const endDate = new Date(challenge.endDate);
-      if (now < startDate || now > endDate) return false;
+      const nowInTimezone = getCurrentDateInTimezone();
+      // Compare dates (ignore time component for date-only comparisons)
+      const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+      const nowDateOnly = new Date(nowInTimezone.getFullYear(), nowInTimezone.getMonth(), nowInTimezone.getDate());
+      if (nowDateOnly < startDateOnly || nowDateOnly > endDateOnly) return false;
       
       // Check if today is weigh-in day
       return isWeighInDay(challenge.weighInDay);
@@ -559,7 +566,16 @@ const checkWeightLossPercentageChanges = async () => {
             console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
             continue;
           }
-          console.log(`   ✅ Challenge is active and today is weigh-in day, sending weight loss card to room ${challenge.matrixRoomId}`);
+          // Verify challenge is still active (using timezone-aware date)
+          const nowInTimezone = getCurrentDateInTimezone();
+          const startDate = new Date(challenge.startDate);
+          const endDate = new Date(challenge.endDate);
+          const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+          const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+          const nowDateOnly = new Date(nowInTimezone.getFullYear(), nowInTimezone.getMonth(), nowInTimezone.getDate());
+          
+          if (nowDateOnly >= startDateOnly && nowDateOnly <= endDateOnly) {
+            console.log(`   ✅ Challenge is active and today is weigh-in day, sending weight loss card to room ${challenge.matrixRoomId}`);
 
           const userName = user.name || user.email || 'Someone';
           const firstName = userName.split(' ')[0];
@@ -584,6 +600,9 @@ const checkWeightLossPercentageChanges = async () => {
             user.picture,
             participant.userId
           );
+          } else {
+            console.log(`   ⏭️ Skipping - challenge not active (start: ${startDateOnly.toISOString().split('T')[0]}, end: ${endDateOnly.toISOString().split('T')[0]}, today: ${nowDateOnly.toISOString().split('T')[0]})`);
+          }
         } else {
           console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}, hasWeights=${!!(participant.startingWeight && participant.lastWeight)}`);
         }
@@ -600,16 +619,50 @@ const checkWeightLossPercentageChanges = async () => {
   }
 };
 
-// Get day name from date
+// Get current date/time in America/New_York timezone
+const getCurrentDateInTimezone = () => {
+  const now = new Date();
+  // Use Intl.DateTimeFormat to get the date in America/New_York timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const year = parseInt(parts.find(p => p.type === 'year').value);
+  const month = parseInt(parts.find(p => p.type === 'month').value) - 1; // Month is 0-indexed
+  const day = parseInt(parts.find(p => p.type === 'day').value);
+  const hour = parseInt(parts.find(p => p.type === 'hour').value);
+  const minute = parseInt(parts.find(p => p.type === 'minute').value);
+  const second = parseInt(parts.find(p => p.type === 'second').value);
+  
+  // Create a new Date object representing this time in the timezone
+  // Note: This creates a date in local time, but the values are from the timezone
+  return new Date(year, month, day, hour, minute, second);
+};
+
+// Get day name from date (in America/New_York timezone)
 const getDayName = (date) => {
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   return days[date.getDay()];
 };
 
-// Check if today is weigh-in day
+// Get today's day name in America/New_York timezone
+const getTodayDayName = () => {
+  const todayInTimezone = getCurrentDateInTimezone();
+  return getDayName(todayInTimezone);
+};
+
+// Check if today is weigh-in day (using America/New_York timezone)
 const isWeighInDay = (weighInDay) => {
   if (!weighInDay) return false;
-  const today = getDayName(new Date());
+  const today = getTodayDayName();
   return today.toLowerCase() === weighInDay.toLowerCase();
 };
 
@@ -711,15 +764,17 @@ const sendWeighInReminder = async () => {
   }
 
   try {
-    const now = new Date();
+    const now = getCurrentDateInTimezone();
     const today = now.toISOString().split('T')[0];
-    const todayDayName = getDayName(now);
-    console.log(`⚖️ Checking weigh-in reminders for ${todayDayName} (${today})`);
+    const todayDayName = getTodayDayName();
+    console.log(`⚖️ Checking weigh-in reminders for ${todayDayName} (${today}) - America/New_York timezone`);
     
     // Find challenges that are active (started and not ended)
+    // Use timezone-aware date for comparison
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const challenges = await Challenge.find({
-      startDate: { $lte: now.toISOString().split('T')[0] },
-      endDate: { $gte: now.toISOString().split('T')[0] }
+      startDate: { $lte: todayStr },
+      endDate: { $gte: todayStr }
     });
     console.log(`⚖️ Found ${challenges.length} active challenges`);
 
