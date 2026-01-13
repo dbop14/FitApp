@@ -393,15 +393,12 @@ const announcedWinners = new Set(); // challengeId
 
 // Monitor step point changes
 const checkStepPointChanges = async () => {
-  console.log('[DEBUG] checkStepPointChanges:entry - mongoConnected:', mongoConnected);
   if (!mongoConnected) {
-    console.log('[DEBUG] checkStepPointChanges:earlyReturn - MongoDB not connected');
     return;
   }
 
   try {
     const participants = await ChallengeParticipant.find({});
-    console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
     let increasesFound = 0;
@@ -483,16 +480,13 @@ const checkStepPointChanges = async () => {
 
 // Monitor weight loss percentage changes (only on weigh-in days)
 const checkWeightLossPercentageChanges = async () => {
-  console.log('[DEBUG] checkWeightLossPercentageChanges:entry - mongoConnected:', mongoConnected);
   if (!mongoConnected) {
-    console.log('[DEBUG] checkWeightLossPercentageChanges:earlyReturn - MongoDB not connected');
     return;
   }
 
   try {
     const now = getCurrentDateInTimezone();
     const todayDayName = getTodayDayName();
-    console.log(`[DEBUG] checkWeightLossPercentageChanges: Today is ${todayDayName} (America/New_York timezone)`);
     
     // First, get all active challenges and filter by weigh-in day
     const challenges = await Challenge.find({});
@@ -514,11 +508,8 @@ const checkWeightLossPercentageChanges = async () => {
     });
     
     if (challengesOnWeighInDay.length === 0) {
-      console.log(`[DEBUG] checkWeightLossPercentageChanges: No challenges with weigh-in day today (${todayDayName})`);
       return;
     }
-    
-    console.log(`[DEBUG] checkWeightLossPercentageChanges: Found ${challengesOnWeighInDay.length} challenges with weigh-in day today`);
     
     // Get challenge IDs for filtering
     const challengeIds = challengesOnWeighInDay.map(c => c._id.toString());
@@ -527,7 +518,6 @@ const checkWeightLossPercentageChanges = async () => {
     const participants = await ChallengeParticipant.find({
       challengeId: { $in: challengeIds }
     });
-    console.log('[DEBUG] checkWeightLossPercentageChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
     let increasesFound = 0;
@@ -668,9 +658,7 @@ const isWeighInDay = (weighInDay) => {
 
 // Send daily step progress update (plain text, not a card)
 const sendDailyStepUpdate = async () => {
-  console.log('[DEBUG] sendDailyStepUpdate:entry - mongoConnected:', mongoConnected);
   if (!mongoConnected) {
-    console.log('[DEBUG] sendDailyStepUpdate:earlyReturn - MongoDB not connected');
     return;
   }
 
@@ -680,7 +668,6 @@ const sendDailyStepUpdate = async () => {
       startDate: { $lte: now.toISOString().split('T')[0] },
       endDate: { $gte: now.toISOString().split('T')[0] }
     });
-    console.log('[DEBUG] sendDailyStepUpdate:challengesFound - count:', challenges.length, 'now:', now.toISOString());
 
     for (const challenge of challenges) {
       console.log(`📊 Processing challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}`);
@@ -1042,15 +1029,12 @@ const announceChallengeWinner = async () => {
 
 // Welcome new participants
 const checkNewParticipants = async () => {
-  console.log('[DEBUG] checkNewParticipants:entry - mongoConnected:', mongoConnected);
   if (!mongoConnected) {
-    console.log('[DEBUG] checkNewParticipants:earlyReturn - MongoDB not connected');
     return;
   }
 
   try {
     const participants = await ChallengeParticipant.find({});
-    console.log('[DEBUG] checkNewParticipants:participantsFound - count:', participants.length);
     
     for (const participant of participants) {
       const key = `${participant.challengeId}-${participant.userId}`;
@@ -1430,21 +1414,6 @@ const setupCronJobs = () => {
   console.log('   - Weight loss celebrations: 9:00 AM');
   console.log('   - Challenge winners: 10:00 AM');
   console.log('   - Challenge start reminders: 8:00 AM');
-  
-  // Test intervals immediately to verify they work
-  console.log('[DEBUG] Testing intervals immediately...');
-  setTimeout(() => {
-    console.log('[DEBUG] Test: Executing checkStepPointChanges after 5 seconds');
-    checkStepPointChanges();
-  }, 5000);
-  setTimeout(() => {
-    console.log('[DEBUG] Test: Executing checkWeightLossPercentageChanges after 7 seconds');
-    checkWeightLossPercentageChanges();
-  }, 7000);
-  setTimeout(() => {
-    console.log('[DEBUG] Test: Executing checkNewParticipants after 10 seconds');
-    checkNewParticipants();
-  }, 10000);
 };
 
 // Graceful shutdown
