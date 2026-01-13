@@ -1,8 +1,9 @@
 // Icon version: Update this when icons change (must match manifest _iconVersion)
 const ICON_VERSION = 2;
 // Increment cache version to force service worker update (especially for Safari PWA)
-const SW_VERSION = 5;
+const SW_VERSION = 6; // Incremented to force cache update
 const CACHE_NAME = `fitapp-cache-v${SW_VERSION}-icons-${ICON_VERSION}`; // Increment version to force update
+const API_CACHE_NAME = `fitapp-api-cache-v${SW_VERSION}`; // Separate cache for API responses
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -27,7 +28,13 @@ self.addEventListener('activate', (event) => {
   console.log('📱 [iOS DEBUG] Service worker activating...');
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.map((key) => (key !== CACHE_NAME ? caches.delete(key) : undefined)))
+      Promise.all(keys.map((key) => {
+        // Delete old caches (both asset cache and API cache)
+        if (key !== CACHE_NAME && key !== API_CACHE_NAME) {
+          console.log('🗑️ Deleting old cache:', key);
+          return caches.delete(key);
+        }
+      }))
     )
   );
   self.clients.claim(); // Take control of all clients immediately
@@ -38,9 +45,55 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   
-  // Don't cache API calls - let React Query handle those
+  // Only handle GET requests - don't cache POST/PUT/DELETE
+  if (request.method !== 'GET') return;
+  
+  // Handle API calls with cache-first strategy
+  // This ensures chat messages, challenges, and other data load from cache
   if (url.pathname.startsWith('/api/')) {
-    return; // Let the request go through normally without caching
+    event.respondWith(
+      caches.open(API_CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cached) => {
+          // Cache-first: return cached response immediately if available
+          if (cached) {
+            console.log('📦 [CACHE] Serving API from cache:', url.pathname);
+            // Update cache in background (stale-while-revalidate)
+            fetch(request)
+              .then((response) => {
+                if (response.status === 200) {
+                  const responseClone = response.clone();
+                  cache.put(request, responseClone).catch(() => {
+                    // Ignore cache errors
+                  });
+                }
+              })
+              .catch(() => {
+                // Ignore network errors - we already have cached data
+              });
+            return cached;
+          }
+          
+          // No cache - fetch from network and cache it
+          console.log('🌐 [NETWORK] Fetching API from network:', url.pathname);
+          return fetch(request)
+            .then((response) => {
+              // Only cache successful responses
+              if (response.status === 200) {
+                const responseClone = response.clone();
+                cache.put(request, responseClone).catch(() => {
+                  // Ignore cache errors - don't block the response
+                });
+              }
+              return response;
+            })
+            .catch((error) => {
+              console.error('❌ [NETWORK] Failed to fetch API:', url.pathname, error);
+              throw error;
+            });
+        });
+      })
+    );
+    return;
   }
   
   // Redirect /home.html to /login for PWA compatibility
@@ -62,70 +115,82 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Only cache GET requests
-  if (request.method !== 'GET') return;
-  
   // For navigation requests (HTML), try network first, cache as fallback
   // This ensures we get the latest HTML with correct JS/CSS references
   if (request.mode === 'navigate') {
-    // Check cache first to see if we have anything
     event.respondWith(
-      caches.match(request).then((cached) => {
-        // Try network first
-        return fetch(request)
-          .then((response) => {
-            // Only cache successful responses
-            if (response.status === 200 && response.type === 'basic') {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => {
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cached) => {
+          // Try network first to get latest HTML
+          return fetch(request)
+            .then((response) => {
+              // Only cache successful responses
+              if (response.status === 200 && response.type === 'basic') {
+                const responseClone = response.clone();
                 cache.put(request, responseClone).catch(() => {
                   // Ignore cache errors - don't block the response
                 });
-              });
-            }
-            return response;
-          })
-          .catch(() => {
-            // If network fails and we have cache, use it
-            if (cached) {
-              return cached;
-            }
-            // If no cache and network failed, try one more network request
-            // This prevents white screen on iOS when cache is cleared
-            return fetch(request);
-          });
+              }
+              return response;
+            })
+            .catch(() => {
+              // If network fails and we have cache, use it
+              if (cached) {
+                console.log('📦 [CACHE] Serving HTML from cache (network failed)');
+                return cached;
+              }
+              // If no cache and network failed, try one more network request
+              // This prevents white screen on iOS when cache is cleared
+              return fetch(request);
+            });
+        });
       })
     );
     return;
   }
   
-  // For all other requests (JS, CSS, images, etc.), network first, then cache
-  // Check cache first to see if we can handle offline requests
+  // For static assets (JS, CSS, images, fonts, etc.), use cache-first strategy
+  // This ensures fast loading when revisiting pages
   event.respondWith(
-    caches.match(request).then((cached) => {
-      // Try network first to get latest version
-      return fetch(request)
-        .then((response) => {
-          // Only cache successful responses
-          if (response.status === 200) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(request).then((cached) => {
+        // Cache-first: return cached response immediately if available
+        if (cached) {
+          console.log('📦 [CACHE] Serving asset from cache:', url.pathname);
+          // Update cache in background (stale-while-revalidate)
+          fetch(request)
+            .then((response) => {
+              if (response.status === 200) {
+                const responseClone = response.clone();
+                cache.put(request, responseClone).catch(() => {
+                  // Ignore cache errors
+                });
+              }
+            })
+            .catch(() => {
+              // Ignore network errors - we already have cached data
+            });
+          return cached;
+        }
+        
+        // No cache - fetch from network and cache it
+        console.log('🌐 [NETWORK] Fetching asset from network:', url.pathname);
+        return fetch(request)
+          .then((response) => {
+            // Only cache successful responses
+            if (response.status === 200) {
+              const responseClone = response.clone();
               cache.put(request, responseClone).catch(() => {
                 // Ignore cache errors - don't block the response
               });
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          // If network fails and we have cache, use it
-          if (cached) {
-            return cached;
-          }
-          // If no cache and network failed, try one more network request
-          // This prevents blocking on iOS when cache is cleared
-          return fetch(request);
-        });
+            }
+            return response;
+          })
+          .catch((error) => {
+            console.error('❌ [NETWORK] Failed to fetch asset:', url.pathname, error);
+            throw error;
+          });
+      });
     })
   );
 });
