@@ -57,11 +57,9 @@ router.post('/userdata', async (req, res) => {
       updateFields.steps = steps;
       updateFields.weight = weight;
       console.log(`🔄 Updating user's current data for ${email}: steps=${steps}, weight=${weight}`);
-      // debug instrumentation removed
     } else {
       // For historical data, preserve existing user steps/weight (don't overwrite with historical values)
       console.log(`📅 Historical data for ${email} on ${dateStr}: steps=${steps}, weight=${weight} - NOT updating user's current state`);
-      // debug instrumentation removed
     }
     
     const user = await User.findOneAndUpdate(
@@ -442,11 +440,14 @@ router.get('/userdata', async (req, res) => {
     }
 
     // After midnight reset, steps are set to 0 for all users
-    // When syncing, always use Google Fit data if available (even if 0), as 0 is valid for a new day
+    // When syncing, use Google Fit data if:
+    // 1. Google Fit returns a value > 0 (always use actual step data)
+    // 2. Google Fit returns 0 AND user's current steps are also 0 (new day after midnight reset)
+    // Otherwise, preserve existing steps if Google Fit returns 0 (prevents overwriting valid steps with 0)
     // Only preserve existing steps if Google Fit returns no data (null/undefined)
-    // This ensures that after midnight reset, the 0 value gets updated with actual Google Fit data when user syncs
+    // This prevents the bouncing effect where GET endpoint overwrites correct steps with 0
     const steps = stepsFromGoogleFit !== null && stepsFromGoogleFit !== undefined 
-      ? stepsFromGoogleFit 
+      ? (stepsFromGoogleFit > 0 || user.steps === 0 ? stepsFromGoogleFit : user.steps)
       : (user.steps || 0);
 
     // Preserve previous values so we can decide whether to broadcast later
