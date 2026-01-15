@@ -27,6 +27,20 @@ console.log('🧪 User Agent:', navigator.userAgent)
 console.log('🧪 Current URL:', window.location.href)
 console.log('🧪 Service Worker support:', 'serviceWorker' in navigator)
 
+// Add platform class for Android-specific styling
+if (typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent || '')) {
+  document.documentElement.classList.add('platform-android')
+}
+
+// Add platform class for desktop styling
+if (typeof navigator !== 'undefined') {
+  const ua = navigator.userAgent || ''
+  const isMobile = /android|iphone|ipad|ipod/i.test(ua)
+  if (!isMobile) {
+    document.documentElement.classList.add('platform-desktop')
+  }
+}
+
 // Add global error handler to catch unhandled errors
 window.addEventListener('error', (event) => {
   console.error('❌ Global error:', event.error, event.message, event.filename, event.lineno)
@@ -99,6 +113,11 @@ if ('serviceWorker' in navigator) {
           console.log('🔄 Controller changed, reloading to latest version...');
           window.location.reload();
         });
+        
+        // Force update check and log readiness state
+        registration.update().catch(() => {});
+        navigator.serviceWorker.ready.then((readyRegistration) => {
+        });
 
         // Show "update available" prompt when a new SW is installed
         registration.onupdatefound = () => {
@@ -108,13 +127,10 @@ if ('serviceWorker' in navigator) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               console.log('🆕 Update available: prompting user to refresh');
-              const shouldRefresh = window.confirm('A new version of FitApp is available. Refresh now?');
-              if (shouldRefresh) {
-                // Ask the waiting worker to activate immediately; controllerchange will reload.
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              } else {
-                console.log('⏭️ User chose to stay on current version until next load.');
-              }
+              window.__FITAPP_SW_UPDATE__ = newWorker;
+              window.dispatchEvent(
+                new CustomEvent('fitapp:sw-update', { detail: { worker: newWorker } })
+              );
             }
           });
         };

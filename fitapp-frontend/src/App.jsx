@@ -23,6 +23,7 @@ import AuthRedirect from './components/AuthRedirect'
 import MainLayout from './layout/MainLayout'
 import AddToHomeScreen from './components/AddToHomeScreen'
 import NotificationPermissionDialog from './components/NotificationPermissionDialog'
+import UpdateAvailableDialog from './components/UpdateAvailableDialog'
 import ScrollToTop from './components/ScrollToTop'
 
 const App = () => {
@@ -54,6 +55,7 @@ const App = () => {
           >
           <ScrollToTop />
           <AddToHomeScreen />
+          <UpdateAvailableDialog />
           <NotificationPermissionDialog />
           <Routes>
             {/* Public Home page at root for Google verification */}

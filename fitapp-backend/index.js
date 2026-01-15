@@ -49,6 +49,9 @@ const jwt = require('jsonwebtoken');
 
 const authenticateJWT = require('./middleware/auth');
 
+const DEFAULT_STEP_GOAL = 10000;
+const RECALC_LOOKBACK_DAYS = 7;
+
 // Helper function for weight loss points rounding
 // .5 or higher rounds up, .4 or lower rounds down
 // Ensures points are never negative (minimum 0)
@@ -63,28 +66,119 @@ function roundWeightLossPoints(percentage) {
   }
 }
 
+const getStepGoal = (challenge) => {
+  const stepGoalValue = challenge?.stepGoal || DEFAULT_STEP_GOAL;
+  const stepGoalNum = typeof stepGoalValue === 'string' ? parseInt(stepGoalValue, 10) : Number(stepGoalValue);
+  return Number.isFinite(stepGoalNum) && stepGoalNum > 0 ? stepGoalNum : DEFAULT_STEP_GOAL;
+};
+
+const getDayKey = (date, timeZone = 'America/New_York') => {
+  const zoned = new Date(date.toLocaleString('en-US', { timeZone }));
+  zoned.setHours(0, 0, 0, 0);
+  return zoned.getTime();
+};
+
 // Helper function to check if a new calendar day has started since the last point was earned.
 // This allows earning one point per day based on calendar date, not a 24-hour window.
 function has24HoursPassed(timestamp) {
   if (!timestamp) return true; // No previous point, so eligible
-
-  // This logic is timezone-dependent. The backend seems to use a hardcoded offset for EDT (UTC-4).
-  // We will use that to determine day boundaries. A more robust solution would store user-specific timezones.
-  const timezoneOffset = -4 * 60 * 60 * 1000;
-
-  // Get the start of the current day in the user's assumed timezone
-  const now = new Date();
-  // Create a new Date object representing the time in the target timezone, but as a UTC date
-  const nowInTimezone = new Date(now.getTime() + timezoneOffset);
-  const startOfToday = new Date(Date.UTC(nowInTimezone.getUTCFullYear(), nowInTimezone.getUTCMonth(), nowInTimezone.getUTCDate()));
-
-  // Get the start of the day of the last point in the user's assumed timezone
-  const lastPointDate = new Date(timestamp);
-  const lastPointInTimezone = new Date(lastPointDate.getTime() + timezoneOffset);
-  const startOfLastPointDay = new Date(Date.UTC(lastPointInTimezone.getUTCFullYear(), lastPointInTimezone.getUTCMonth(), lastPointInTimezone.getUTCDate()));
-
-  return startOfToday.getTime() > startOfLastPointDay.getTime();
+  const todayKey = getDayKey(new Date());
+  const lastKey = getDayKey(new Date(timestamp));
+  return todayKey > lastKey;
 }
+
+const shouldRecalculateChallenge = (challenge, today) => {
+  if (!challenge?.startDate || !challenge?.endDate) return false;
+  const startDate = FitnessHistory.normalizeDate(new Date(challenge.startDate));
+  const endDate = FitnessHistory.normalizeDate(new Date(challenge.endDate));
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - RECALC_LOOKBACK_DAYS);
+  return today >= startDate && endDate >= cutoff;
+};
+
+const recalculateStepPoints = async () => {
+  try {
+    console.log('🔁 Starting step point recalculation job...');
+    const today = FitnessHistory.normalizeDate(new Date());
+    const challenges = await Challenge.find({});
+    let challengesProcessed = 0;
+    let participantsUpdated = 0;
+
+    for (const challenge of challenges) {
+      if (!shouldRecalculateChallenge(challenge, today)) {
+        continue;
+      }
+
+      const challengeId = challenge._id.toString();
+      const stepGoalValue = challenge.stepGoal || DEFAULT_STEP_GOAL;
+      const stepGoal = typeof stepGoalValue === 'string' ? parseInt(stepGoalValue, 10) : Number(stepGoalValue);
+      const normalizedGoal = Number.isFinite(stepGoal) && stepGoal > 0 ? stepGoal : DEFAULT_STEP_GOAL;
+      const startDate = FitnessHistory.normalizeDate(new Date(challenge.startDate));
+      const endDate = FitnessHistory.normalizeDate(new Date(challenge.endDate));
+
+      const participants = await ChallengeParticipant.find({ challengeId });
+      challengesProcessed++;
+      console.log(`🔍 Recalculating step points for challenge ${challenge.name} (${participants.length} participants)`);
+
+      for (const participant of participants) {
+        const history = await FitnessHistory.find({
+          userId: participant.userId,
+          date: { $gte: startDate, $lte: endDate }
+        }).sort({ date: 1 });
+
+        let daysAchieved = 0;
+        let latestAchievedDate = null;
+        const latestHistory = history.length > 0 ? history[history.length - 1] : null;
+
+        for (const entry of history) {
+          if ((entry.steps || 0) >= normalizedGoal) {
+            daysAchieved += 1;
+            latestAchievedDate = entry.date;
+          }
+        }
+
+        const updates = {};
+        if (participant.stepGoalPoints !== daysAchieved) {
+          updates.stepGoalPoints = daysAchieved;
+        }
+        if (participant.stepGoalDaysAchieved !== daysAchieved) {
+          updates.stepGoalDaysAchieved = daysAchieved;
+        }
+
+        const normalizedLatestAchieved = latestAchievedDate ? FitnessHistory.normalizeDate(new Date(latestAchievedDate)) : null;
+        const currentLastStepDate = participant.lastStepDate ? FitnessHistory.normalizeDate(new Date(participant.lastStepDate)) : null;
+        if (normalizedLatestAchieved && (!currentLastStepDate || normalizedLatestAchieved.getTime() !== currentLastStepDate.getTime())) {
+          updates.lastStepDate = normalizedLatestAchieved;
+          updates.lastStepPointTimestamp = normalizedLatestAchieved;
+        } else if (!normalizedLatestAchieved && currentLastStepDate) {
+          updates.lastStepDate = null;
+          updates.lastStepPointTimestamp = null;
+        }
+
+        if (latestHistory && participant.lastStepCount !== latestHistory.steps) {
+          updates.lastStepCount = latestHistory.steps;
+        }
+
+        const weightLossPoints = participant.weightLossPoints || 0;
+        const totalPoints = daysAchieved + weightLossPoints;
+        if (participant.points !== totalPoints) {
+          updates.points = totalPoints;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          participant.set(updates);
+          await participant.save();
+          participantsUpdated++;
+        }
+      }
+    }
+
+    console.log(`✅ Step point recalculation complete. Challenges processed: ${challengesProcessed}, participants updated: ${participantsUpdated}`);
+  } catch (error) {
+    console.error('❌ Error during step point recalculation:', error);
+  }
+};
 
 // Helper function to check if challenge has ended
 function isChallengeEnded(challenge) {
@@ -160,6 +254,15 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
+
+// Recalculate step points hourly to keep totals consistent with history
+cron.schedule('5 * * * *', async () => {
+  await recalculateStepPoints();
+}, {
+  timezone: "America/New_York"
+});
+
+console.log('⏰ Hourly step point recalculation scheduled (runs at :05)');
 
 // Increase JSON body size limit to 1MB to accommodate profile photos
 // Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)
@@ -1732,8 +1835,6 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
         });
         const isInParticipantsArray = decemberTesting.participants.includes(user.email);
         console.log(`🔍 December Testing: hasParticipantRecord=${!!hasParticipantRecord}, isInParticipantsArray=${isInParticipantsArray}, participants=${JSON.stringify(decemberTesting.participants)}`);
-      } else {
-        console.log(`⚠️ "December Testing" challenge not found`);
       }
     } else {
       console.log(`⚠️ User not found for googleId: ${googleId}`);
@@ -1921,7 +2022,7 @@ app.post('/api/update-participant/:challengeId/:googleId', async (req, res) => {
     // Recalculate step goal points if we have step data
     if (user.steps !== undefined && user.steps !== null) {
       const stepsNum = typeof user.steps === 'string' ? parseInt(user.steps, 10) : Number(user.steps);
-      const stepGoalNum = typeof challenge.stepGoal === 'string' ? parseInt(challenge.stepGoal, 10) : Number(challenge.stepGoal);
+      const stepGoalNum = getStepGoal(challenge);
       
       participant.lastStepCount = stepsNum;
       
@@ -2259,16 +2360,17 @@ app.post('/api/save-user', async (req, res) => {
           }
         }
         
-        // Step goal points (once per 24-hour period)
+        // Step goal points (once per calendar day)
         if (steps !== undefined) {
           const now = new Date();
           const lastStepPointTime = participant.lastStepPointTimestamp ? new Date(participant.lastStepPointTimestamp) : null;
           const canEarnPoint = has24HoursPassed(lastStepPointTime);
+          const stepGoalNum = getStepGoal(challenge);
           
           console.log(`🔍 Step goal check for ${email}:`, {
             steps,
-            stepGoal: challenge.stepGoal,
-            reachedGoal: steps >= challenge.stepGoal,
+            stepGoal: stepGoalNum,
+            reachedGoal: steps >= stepGoalNum,
             lastStepPointTime: lastStepPointTime?.toISOString(),
             canEarnPoint,
             hoursSinceLastPoint: lastStepPointTime ? ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60)).toFixed(2) : 'N/A',
@@ -2280,7 +2382,7 @@ app.post('/api/save-user', async (req, res) => {
           
           // Award point immediately when goal is reached (if 24 hours have passed)
           // IMPORTANT: Must meet or exceed the goal (steps >= challenge.stepGoal)
-          if (canEarnPoint && steps >= challenge.stepGoal) {
+          if (canEarnPoint && steps >= stepGoalNum) {
             // Initialize fields if needed
             if (!participant.stepGoalPoints) participant.stepGoalPoints = 0;
             if (!participant.stepGoalDaysAchieved) participant.stepGoalDaysAchieved = 0;
@@ -2297,19 +2399,18 @@ app.post('/api/save-user', async (req, res) => {
             participant.points = stepPoints + weightLossPoints;
             
             pointsEarned += 1;
-            console.log(`🏆 Step goal achieved! +1 point (${steps.toLocaleString()} steps >= ${challenge.stepGoal.toLocaleString()} goal)`);
+            console.log(`🏆 Step goal achieved! +1 point (${steps.toLocaleString()} steps >= ${stepGoalNum.toLocaleString()} goal)`);
             console.log(`📊 Updated: ${participant.stepGoalPoints} step points, ${participant.stepGoalDaysAchieved} days achieved`);
             console.log(`📊 Total points: ${participant.points} (${stepPoints} step + ${weightLossPoints} weight loss)`);
-          } else if (!canEarnPoint && steps >= challenge.stepGoal) {
-            const hoursRemaining = 24 - ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60));
-            console.log(`✅ Step goal met but point already awarded within 24 hours (${hoursRemaining.toFixed(1)} hours remaining until next point eligible)`);
+          } else if (!canEarnPoint && steps >= stepGoalNum) {
+            console.log('✅ Step goal met but point already awarded today');
             // Still update total points to ensure consistency
             const stepPoints = participant.stepGoalPoints || 0;
             const weightLossPoints = participant.weightLossPoints || 0;
             participant.points = stepPoints + weightLossPoints;
-          } else if (steps < challenge.stepGoal) {
-            const remaining = challenge.stepGoal - steps;
-            console.log(`📊 Step progress: ${steps.toLocaleString()}/${challenge.stepGoal.toLocaleString()} (${remaining.toLocaleString()} remaining) - Goal NOT met, no point awarded`);
+          } else if (steps < stepGoalNum) {
+            const remaining = stepGoalNum - steps;
+            console.log(`📊 Step progress: ${steps.toLocaleString()}/${stepGoalNum.toLocaleString()} (${remaining.toLocaleString()} remaining) - Goal NOT met, no point awarded`);
             // Ensure points are correct even when goal not met
             const stepPoints = participant.stepGoalPoints || 0;
             const weightLossPoints = participant.weightLossPoints || 0;
@@ -2757,7 +2858,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
             participation.stepGoalDaysAchieved = 0;
           }
           
-          // Check if 24 hours have passed since last step point
+          // Check if a new calendar day has started since last step point
           const now = new Date();
           const lastStepPointTime = participation.lastStepPointTimestamp ? new Date(participation.lastStepPointTimestamp) : null;
           const canEarnPoint = has24HoursPassed(lastStepPointTime);
@@ -2766,12 +2867,13 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
           const oldStepCount = participation.lastStepCount || 0;
           participation.lastStepCount = user.steps || 0;
           
-          const stepGoalMet = (user.steps || 0) >= challenge.stepGoal;
+          const stepGoalNum = getStepGoal(challenge);
+          const stepGoalMet = (user.steps || 0) >= stepGoalNum;
           
           let challengeResult = {
             challengeId: challenge._id.toString(),
             challengeName: challenge.name,
-            stepGoal: challenge.stepGoal,
+            stepGoal: stepGoalNum,
             currentSteps: user.steps || 0,
             stepGoalMet: stepGoalMet,
             alreadyGotPointWithin24Hours: !canEarnPoint,
@@ -2780,7 +2882,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
             newPoints: participation.points
           };
           
-          // Award step goal point if eligible (goal met AND 24 hours passed)
+          // Award step goal point if eligible (goal met AND new calendar day)
           if (canEarnPoint && stepGoalMet) {
             // Initialize fields if needed
             if (!participation.stepGoalPoints) participation.stepGoalPoints = 0;
@@ -2801,16 +2903,15 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
             challengeResult.newPoints = participation.points;
             userResult.pointsEarned += 1;
             
-            console.log(`🏆 ${user.email} earned step goal point in "${challenge.name}" (${user.steps} >= ${challenge.stepGoal})`);
+            console.log(`🏆 ${user.email} earned step goal point in "${challenge.name}" (${user.steps} >= ${stepGoalNum})`);
           } else if (!canEarnPoint && stepGoalMet) {
-            const hoursRemaining = 24 - ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60));
-            console.log(`✅ ${user.email} already got step point within 24 hours for "${challenge.name}" (${hoursRemaining.toFixed(1)} hours remaining)`);
+            console.log(`✅ ${user.email} already got step point today for "${challenge.name}"`);
             // Still update total points to ensure consistency
             const stepPoints = participation.stepGoalPoints || 0;
             const weightLossPoints = participation.weightLossPoints || 0;
             participation.points = stepPoints + weightLossPoints;
           } else {
-            console.log(`📊 ${user.email} hasn't reached step goal for "${challenge.name}" (${user.steps}/${challenge.stepGoal}) - Goal NOT met, no point awarded`);
+            console.log(`📊 ${user.email} hasn't reached step goal for "${challenge.name}" (${user.steps}/${stepGoalNum}) - Goal NOT met, no point awarded`);
           }
           
           // Ensure total points are correct even if no new point was earned

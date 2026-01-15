@@ -51,6 +51,20 @@ self.addEventListener('fetch', (event) => {
   // Handle API calls with cache-first strategy
   // This ensures chat messages, challenges, and other data load from cache
   if (url.pathname.startsWith('/api/')) {
+    const acceptHeader = request.headers.get('accept') || '';
+    const isEventStream = acceptHeader.includes('text/event-stream');
+    const isCrossOrigin = url.origin !== self.location.origin;
+    const isRealtime = url.pathname.startsWith('/api/realtime/events');
+    const isRefresh = url.pathname.startsWith('/api/auth/refresh-google-fit-token');
+    // Skip handling cross-origin API requests in the service worker
+    // iOS PWA can throw "FetchEvent.respondWith received an error" for cross-origin
+    if (isCrossOrigin) {
+      return;
+    }
+    // Bypass service worker caching for SSE/event-stream requests
+    if (isRealtime || isEventStream) {
+      return;
+    }
     event.respondWith(
       caches.open(API_CACHE_NAME).then((cache) => {
         return cache.match(request).then((cached) => {

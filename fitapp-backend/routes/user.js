@@ -147,22 +147,17 @@ router.post('/userdata', async (req, res) => {
         }
       };
       
-      const has24HoursPassed = (timestamp) => {
-        if (!timestamp) {
-          return true; // No previous point, so eligible
-        }
+      const getDayKey = (date, timeZone = 'America/New_York') => {
+        const zoned = new Date(date.toLocaleString('en-US', { timeZone }));
+        zoned.setHours(0, 0, 0, 0);
+        return zoned.getTime();
+      };
 
-        // Use calendar day boundaries instead of rolling 24-hour window
-        // This ensures users get one opportunity per calendar day (12 AM - 11:59 PM)
-        const now = new Date();
-        const todayStart = new Date(now);
-        todayStart.setHours(0, 0, 0, 0);
-        
-        const lastPointDate = new Date(timestamp);
-        const lastPointDayStart = new Date(lastPointDate);
-        lastPointDayStart.setHours(0, 0, 0, 0);
-        
-        return todayStart.getTime() > lastPointDayStart.getTime();
+      const isNewCalendarDay = (lastPointDate) => {
+        if (!lastPointDate) return true;
+        const todayKey = getDayKey(new Date());
+        const lastKey = getDayKey(new Date(lastPointDate));
+        return todayKey > lastKey;
       };
       
       // Weight loss points - calculate continuously throughout the challenge
@@ -220,32 +215,33 @@ router.post('/userdata', async (req, res) => {
         }
       }
       
-      // Step goal points (once per 24-hour period)
+      // Step goal points (once per calendar day)
       // IMPORTANT: Only calculate step points for today's data, not historical days
       // Historical days should only update FitnessHistory, not trigger point calculations
       if (steps !== undefined && isToday) {
         // Ensure steps is a number (handle string conversion)
         const stepsNum = typeof steps === 'string' ? parseInt(steps, 10) : Number(steps);
-        const stepGoalNum = typeof challenge.stepGoal === 'string' ? parseInt(challenge.stepGoal, 10) : Number(challenge.stepGoal);
+        const stepGoalValue = challenge.stepGoal || 10000;
+        const stepGoalNum = typeof stepGoalValue === 'string' ? parseInt(stepGoalValue, 10) : Number(stepGoalValue);
         
         const now = new Date();
-        const lastStepPointTime = participant.lastStepPointTimestamp ? new Date(participant.lastStepPointTimestamp) : null;
-        const canEarnPoint = has24HoursPassed(lastStepPointTime);
+        const lastStepPointDate = participant.lastStepDate ? new Date(participant.lastStepDate) : null;
+        const canEarnPoint = isNewCalendarDay(lastStepPointDate);
         
         console.log(`🔍 Step goal check for ${email}:`, {
           steps: stepsNum,
           stepGoal: stepGoalNum,
           reachedGoal: stepsNum >= stepGoalNum,
-          lastStepPointTime: lastStepPointTime?.toISOString(),
+          lastStepPointTime: lastStepPointDate?.toISOString(),
           canEarnPoint,
-          hoursSinceLastPoint: lastStepPointTime ? ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60)).toFixed(2) : 'N/A',
+          hoursSinceLastPoint: lastStepPointDate ? ((now.getTime() - lastStepPointDate.getTime()) / (1000 * 60 * 60)).toFixed(2) : 'N/A',
           currentStepPoints: participant.stepGoalPoints || 0
         });
         
         // Update step count regardless of goal achievement
         participant.lastStepCount = stepsNum;
         
-        // Award point immediately when goal is reached (if 24 hours have passed)
+        // Award point immediately when goal is reached (if a new calendar day)
         // IMPORTANT: Must meet or exceed the goal (steps >= challenge.stepGoal)
         if (canEarnPoint && stepsNum >= stepGoalNum) {
           // Initialize fields if needed
@@ -268,8 +264,7 @@ router.post('/userdata', async (req, res) => {
           console.log(`📊 Updated: ${participant.stepGoalPoints} step points, ${participant.stepGoalDaysAchieved} days achieved`);
           console.log(`📊 Total points: ${participant.points} (${stepPoints} step + ${weightLossPoints} weight loss)`);
         } else if (!canEarnPoint && stepsNum >= stepGoalNum) {
-          const hoursRemaining = 24 - ((now.getTime() - lastStepPointTime.getTime()) / (1000 * 60 * 60));
-          console.log(`✅ Step goal met but point already awarded within 24 hours (${hoursRemaining.toFixed(1)} hours remaining until next point eligible)`);
+          console.log(`✅ Step goal met but point already awarded today`);
           // Still update total points to ensure consistency
           const stepPoints = participant.stepGoalPoints || 0;
           const weightLossPoints = participant.weightLossPoints || 0;
