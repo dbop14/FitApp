@@ -302,7 +302,8 @@ const StepsHistory = () => {
         setTotalStepPoints(null)
         return
       }
-      
+
+
       try {
         const apiUrl = getApiUrl()
         const response = await fetchWithAuth(

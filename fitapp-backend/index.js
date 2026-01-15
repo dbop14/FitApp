@@ -2019,28 +2019,46 @@ app.post('/api/update-participant/:challengeId/:googleId', async (req, res) => {
       }
     }
 
-    // Recalculate step goal points if we have step data
-    if (user.steps !== undefined && user.steps !== null) {
-      const stepsNum = typeof user.steps === 'string' ? parseInt(user.steps, 10) : Number(user.steps);
+    // Recalculate step goal points from FitnessHistory within challenge window
+    if (challenge.startDate) {
       const stepGoalNum = getStepGoal(challenge);
-      
-      participant.lastStepCount = stepsNum;
-      
-      const now = new Date();
-      const lastStepPointTime = participant.lastStepPointTimestamp ? new Date(participant.lastStepPointTimestamp) : null;
-      const canEarnPoint = has24HoursPassed(lastStepPointTime);
-      
-      if (canEarnPoint && stepsNum >= stepGoalNum) {
-        // Initialize fields if needed
-        if (!participant.stepGoalPoints) participant.stepGoalPoints = 0;
-        if (!participant.stepGoalDaysAchieved) participant.stepGoalDaysAchieved = 0;
-        
-        // Award the point
-        participant.stepGoalPoints += 1;
-        participant.stepGoalDaysAchieved += 1;
-        participant.lastStepPointTimestamp = now;
-        participant.lastStepDate = new Date(now);
+      const startDate = FitnessHistory.normalizeDate(new Date(challenge.startDate));
+      const today = FitnessHistory.normalizeDate(new Date());
+      const endDateCandidate = challenge.endDate ? FitnessHistory.normalizeDate(new Date(challenge.endDate)) : today;
+      const endDate = endDateCandidate < today ? endDateCandidate : today;
+
+      const history = await FitnessHistory.find({
+        userId: googleId,
+        date: { $gte: startDate, $lte: endDate }
+      }).sort({ date: 1 });
+
+      let daysAchieved = 0;
+      let latestAchievedDate = null;
+
+      for (const entry of history) {
+        if ((entry.steps || 0) >= stepGoalNum) {
+          daysAchieved += 1;
+          latestAchievedDate = entry.date;
+        }
       }
+
+      participant.stepGoalPoints = daysAchieved;
+      participant.stepGoalDaysAchieved = daysAchieved;
+
+      if (latestAchievedDate) {
+        const normalizedLatest = FitnessHistory.normalizeDate(new Date(latestAchievedDate));
+        participant.lastStepDate = normalizedLatest;
+        participant.lastStepPointTimestamp = normalizedLatest;
+      } else {
+        participant.lastStepDate = participant.lastStepDate || null;
+        participant.lastStepPointTimestamp = participant.lastStepPointTimestamp || null;
+      }
+
+      const latestHistory = history.length > 0 ? history[history.length - 1] : null;
+      if (latestHistory && latestHistory.steps !== undefined && latestHistory.steps !== null) {
+        participant.lastStepCount = latestHistory.steps;
+      }
+
     }
 
     // Recalculate total points: step points + weight loss points

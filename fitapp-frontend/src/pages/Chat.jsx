@@ -661,7 +661,10 @@ const Chat = () => {
     return (
       <div className="fixed inset-0 flex flex-col bg-gray-50 overflow-hidden">
         {/* Fixed Header - Always at top, edge-to-edge */}
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header">
+        <div
+          className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header"
+          style={{ paddingTop: '5px', paddingBottom: '5px' }}
+        >
           <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-4">
             {/* Back Arrow Button - Top Left */}
             <button
@@ -1307,7 +1310,7 @@ const Chat = () => {
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Fixed Header - Always at top, edge-to-edge */}
       <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header">
-        <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-10">
+        <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-4">
 
           
           {/* Centered Header Content - Absolutely positioned for true centering */}
