@@ -30,6 +30,40 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
+const BOT_TIMEZONE = 'America/New_York';
+const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
+const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
+
+const getZonedDate = (date, timeZone = BOT_TIMEZONE) => new Date(date.toLocaleString('en-US', { timeZone }));
+
+const getDateStringInTimeZone = (date, timeZone = BOT_TIMEZONE) => {
+  const zoned = getZonedDate(date, timeZone);
+  const year = zoned.getFullYear();
+  const month = String(zoned.getMonth() + 1).padStart(2, '0');
+  const day = String(zoned.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDayBoundsInTimeZone = (date, timeZone = BOT_TIMEZONE) => {
+  const zoned = getZonedDate(date, timeZone);
+  const start = new Date(zoned.getFullYear(), zoned.getMonth(), zoned.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+const runWithConcurrency = async (items, limit, handler) => {
+  const safeLimit = Math.max(1, Number.isFinite(limit) ? limit : 1);
+  let index = 0;
+  const workers = Array.from({ length: Math.min(safeLimit, items.length) }, async () => {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      await handler(items[currentIndex], currentIndex);
+    }
+  });
+  await Promise.all(workers);
+};
 
 const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
   try {
@@ -178,9 +212,7 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
 
   try {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
+    const { start: todayStart, end: todayEnd } = getDayBoundsInTimeZone(now);
 
     // Build query to find duplicate messages
     const query = {
@@ -389,6 +421,62 @@ const welcomedParticipants = new Set(); // challengeId-userId
 // Track announced winners
 const announcedWinners = new Set(); // challengeId
 
+let stepPointInterval = null;
+let stepPointChangeStream = null;
+
+const handleStepPointIncrease = async (participant, previousPoints, currentPoints) => {
+  console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
+  previousStepPoints.set(`${participant.challengeId}-${participant.userId}`, currentPoints);
+
+  // Get challenge and user info
+  const challenge = await Challenge.findById(participant.challengeId);
+  const user = await User.findOne({ googleId: participant.userId });
+
+  console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
+  if (challenge && challenge.matrixRoomId && user) {
+    // Only send if challenge is active
+    const now = new Date();
+    const startDate = new Date(challenge.startDate);
+    const endDate = new Date(challenge.endDate);
+
+    if (now >= startDate && now <= endDate) {
+      // Skip if winner already announced
+      const challengeKey = challenge._id.toString();
+      if (announcedWinners.has(challengeKey)) {
+        console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
+        return;
+      }
+      console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
+
+      const userName = user.name || user.email || 'Someone';
+      const firstName = userName.split(' ')[0];
+      const currentSteps = user.steps || participant.lastStepCount || challenge.stepGoal || 10000;
+      const stepGoalFormatted = (challenge.stepGoal || 10000).toLocaleString();
+      const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${stepGoalFormatted} steps. Keep up the momentum!`;
+      const botName = challenge.botName || 'Fitness Motivator';
+
+      console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
+      await sendCardMessage(
+        challenge.matrixRoomId,
+        fullMessage,
+        challenge._id,
+        botName,
+        'stepGoalCard',
+        {
+          userName: firstName,
+          stepCount: currentSteps,
+          stepGoal: challenge.stepGoal || 10000,
+          achievement: 'Step Goal Achieved!'
+        },
+        user.picture,
+        participant.userId
+      );
+    }
+  } else {
+    console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
+  }
+};
+
 // Monitor step point changes
 const checkStepPointChanges = async () => {
   console.log('[DEBUG] checkStepPointChanges:entry - mongoConnected:', mongoConnected);
@@ -398,7 +486,15 @@ const checkStepPointChanges = async () => {
   }
 
   try {
-    const participants = await ChallengeParticipant.find({});
+    const today = getDateStringInTimeZone(new Date());
+    const activeChallenges = await Challenge.find({
+      startDate: { $lte: today },
+      endDate: { $gte: today }
+    });
+    const activeChallengeIds = activeChallenges.map((challenge) => challenge._id.toString());
+    const participants = activeChallengeIds.length > 0
+      ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
+      : [];
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
@@ -414,56 +510,7 @@ const checkStepPointChanges = async () => {
       // If points increased, someone earned a step point
       if (currentPoints > previousPoints) {
         increasesFound++;
-        console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
-        previousStepPoints.set(key, currentPoints);
-        
-        // Get challenge and user info
-        const challenge = await Challenge.findById(participant.challengeId);
-        const user = await User.findOne({ googleId: participant.userId });
-        
-        console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
-        if (challenge && challenge.matrixRoomId && user) {
-          // Only send if challenge is active
-          const now = new Date();
-          const startDate = new Date(challenge.startDate);
-          const endDate = new Date(challenge.endDate);
-          
-          if (now >= startDate && now <= endDate) {
-            // Skip if winner already announced
-            const challengeKey = challenge._id.toString();
-            if (announcedWinners.has(challengeKey)) {
-              console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
-              continue;
-            }
-            console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
-
-            const userName = user.name || user.email || 'Someone';
-            const firstName = userName.split(' ')[0];
-            const currentSteps = user.steps || participant.lastStepCount || challenge.stepGoal || 10000;
-            const stepGoalFormatted = (challenge.stepGoal || 10000).toLocaleString();
-            const fullMessage = `${firstName} just earned a step point! Great job reaching your daily step goal of ${stepGoalFormatted} steps. Keep up the momentum!`;
-            const botName = challenge.botName || 'Fitness Motivator';
-            
-            console.log(`   📤 Calling sendCardMessage for ${firstName}...`);
-            await sendCardMessage(
-              challenge.matrixRoomId,
-              fullMessage,
-              challenge._id,
-              botName,
-              'stepGoalCard',
-              {
-                userName: firstName,
-                stepCount: currentSteps,
-                stepGoal: challenge.stepGoal || 10000,
-                achievement: 'Step Goal Achieved!'
-              },
-              user.picture,
-              participant.userId
-            );
-          }
-        } else {
-          console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
-        }
+        await handleStepPointIncrease(participant, previousPoints, currentPoints);
       } else if (currentPoints !== previousPoints) {
         // Update tracking even if points didn't increase (in case of reset)
         console.log(`   📊 Points changed (not increase): ${participant.userId} - ${previousPoints} -> ${currentPoints}, updating tracking`);
@@ -477,10 +524,71 @@ const checkStepPointChanges = async () => {
   }
 };
 
+const startStepPointPolling = () => {
+  console.log(`⏰ Setting up fallback interval for checkStepPointChanges (every ${STEP_POINT_POLL_INTERVAL_MS / 60000} minutes)`);
+  if (stepPointInterval) {
+    clearInterval(stepPointInterval);
+  }
+  stepPointInterval = setInterval(() => {
+    console.log(`🔄 [${new Date().toISOString()}] Interval: Checking step point changes...`);
+    checkStepPointChanges();
+  }, STEP_POINT_POLL_INTERVAL_MS);
+};
+
+const startStepPointChangeStream = async () => {
+  try {
+    stepPointChangeStream = ChallengeParticipant.watch([], { fullDocument: 'updateLookup' });
+    console.log('✅ Step point change stream started');
+
+    stepPointChangeStream.on('change', async (change) => {
+      if (!change?.fullDocument) {
+        return;
+      }
+
+      if (change.operationType !== 'update' && change.operationType !== 'replace' && change.operationType !== 'insert') {
+        return;
+      }
+
+      const participant = change.fullDocument;
+      const key = `${participant.challengeId}-${participant.userId}`;
+      const previousPoints = previousStepPoints.get(key) || 0;
+      const currentPoints = participant.stepGoalPoints || 0;
+
+      if (currentPoints > previousPoints) {
+        await handleStepPointIncrease(participant, previousPoints, currentPoints);
+      } else if (currentPoints !== previousPoints) {
+        console.log(`   📊 Points changed (not increase): ${participant.userId} - ${previousPoints} -> ${currentPoints}, updating tracking`);
+        previousStepPoints.set(key, currentPoints);
+      }
+    });
+
+    stepPointChangeStream.on('error', (err) => {
+      console.error('❌ Step point change stream error:', err.message);
+      if (!stepPointInterval) {
+        startStepPointPolling();
+      }
+    });
+
+    return true;
+  } catch (err) {
+    console.error('⚠️ Step point change stream unavailable, falling back to polling:', err.message);
+    return false;
+  }
+};
+
+const startStepPointMonitoring = async () => {
+  const started = await startStepPointChangeStream();
+  if (!started) {
+    startStepPointPolling();
+  }
+};
+
 // Get day name from date
 const getDayName = (date) => {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  return days[date.getDay()];
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: BOT_TIMEZONE,
+    weekday: 'long'
+  }).format(date).toLowerCase();
 };
 
 // Check if today is weigh-in day
@@ -500,9 +608,10 @@ const sendDailyStepUpdate = async () => {
 
   try {
     const now = new Date();
+    const today = getDateStringInTimeZone(now);
     const challenges = await Challenge.find({
-      startDate: { $lte: now.toISOString().split('T')[0] },
-      endDate: { $gte: now.toISOString().split('T')[0] }
+      startDate: { $lte: today },
+      endDate: { $gte: today }
     });
     console.log('[DEBUG] sendDailyStepUpdate:challengesFound - count:', challenges.length, 'now:', now.toISOString());
 
@@ -524,13 +633,10 @@ const sendDailyStepUpdate = async () => {
       const participants = await ChallengeParticipant.find({ challengeId: challenge._id.toString() });
       console.log(`   Found ${participants.length} participants`);
       const userMap = new Map();
-      
-      // Get all user info
-      for (const participant of participants) {
-        const user = await User.findOne({ googleId: participant.userId });
-        if (user) {
-          userMap.set(participant.userId, user);
-        }
+      const userIds = participants.map((participant) => participant.userId);
+      const users = userIds.length > 0 ? await User.find({ googleId: { $in: userIds } }) : [];
+      for (const user of users) {
+        userMap.set(user.googleId, user);
       }
 
       if (participants.length === 0) continue;
@@ -589,14 +695,14 @@ const sendWeighInReminder = async () => {
 
   try {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const today = getDateStringInTimeZone(now);
     const todayDayName = getDayName(now);
     console.log(`⚖️ Checking weigh-in reminders for ${todayDayName} (${today})`);
     
     // Find challenges that are active (started and not ended)
     const challenges = await Challenge.find({
-      startDate: { $lte: now.toISOString().split('T')[0] },
-      endDate: { $gte: now.toISOString().split('T')[0] }
+      startDate: { $lte: today },
+      endDate: { $gte: today }
     });
     console.log(`⚖️ Found ${challenges.length} active challenges`);
 
@@ -613,12 +719,7 @@ const sendWeighInReminder = async () => {
       if (announcedWinners.has(challengeKey)) continue;
 
       // Check if today is the first day of the challenge
-      const startDate = challenge.startDate ? new Date(challenge.startDate) : null;
-      let isFirstDay = false;
-      if (startDate) {
-        const startDateStr = startDate.toISOString().split('T')[0];
-        isFirstDay = startDateStr === today;
-      }
+      const isFirstDay = challenge.startDate === today;
 
       // For first weigh-in day, mention that this will be their starting weight
       let message;
@@ -673,16 +774,17 @@ const checkWeightLossCelebrations = async () => {
 
   try {
     const now = new Date();
-    const yesterday = new Date(now);
+    const zonedNow = getZonedDate(now);
+    const yesterday = new Date(zonedNow);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDay = getDayName(yesterday);
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getDateStringInTimeZone(now);
     console.log(`🎉 Checking weight loss celebrations - yesterday was ${yesterdayDay}, today is ${todayStr}`);
 
     // Check challenges that had weigh-in day yesterday
     const challenges = await Challenge.find({
-      startDate: { $lte: now.toISOString().split('T')[0] },
-      endDate: { $gte: now.toISOString().split('T')[0] }
+      startDate: { $lte: todayStr },
+      endDate: { $gte: todayStr }
     });
     console.log(`🎉 Found ${challenges.length} active challenges`);
 
@@ -776,7 +878,7 @@ const announceChallengeWinner = async () => {
 
   try {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const today = getDateStringInTimeZone(now);
     console.log(`🏆 Checking for challenge winners - today is ${today}`);
 
     // Find challenges that ended today or yesterday (in case we missed it)
@@ -1068,10 +1170,11 @@ const sendChallengeStartReminders = async () => {
 
   try {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const tomorrow = new Date(now);
+    const today = getDateStringInTimeZone(now);
+    const zonedNow = getZonedDate(now);
+    const tomorrow = new Date(zonedNow);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const tomorrowStr = getDateStringInTimeZone(tomorrow);
     console.log(`📅 Checking challenge start reminders - today is ${today}, looking for challenges starting ${tomorrowStr}`);
 
     // Find challenges starting tomorrow
@@ -1096,6 +1199,7 @@ const sendChallengeStartReminders = async () => {
 
       const startDate = new Date(challenge.startDate);
       const formattedDate = startDate.toLocaleDateString('en-US', { 
+        timeZone: BOT_TIMEZONE,
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
@@ -1138,7 +1242,7 @@ const syncAllUsersData = async () => {
     const users = await User.find({});
     console.log(`🔍 Found ${users.length} users to sync.`);
 
-    for (const user of users) {
+    await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
       if (user.googleId) {
         try {
           const response = await fetch(`http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`);
@@ -1151,7 +1255,7 @@ const syncAllUsersData = async () => {
           console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
         }
       }
-    }
+    });
     console.log('✅ Finished daily sync of all users data.');
   } catch (err) {
     console.error('❌ Error fetching users for sync:', err.message);
@@ -1230,12 +1334,8 @@ const setupCronJobs = () => {
     checkNewParticipants();
   }, 2 * 60 * 1000);
 
-  // Check for step point changes every 30 seconds
-  console.log('⏰ Setting up interval for checkStepPointChanges (every 30 seconds)');
-  const stepPointInterval = setInterval(() => {
-    console.log(`🔄 [${new Date().toISOString()}] Interval: Checking step point changes...`);
-    checkStepPointChanges();
-  }, 30 * 1000);
+  // Monitor step point changes (change stream with low-frequency polling fallback)
+  startStepPointMonitoring();
 
   console.log('✅ Cron jobs and monitoring intervals set up');
   console.log('📋 Scheduled cron jobs:');
@@ -1262,6 +1362,18 @@ const setupCronJobs = () => {
 const shutdown = async (signal) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   
+  if (stepPointInterval) {
+    clearInterval(stepPointInterval);
+  }
+
+  if (stepPointChangeStream) {
+    try {
+      await stepPointChangeStream.close();
+    } catch (err) {
+      console.error('Error closing step point change stream:', err.message);
+    }
+  }
+
   if (matrixClient) {
     try {
       await matrixClient.stopClient();

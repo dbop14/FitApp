@@ -640,7 +640,7 @@ const Challenge = () => {
   if (loading) {
     return (
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className="p-6 pb-24 pt-20">
+        <main className="p-6 pb-24 safe-area-content">
           <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
@@ -652,14 +652,14 @@ const Challenge = () => {
   return (
     <>
       {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50">
+      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
         <h1 className="text-2xl font-bold text-center text-white">
           FitApp
         </h1>
       </header>
 
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className="p-6 pb-24 pt-20">
+        <main className="p-6 pb-24 safe-area-content">
           {/* Page header */}
           <header className="mb-8">
             <h1 className="text-4xl font-bold text-blue-600 mb-2 leading-tight">

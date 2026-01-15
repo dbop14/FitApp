@@ -29,6 +29,44 @@ body {
   /* background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%); */
 }
 
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-header {
+  padding-top: 0;
+}
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-header {
+    padding-top: calc(var(--safe-area-top) + 0.1rem);
+    padding-bottom: 0.1rem;
+  }
+}
+
+.platform-android .safe-area-header {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.platform-desktop .safe-area-header {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.safe-area-content {
+  padding-top: calc(3rem + var(--safe-area-top));
+}
+
+.safe-area-content-small {
+  padding-top: calc(1.5rem + var(--safe-area-top));
+}
+
+.safe-area-chat-content {
+  padding-top: calc(4rem + var(--safe-area-top));
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.25;

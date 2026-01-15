@@ -372,7 +372,7 @@ const Leaderboard = () => {
   return (
     <>
       {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50">
+      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
         <div className="flex items-center justify-between">
           <button
             onClick={handleBackToChallenges}
@@ -445,7 +445,7 @@ const Leaderboard = () => {
 
       {/* Desktop header with challenge name - Desktop only */}
       {activeChallenge && (
-        <div className="hidden md:block max-w-md mx-auto bg-gray-50 pt-20">
+        <div className="hidden md:block max-w-md mx-auto bg-gray-50 safe-area-content">
           <div className="p-6 pb-0">
             <h1 className="text-4xl font-bold text-blue-600 leading-tight mb-6">
               {activeChallenge.name} Leaderboard
@@ -455,7 +455,7 @@ const Leaderboard = () => {
       )}
 
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 pt-6' : 'pt-20'}`}>
+        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content-small' : 'safe-area-content'}`}>
 
       {!activeChallenge && !showForm && (
         <div className="bg-white rounded-2xl p-8 space-y-6 text-center shadow-lg">

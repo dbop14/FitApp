@@ -48,6 +48,7 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedMessages, setHasLoadedMessages] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [fetchingChallenges, setFetchingChallenges] = useState(() => {
@@ -83,6 +84,7 @@ const Chat = () => {
         setMessages(cachedMessages);
         setIsConnected(true);
         setLoading(false);
+        setHasLoadedMessages(true);
         // Update last seen message count
         lastSeenMessageCountRef.current = cachedMessages.length;
       } else {
@@ -248,6 +250,7 @@ const Chat = () => {
   useEffect(() => {
     if (activeChallenge?._id) {
       isInitialLoadRef.current = true;
+      setHasLoadedMessages(false);
     }
   }, [activeChallenge?._id]);
 
@@ -423,6 +426,7 @@ const Chat = () => {
       const existingMessages = await chatService.fetchMessages(activeChallenge._id, false);
       
       setMessages(existingMessages || []);
+      setHasLoadedMessages(true);
       
       // Update last seen message count when loading messages
       if (existingMessages && existingMessages.length > 0) {
@@ -441,6 +445,7 @@ const Chat = () => {
       setError('Failed to load chat messages');
       // If error, still mark as initialized to prevent retry loops
       initializedChallengesRef.current.add(activeChallenge._id);
+      setHasLoadedMessages(true);
     } finally {
       setLoading(false);
     }
@@ -656,7 +661,7 @@ const Chat = () => {
     return (
       <div className="fixed inset-0 flex flex-col bg-gray-50 overflow-hidden">
         {/* Fixed Header - Always at top, edge-to-edge */}
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm">
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header">
           <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-4">
             {/* Back Arrow Button - Top Left */}
             <button
@@ -707,7 +712,7 @@ const Chat = () => {
         {/* Messages Container - Scrollable area with padding for fixed header and input */}
         <div 
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto pt-16"
+          className="flex-1 overflow-y-auto safe-area-chat-content"
           style={{ 
             WebkitOverflowScrolling: 'touch',
             touchAction: 'pan-y',
@@ -734,7 +739,7 @@ const Chat = () => {
             
             <div className="space-y-4">
               {/* No messages state */}
-              {messages.length === 0 && !loading && (
+              {messages.length === 0 && !loading && hasLoadedMessages && (
                 <div key="no-messages" className="text-center py-8 text-gray-500">
                   <svg width="48" height="48" fill="currentColor" viewBox="0 0 20 20" className="mx-auto mb-3 opacity-50">
                     <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
@@ -1301,7 +1306,7 @@ const Chat = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Fixed Header - Always at top, edge-to-edge */}
-      <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm">
+      <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header">
         <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-10">
 
           
@@ -1317,7 +1322,7 @@ const Chat = () => {
 
       {/* Navigation Bar */}
       <MainLayout>
-        <div className="min-h-screen pt-20">
+        <div className="min-h-screen safe-area-content">
           {/* Challenge List - Takes remaining space */}
           <div className="flex-1 overflow-y-auto px-1 sm:px-6 py-4">
             {/* Active Challenges Section */}
