@@ -455,7 +455,7 @@ const Leaderboard = () => {
       )}
 
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content-small' : 'safe-area-content'}`}>
+        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content' : 'safe-area-content'}`}>
 
       {!activeChallenge && !showForm && (
         <div className="bg-white rounded-2xl p-8 space-y-6 text-center shadow-lg">

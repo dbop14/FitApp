@@ -168,6 +168,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.match(request).then((cached) => {
+        if (url.origin !== self.location.origin) {
+          return fetch(request).catch(() => cached || new Response('', { status: 204 }));
+        }
         // Cache-first: return cached response immediately if available
         if (cached) {
           console.log('📦 [CACHE] Serving asset from cache:', url.pathname);

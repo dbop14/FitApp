@@ -56,7 +56,7 @@ body {
 }
 
 .safe-area-content {
-  padding-top: calc(3rem + var(--safe-area-top));
+  padding-top: calc(4rem + var(--safe-area-top));
 }
 
 .safe-area-content-small {
