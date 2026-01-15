@@ -40,8 +40,8 @@ body {
 
 @supports (padding-top: env(safe-area-inset-top)) {
   .safe-area-header {
-    padding-top: calc(var(--safe-area-top) + 0.1rem);
-    padding-bottom: 0.1rem;
+    padding-top: calc(var(--safe-area-top) + 1rem);
+    padding-bottom: 1rem;
   }
 }
 
