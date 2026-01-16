@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     environment:
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
-      - MATRIX_HOMESERVER_URL=http://synapse:8008
+      - MATRIX_HOMESERVER_URL=http://host.docker.internal:8008
       - MATRIX_SERVER_NAME=fitapp.local
       - BOT_USERNAME=fitness_motivator
       - BOT_PASSWORD=${BOT_PASSWORD}
@@ -46,6 +46,8 @@ services:
       - mongoosedb
       - synapse
       - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - fitapp_prod
 
