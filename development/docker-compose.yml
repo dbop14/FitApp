@@ -45,6 +45,7 @@ services:
       - BOT_USERNAME=fitness_motivator
       - BOT_PASSWORD=${BOT_PASSWORD}
       - BACKEND_API_URL=http://backend:3000
+      - DEBUG_LOG_ENDPOINT=http://host.docker.internal:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb
     volumes:
       - ../fitapp-bot:/app
       - node_modules_bot:/app/node_modules
