@@ -36,6 +36,7 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
+const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
@@ -77,6 +78,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     const botPassword = process.env.BOT_PASSWORD;
     const matrixServerName = process.env.MATRIX_SERVER_NAME || 'fitapp.local';
     const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
+    
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:38',message:'connectMatrix:start',data:{retryCount,rateLimitCount,botUsername,hasPassword:!!botPassword,matrixUrl,matrixServerName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
 
     if (!botPassword) {
       console.error('❌ BOT_PASSWORD environment variable is not set!');
@@ -103,6 +108,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     client.setAccessToken(response.access_token);
     matrixClient = client;
     matrixConnected = true;
+    
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:71',message:'connectMatrix:success',data:{matrixUrl,botUsername},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion agent log
 
     console.log('✅ Connected to Matrix');
     
@@ -122,6 +131,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     // Handle rate limiting (429) - wait but give up after too many
     if (statusCode === 429) {
       const newRateLimitCount = rateLimitCount + 1;
+      
+      // #region agent log
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:88',message:'connectMatrix:rateLimited',data:{retryCount,newRateLimitCount,statusCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion agent log
 
       // Give up if we've hit rate limits too many times
       if (newRateLimitCount > MAX_RATE_LIMIT_RETRIES) {
@@ -171,6 +184,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     if (statusCode === 403) {
       const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
       const hasPassword = !!process.env.BOT_PASSWORD;
+      
+      // #region agent log
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:133',message:'connectMatrix:authFailed',data:{retryCount,statusCode,botUsername,hasPassword},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion agent log
 
       console.error(`❌ Matrix authentication failed (attempt ${retryCount + 1}/${MAX_RETRIES}): Invalid username or password`);
       console.error('');
@@ -316,6 +333,9 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
+  // #region agent log
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:314',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -443,6 +463,9 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
 
   if (!lastStepDateStr || lastStepDateStr !== todayStr) {
     console.log(`   ⏭️ Skipping step point message - lastStepDate=${lastStepDateStr || 'none'} (today=${todayStr})`);
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:450',message:'stepPointIncrease:skipped',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion agent log
     return;
   }
 
@@ -451,6 +474,9 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
+  // #region agent log
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:462',message:'stepPointIncrease:context',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+  // #endregion agent log
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
     const now = new Date();
@@ -513,6 +539,9 @@ const checkStepPointChanges = async () => {
     const participants = activeChallengeIds.length > 0
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
       : [];
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:509',message:'checkStepPointChanges:scope',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion agent log
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
@@ -596,6 +625,9 @@ const startStepPointChangeStream = async () => {
 
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
+  // #region agent log
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:599',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion agent log
   if (!started) {
     startStepPointPolling();
   }
