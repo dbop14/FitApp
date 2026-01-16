@@ -1,7 +1,15 @@
 const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
-const fetch = require('node-fetch');
+let fetch;
+let fetchSource = 'unknown';
+try {
+  fetch = global.fetch ? global.fetch.bind(global) : require('node-fetch');
+  fetchSource = global.fetch ? 'global' : 'node-fetch';
+} catch (err) {
+  console.error('❌ Failed to initialize fetch:', err.message);
+  throw err;
+}
 require('dotenv').config();
 
 // Import models
@@ -36,6 +44,10 @@ const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
 
 const getZonedDate = (date, timeZone = BOT_TIMEZONE) => new Date(date.toLocaleString('en-US', { timeZone }));
+
+// #region agent log
+fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:39',message:'fetch:init',data:{fetchSource},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+// #endregion agent log
 
 const getDateStringInTimeZone = (date, timeZone = BOT_TIMEZONE) => {
   const zoned = getZonedDate(date, timeZone);
