@@ -309,6 +309,9 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:311',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -430,11 +433,27 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
   previousStepPoints.set(`${participant.challengeId}-${participant.userId}`, currentPoints);
 
+  const lastStepDate = participant.lastStepDate ? new Date(participant.lastStepDate) : null;
+  const todayStr = getDateStringInTimeZone(new Date());
+  const lastStepDateStr = lastStepDate ? getDateStringInTimeZone(lastStepDate) : null;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:437',message:'stepPointIncrease:dateCheck',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr,willSend:lastStepDateStr===todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion agent log
+
+  if (!lastStepDateStr || lastStepDateStr !== todayStr) {
+    console.log(`   ⏭️ Skipping step point message - lastStepDate=${lastStepDateStr || 'none'} (today=${todayStr})`);
+    return;
+  }
+
   // Get challenge and user info
   const challenge = await Challenge.findById(participant.challengeId);
   const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:446',message:'stepPointIncrease:challengeCheck',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion agent log
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
     const now = new Date();
@@ -448,6 +467,9 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
         console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
         return;
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:454',message:'stepPointIncrease:challengeActive',data:{challengeId:participant.challengeId,startDate:challenge.startDate,endDate:challenge.endDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion agent log
       console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
 
       const userName = user.name || user.email || 'Someone';
@@ -497,6 +519,9 @@ const checkStepPointChanges = async () => {
     const participants = activeChallengeIds.length > 0
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
       : [];
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:499',message:'checkStepPointChanges:scoped',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion agent log
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
@@ -543,6 +568,9 @@ const startStepPointChangeStream = async () => {
     console.log('✅ Step point change stream started');
 
     stepPointChangeStream.on('change', async (change) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:546',message:'stepPointChangeStream:event',data:{operationType:change?.operationType || null,hasFullDocument:!!change?.fullDocument,challengeId:change?.fullDocument?.challengeId || null,stepGoalPoints:change?.fullDocument?.stepGoalPoints ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion agent log
       if (!change?.fullDocument) {
         return;
       }
@@ -580,6 +608,9 @@ const startStepPointChangeStream = async () => {
 
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:592',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+  // #endregion agent log
   if (!started) {
     startStepPointPolling();
   }
