@@ -2,10 +2,8 @@ const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 let fetch;
-let fetchSource = 'unknown';
 try {
   fetch = global.fetch ? global.fetch.bind(global) : require('node-fetch');
-  fetchSource = global.fetch ? 'global' : 'node-fetch';
 } catch (err) {
   console.error('❌ Failed to initialize fetch:', err.message);
   throw err;
@@ -38,16 +36,11 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
-const DEBUG_LOG_ENDPOINT = process.env.DEBUG_LOG_ENDPOINT || 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
 
 const getZonedDate = (date, timeZone = BOT_TIMEZONE) => new Date(date.toLocaleString('en-US', { timeZone }));
-
-// #region agent log
-fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:39',message:'fetch:init',data:{fetchSource},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-// #endregion agent log
 
 const getDateStringInTimeZone = (date, timeZone = BOT_TIMEZONE) => {
   const zoned = getZonedDate(date, timeZone);
@@ -85,10 +78,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     const matrixServerName = process.env.MATRIX_SERVER_NAME || 'fitapp.local';
     const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
 
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:36',message:'connectMatrix:start',data:{retryCount,rateLimitCount,botUsername,hasPassword:!!botPassword,matrixUrl,matrixServerName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
-    
     if (!botPassword) {
       console.error('❌ BOT_PASSWORD environment variable is not set!');
       console.error('💡 Set BOT_PASSWORD in your .env file or docker-compose.yml');
@@ -115,10 +104,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     matrixClient = client;
     matrixConnected = true;
 
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:69',message:'connectMatrix:success',data:{botUsername,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion agent log
-    
     console.log('✅ Connected to Matrix');
     
     // Start the client
@@ -138,10 +123,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     if (statusCode === 429) {
       const newRateLimitCount = rateLimitCount + 1;
 
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:87',message:'connectMatrix:rateLimited',data:{retryCount,newRateLimitCount,statusCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
-      
       // Give up if we've hit rate limits too many times
       if (newRateLimitCount > MAX_RATE_LIMIT_RETRIES) {
         console.error(`❌ Matrix rate limited too many times (${newRateLimitCount}). Giving up for now.`);
@@ -191,10 +172,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
       const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
       const hasPassword = !!process.env.BOT_PASSWORD;
 
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:132',message:'connectMatrix:authFailed',data:{retryCount,statusCode,botUsername,hasPassword},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion agent log
-      
       console.error(`❌ Matrix authentication failed (attempt ${retryCount + 1}/${MAX_RETRIES}): Invalid username or password`);
       console.error('');
       console.error('🔍 Troubleshooting steps:');
@@ -222,9 +199,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
       console.error(`❌ Matrix connection failed (attempt ${retryCount + 1}/${MAX_RETRIES}): ${err.message}`);
       console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
 
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:158',message:'connectMatrix:retry',data:{retryCount,delayMs:delay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion agent log
       await new Promise(resolve => setTimeout(resolve, delay));
       return connectMatrix(retryCount + 1, rateLimitCount);
     }
@@ -342,9 +316,6 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:311',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -470,10 +441,6 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   const todayStr = getDateStringInTimeZone(new Date());
   const lastStepDateStr = lastStepDate ? getDateStringInTimeZone(lastStepDate) : null;
 
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:437',message:'stepPointIncrease:dateCheck',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr,willSend:lastStepDateStr===todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion agent log
-
   if (!lastStepDateStr || lastStepDateStr !== todayStr) {
     console.log(`   ⏭️ Skipping step point message - lastStepDate=${lastStepDateStr || 'none'} (today=${todayStr})`);
     return;
@@ -484,9 +451,6 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:446',message:'stepPointIncrease:challengeCheck',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion agent log
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
     const now = new Date();
@@ -500,9 +464,6 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
         console.log(`   ⏭️ Skipping - winner already announced for challenge ${challengeKey}`);
         return;
       }
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:454',message:'stepPointIncrease:challengeActive',data:{challengeId:participant.challengeId,startDate:challenge.startDate,endDate:challenge.endDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
       console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
 
       const userName = user.name || user.email || 'Someone';
@@ -552,9 +513,6 @@ const checkStepPointChanges = async () => {
     const participants = activeChallengeIds.length > 0
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
       : [];
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:499',message:'checkStepPointChanges:scoped',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion agent log
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
@@ -601,9 +559,6 @@ const startStepPointChangeStream = async () => {
     console.log('✅ Step point change stream started');
 
     stepPointChangeStream.on('change', async (change) => {
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:546',message:'stepPointChangeStream:event',data:{operationType:change?.operationType || null,hasFullDocument:!!change?.fullDocument,challengeId:change?.fullDocument?.challengeId || null,stepGoalPoints:change?.fullDocument?.stepGoalPoints ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion agent log
       if (!change?.fullDocument) {
         return;
       }
@@ -641,9 +596,6 @@ const startStepPointChangeStream = async () => {
 
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:592',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-  // #endregion agent log
   if (!started) {
     startStepPointPolling();
   }
