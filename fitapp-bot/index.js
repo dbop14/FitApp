@@ -30,6 +30,7 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
+const DEBUG_LOG_ENDPOINT = process.env.DEBUG_LOG_ENDPOINT || 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
@@ -310,7 +311,7 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:311',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:311',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
   // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
@@ -438,7 +439,7 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   const lastStepDateStr = lastStepDate ? getDateStringInTimeZone(lastStepDate) : null;
 
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:437',message:'stepPointIncrease:dateCheck',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr,willSend:lastStepDateStr===todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:437',message:'stepPointIncrease:dateCheck',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr,willSend:lastStepDateStr===todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion agent log
 
   if (!lastStepDateStr || lastStepDateStr !== todayStr) {
@@ -452,7 +453,7 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:446',message:'stepPointIncrease:challengeCheck',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:446',message:'stepPointIncrease:challengeCheck',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
   // #endregion agent log
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
@@ -468,7 +469,7 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
         return;
       }
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:454',message:'stepPointIncrease:challengeActive',data:{challengeId:participant.challengeId,startDate:challenge.startDate,endDate:challenge.endDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:454',message:'stepPointIncrease:challengeActive',data:{challengeId:participant.challengeId,startDate:challenge.startDate,endDate:challenge.endDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion agent log
       console.log(`   ✅ Challenge is active, sending step point message to room ${challenge.matrixRoomId}`);
 
@@ -520,7 +521,7 @@ const checkStepPointChanges = async () => {
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
       : [];
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:499',message:'checkStepPointChanges:scoped',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:499',message:'checkStepPointChanges:scoped',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion agent log
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
@@ -569,7 +570,7 @@ const startStepPointChangeStream = async () => {
 
     stepPointChangeStream.on('change', async (change) => {
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:546',message:'stepPointChangeStream:event',data:{operationType:change?.operationType || null,hasFullDocument:!!change?.fullDocument,challengeId:change?.fullDocument?.challengeId || null,stepGoalPoints:change?.fullDocument?.stepGoalPoints ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:546',message:'stepPointChangeStream:event',data:{operationType:change?.operationType || null,hasFullDocument:!!change?.fullDocument,challengeId:change?.fullDocument?.challengeId || null,stepGoalPoints:change?.fullDocument?.stepGoalPoints ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
       // #endregion agent log
       if (!change?.fullDocument) {
         return;
@@ -609,7 +610,7 @@ const startStepPointChangeStream = async () => {
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:592',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:592',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
   // #endregion agent log
   if (!started) {
     startStepPointPolling();
