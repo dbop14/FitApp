@@ -84,6 +84,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     const botPassword = process.env.BOT_PASSWORD;
     const matrixServerName = process.env.MATRIX_SERVER_NAME || 'fitapp.local';
     const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
+
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:36',message:'connectMatrix:start',data:{retryCount,rateLimitCount,botUsername,hasPassword:!!botPassword,matrixUrl,matrixServerName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
     
     if (!botPassword) {
       console.error('❌ BOT_PASSWORD environment variable is not set!');
@@ -110,6 +114,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     client.setAccessToken(response.access_token);
     matrixClient = client;
     matrixConnected = true;
+
+    // #region agent log
+    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:69',message:'connectMatrix:success',data:{botUsername,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion agent log
     
     console.log('✅ Connected to Matrix');
     
@@ -129,6 +137,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     // Handle rate limiting (429) - wait but give up after too many
     if (statusCode === 429) {
       const newRateLimitCount = rateLimitCount + 1;
+
+      // #region agent log
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:87',message:'connectMatrix:rateLimited',data:{retryCount,newRateLimitCount,statusCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion agent log
       
       // Give up if we've hit rate limits too many times
       if (newRateLimitCount > MAX_RATE_LIMIT_RETRIES) {
@@ -178,6 +190,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     if (statusCode === 403) {
       const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
       const hasPassword = !!process.env.BOT_PASSWORD;
+
+      // #region agent log
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:132',message:'connectMatrix:authFailed',data:{retryCount,statusCode,botUsername,hasPassword},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion agent log
       
       console.error(`❌ Matrix authentication failed (attempt ${retryCount + 1}/${MAX_RETRIES}): Invalid username or password`);
       console.error('');
@@ -205,6 +221,10 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
       const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
       console.error(`❌ Matrix connection failed (attempt ${retryCount + 1}/${MAX_RETRIES}): ${err.message}`);
       console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
+
+      // #region agent log
+      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:158',message:'connectMatrix:retry',data:{retryCount,delayMs:delay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion agent log
       await new Promise(resolve => setTimeout(resolve, delay));
       return connectMatrix(retryCount + 1, rateLimitCount);
     }
