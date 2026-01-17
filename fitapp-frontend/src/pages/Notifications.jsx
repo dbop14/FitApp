@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatNotifications } from '../context/ChatNotificationContext';
+import { UserContext } from '../context/UserContext';
 import { unifiedDesignSystem } from '../config/unifiedDesignSystem';
 import Button from '../components/ui/Button';
 
@@ -14,6 +15,7 @@ import Button from '../components/ui/Button';
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
   const {
     preferences,
     updatePreferences,
@@ -21,6 +23,8 @@ const Notifications = () => {
   } = useChatNotifications();
 
   const [permissionStatus, setPermissionStatus] = useState('default');
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testStatus, setTestStatus] = useState(null);
 
   // Check notification permission status
   useEffect(() => {
@@ -34,6 +38,35 @@ const Notifications = () => {
     const granted = await requestNotificationPermission();
     if (granted) {
       setPermissionStatus('granted');
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    setIsSendingTest(true);
+    setTestStatus(null);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
+      const userId = user?.sub || user?.googleId || null;
+      const response = await fetch(`${apiUrl}/api/push/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('fitapp_jwt_token')}`
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (response.ok) {
+        setTestStatus('sent');
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setTestStatus(data?.error || 'failed');
+      }
+    } catch (error) {
+      console.error('Failed to send test notification:', error);
+      setTestStatus('failed');
+    } finally {
+      setIsSendingTest(false);
     }
   };
 
@@ -118,6 +151,37 @@ const Notifications = () => {
               {permissionStatus === 'denied' && (
                 <p className="text-xs text-red-600">
                   Notifications are blocked. Please enable them in your browser settings.
+                </p>
+              )}
+            </div>
+
+            {/* Test Notification */}
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Test Notification</span>
+                {testStatus === 'sent' && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
+                    Sent
+                  </span>
+                )}
+                {testStatus && testStatus !== 'sent' && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">
+                    Failed
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSendTestNotification}
+                disabled={permissionStatus !== 'granted' || isSendingTest}
+                className="w-full"
+              >
+                {isSendingTest ? 'Sending...' : 'Send Test Notification'}
+              </Button>
+              {permissionStatus !== 'granted' && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Enable notifications to run the test.
                 </p>
               )}
             </div>

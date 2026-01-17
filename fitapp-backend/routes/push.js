@@ -8,6 +8,22 @@ const User = require('../models/User');
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 
+function normalizeSubscription(subscription) {
+  if (!subscription) return null;
+  const endpoint = subscription.endpoint;
+  const keys = subscription.keys || {};
+  if (!endpoint || !keys.p256dh || !keys.auth) {
+    return null;
+  }
+  return {
+    endpoint,
+    keys: {
+      p256dh: keys.p256dh,
+      auth: keys.auth
+    }
+  };
+}
+
 if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
   console.error('⚠️ WARNING: VAPID keys not set! Push notifications will not work.');
   console.error('⚠️ Generate keys by running: node scripts/generate-vapid-keys.js');
@@ -36,6 +52,11 @@ router.post('/subscribe', async (req, res) => {
       return res.status(400).json({ error: 'Missing subscription or userId' });
     }
 
+    const normalizedSubscription = normalizeSubscription(subscription);
+    if (!normalizedSubscription) {
+      return res.status(400).json({ error: 'Invalid push subscription format' });
+    }
+
     // Verify user exists
     const user = await User.findOne({ googleId: userId });
     if (!user) {
@@ -44,11 +65,11 @@ router.post('/subscribe', async (req, res) => {
 
     // Store or update subscription
     await PushSubscription.findOneAndUpdate(
-      { endpoint: subscription.endpoint },
+      { endpoint: normalizedSubscription.endpoint },
       {
         userId,
-        endpoint: subscription.endpoint,
-        keys: subscription.keys,
+        endpoint: normalizedSubscription.endpoint,
+        keys: normalizedSubscription.keys,
         lastUsed: new Date()
       },
       { upsert: true, new: true }
@@ -77,6 +98,27 @@ router.post('/unsubscribe', async (req, res) => {
   } catch (error) {
     console.error('❌ Error unsubscribing:', error);
     res.status(500).json({ error: 'Failed to unsubscribe' });
+  }
+});
+
+// POST send a test push notification for current user
+router.post('/test', async (req, res) => {
+  const userId = req.body.userId || req.user?.sub;
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  try {
+    await sendPushNotification(
+      userId,
+      'FitApp Test',
+      'This is a test notification',
+      { url: '/chat', test: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error sending test push notification:', error);
+    res.status(500).json({ error: 'Failed to send test notification' });
   }
 });
 

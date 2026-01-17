@@ -7,7 +7,6 @@ const BottomNavigation = () => {
   const location = useLocation()
   const { user } = useContext(UserContext)
   const { unreadCount } = useChatNotifications()
-
   // SVG Icons for navigation
   const DashboardIcon = ({ className }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 20 20">

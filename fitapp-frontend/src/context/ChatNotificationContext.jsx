@@ -430,11 +430,23 @@ export const ChatNotificationProvider = ({ children }) => {
       // Convert VAPID key to Uint8Array
       const applicationServerKey = urlBase64ToUint8Array(publicKey);
       
-      // Subscribe to push notifications
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey
-      });
+      // Reuse existing subscription if possible to avoid duplicates
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey
+        });
+      }
+
+      const subscriptionPayload = subscription.toJSON ? subscription.toJSON() : {
+        endpoint: subscription.endpoint,
+        expirationTime: subscription.expirationTime || null,
+        keys: {
+          p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+          auth: arrayBufferToBase64(subscription.getKey('auth'))
+        }
+      };
       
       // Send subscription to backend
       const subscribeResponse = await fetch(`${apiUrl}/api/push/subscribe`, {
@@ -444,13 +456,7 @@ export const ChatNotificationProvider = ({ children }) => {
           'Authorization': `Bearer ${localStorage.getItem('fitapp_jwt_token')}`
         },
         body: JSON.stringify({
-          subscription: {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
-              auth: arrayBufferToBase64(subscription.getKey('auth'))
-            }
-          },
+          subscription: subscriptionPayload,
           userId: user.sub
         })
       });

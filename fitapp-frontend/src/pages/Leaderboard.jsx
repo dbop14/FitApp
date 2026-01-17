@@ -414,7 +414,10 @@ const Leaderboard = () => {
 
       {/* Edge-to-edge challenge photo banner (4:1 ratio) - Mobile only */}
       {activeChallenge && (
-        <div className="md:hidden w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]" style={{ marginTop: '48px' }}>
+        <div
+          className="md:hidden w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]"
+          style={{ marginTop: 'calc(48px + var(--safe-area-top))' }}
+        >
           <div className="relative w-full" style={{ paddingBottom: '25%' }}> {/* 4:1 aspect ratio */}
             {/* Background image */}
             {activeChallenge.photo ? (
@@ -455,7 +458,8 @@ const Leaderboard = () => {
       )}
 
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content' : 'safe-area-content'}`}>
+        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content' : 'safe-area-content'}`}
+        style={{ paddingTop: '16px' }}>
 
       {!activeChallenge && !showForm && (
         <div className="bg-white rounded-2xl p-8 space-y-6 text-center shadow-lg">

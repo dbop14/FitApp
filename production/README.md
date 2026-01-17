@@ -108,6 +108,13 @@ Production uses different ports to avoid conflicts with development:
 
 **⚠️ Important:** If you get "OAuth client was deleted" errors, update your `.env` file with the new client ID above and rebuild containers.
 
+## iOS Push Notifications (PWA)
+
+To receive push notifications when the app is closed on iPhone:
+- Install FitApp as a PWA: Safari → Share → Add to Home Screen.
+- Enable notifications when prompted in the app.
+- After deployments that change the service worker, remove and re-add the PWA if notifications stop arriving.
+
 ## Usage
 
 ### Start Production Environment

@@ -1,6 +1,7 @@
 const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
+const crypto = require('crypto');
 let fetch;
 try {
   fetch = global.fetch ? global.fetch.bind(global) : require('node-fetch');
@@ -36,10 +37,10 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
-const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
+const MATRIX_REGISTRATION_SHARED_SECRET = process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
 const getZonedDate = (date, timeZone = BOT_TIMEZONE) => new Date(date.toLocaleString('en-US', { timeZone }));
 
@@ -72,6 +73,46 @@ const runWithConcurrency = async (items, limit, handler) => {
   await Promise.all(workers);
 };
 
+const registerMatrixUserIfNeeded = async () => {
+  const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
+  const botPassword = process.env.BOT_PASSWORD;
+  const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
+
+  if (!MATRIX_REGISTRATION_SHARED_SECRET || !botPassword) {
+    return { skipped: true };
+  }
+
+  try {
+    const nonceResponse = await fetch(`${matrixUrl}/_synapse/admin/v1/register`, { method: 'GET' });
+    if (!nonceResponse.ok) {
+      return { skipped: false, status: nonceResponse.status };
+    }
+    const nonceData = await nonceResponse.json();
+    const nonce = nonceData.nonce;
+    const adminFlag = false;
+    const mac = crypto.createHmac('sha1', MATRIX_REGISTRATION_SHARED_SECRET)
+      .update(`${nonce}\0${botUsername}\0${botPassword}\0${adminFlag ? 'admin' : 'notadmin'}`)
+      .digest('hex');
+
+    const registerResponse = await fetch(`${matrixUrl}/_synapse/admin/v1/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce,
+        username: botUsername,
+        password: botPassword,
+        admin: adminFlag,
+        mac
+      })
+    });
+
+
+    return { skipped: false, status: registerResponse.status };
+  } catch (err) {
+    return { skipped: false, error: err.message };
+  }
+};
+
 const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
   try {
     const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
@@ -79,15 +120,13 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     const matrixServerName = process.env.MATRIX_SERVER_NAME || 'fitapp.local';
     const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
     
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:38',message:'connectMatrix:start',data:{retryCount,rateLimitCount,botUsername,hasPassword:!!botPassword,matrixUrl,matrixServerName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
-
     if (!botPassword) {
       console.error('❌ BOT_PASSWORD environment variable is not set!');
       console.error('💡 Set BOT_PASSWORD in your .env file or docker-compose.yml');
       throw new Error('BOT_PASSWORD not set');
     }
+
+    await registerMatrixUserIfNeeded();
     
     console.log(`🔄 Attempting to connect to Matrix (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
     console.log(`   Username: ${botUsername}`);
@@ -109,10 +148,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     matrixClient = client;
     matrixConnected = true;
     
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:71',message:'connectMatrix:success',data:{matrixUrl,botUsername},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion agent log
-
     console.log('✅ Connected to Matrix');
     
     // Start the client
@@ -132,10 +167,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
     if (statusCode === 429) {
       const newRateLimitCount = rateLimitCount + 1;
       
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:88',message:'connectMatrix:rateLimited',data:{retryCount,newRateLimitCount,statusCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
-
       // Give up if we've hit rate limits too many times
       if (newRateLimitCount > MAX_RATE_LIMIT_RETRIES) {
         console.error(`❌ Matrix rate limited too many times (${newRateLimitCount}). Giving up for now.`);
@@ -185,10 +216,6 @@ const connectMatrix = async (retryCount = 0, rateLimitCount = 0) => {
       const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
       const hasPassword = !!process.env.BOT_PASSWORD;
       
-      // #region agent log
-      fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:133',message:'connectMatrix:authFailed',data:{retryCount,statusCode,botUsername,hasPassword},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion agent log
-
       console.error(`❌ Matrix authentication failed (attempt ${retryCount + 1}/${MAX_RETRIES}): Invalid username or password`);
       console.error('');
       console.error('🔍 Troubleshooting steps:');
@@ -333,9 +360,6 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:314',message:'sendCardMessage:dedupe',data:{challengeId:challengeId?.toString?.() || null,cardType,isDuplicate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -463,9 +487,6 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
 
   if (!lastStepDateStr || lastStepDateStr !== todayStr) {
     console.log(`   ⏭️ Skipping step point message - lastStepDate=${lastStepDateStr || 'none'} (today=${todayStr})`);
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:450',message:'stepPointIncrease:skipped',data:{challengeId:participant.challengeId,previousPoints,currentPoints,lastStepDateStr,todayStr},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion agent log
     return;
   }
 
@@ -474,9 +495,6 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:462',message:'stepPointIncrease:context',data:{challengeId:participant.challengeId,hasChallenge:!!challenge,hasRoom:!!challenge?.matrixRoomId,hasUser:!!user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-  // #endregion agent log
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
     const now = new Date();
@@ -531,17 +549,17 @@ const checkStepPointChanges = async () => {
 
   try {
     const today = getDateStringInTimeZone(new Date());
+    const { start: todayStart, end: todayEnd } = getDayBoundsInTimeZone(new Date());
     const activeChallenges = await Challenge.find({
       startDate: { $lte: today },
       endDate: { $gte: today }
-    });
+    }).select('_id').lean();
     const activeChallengeIds = activeChallenges.map((challenge) => challenge._id.toString());
     const participants = activeChallengeIds.length > 0
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
+          .select('challengeId userId stepGoalPoints lastStepDate lastStepCount')
+          .lean()
       : [];
-    // #region agent log
-    fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:509',message:'checkStepPointChanges:scope',data:{activeChallenges:activeChallengeIds.length,participants:participants.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion agent log
     console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
@@ -551,6 +569,7 @@ const checkStepPointChanges = async () => {
       const key = `${participant.challengeId}-${participant.userId}`;
       const previousPoints = previousStepPoints.get(key) || 0;
       const currentPoints = participant.stepGoalPoints || 0;
+    
       
       console.log(`   [${totalChecked}/${participants.length}] Participant ${participant.userId} in challenge ${participant.challengeId}: previous=${previousPoints}, current=${currentPoints}`);
 
@@ -625,9 +644,6 @@ const startStepPointChangeStream = async () => {
 
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
-  // #region agent log
-  fetch(DEBUG_LOG_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:599',message:'stepPointMonitoring:started',data:{changeStreamStarted:started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-  // #endregion agent log
   if (!started) {
     startStepPointPolling();
   }
@@ -660,7 +676,7 @@ const sendDailyStepUpdate = async () => {
     const challenges = await Challenge.find({
       startDate: { $lte: today },
       endDate: { $gte: today }
-    });
+    }).select('_id name matrixRoomId botName').lean();
 
     for (const challenge of challenges) {
       console.log(`📊 Processing challenge ${challenge.name}: matrixRoomId=${!!challenge.matrixRoomId}`);
@@ -677,11 +693,17 @@ const sendDailyStepUpdate = async () => {
       }
       console.log(`   ✅ Challenge is active, preparing daily step update`);
 
-      const participants = await ChallengeParticipant.find({ challengeId: challenge._id.toString() });
+      const participants = await ChallengeParticipant.find({ challengeId: challenge._id.toString() })
+        .select('userId lastStepCount')
+        .lean();
       console.log(`   Found ${participants.length} participants`);
       const userMap = new Map();
       const userIds = participants.map((participant) => participant.userId);
-      const users = userIds.length > 0 ? await User.find({ googleId: { $in: userIds } }) : [];
+      const users = userIds.length > 0
+        ? await User.find({ googleId: { $in: userIds } })
+            .select('googleId name email steps')
+            .lean()
+        : [];
       for (const user of users) {
         userMap.set(user.googleId, user);
       }
@@ -1020,7 +1042,31 @@ const checkNewParticipants = async () => {
   }
 
   try {
-    const participants = await ChallengeParticipant.find({});
+    const participants = await ChallengeParticipant.find({})
+      .select('_id challengeId userId')
+      .lean();
+    const challengeIds = [...new Set(participants.map((participant) => participant.challengeId))];
+    const userIds = [...new Set(participants.map((participant) => participant.userId))];
+    const challenges = challengeIds.length > 0
+      ? await Challenge.find({ _id: { $in: challengeIds } })
+          .select('_id name matrixRoomId botName stepGoal startDate endDate')
+          .lean()
+      : [];
+    const users = userIds.length > 0
+      ? await User.find({ googleId: { $in: userIds } })
+          .select('googleId name email picture')
+          .lean()
+      : [];
+    const challengeMap = new Map(challenges.map((challenge) => [challenge._id.toString(), challenge]));
+    const userMap = new Map(users.map((user) => [user.googleId, user]));
+    const existingWelcomeMessages = await ChatMessage.find({
+      messageType: 'welcomeCard',
+      isBot: true,
+      userId: { $in: userIds }
+    }).select('challengeId userId').lean();
+    const welcomeKeySet = new Set(
+      existingWelcomeMessages.map((message) => `${message.challengeId}-${message.userId}`)
+    );
     
     for (const participant of participants) {
       const key = `${participant.challengeId}-${participant.userId}`;
@@ -1030,8 +1076,8 @@ const checkNewParticipants = async () => {
         continue;
       }
 
-      const challenge = await Challenge.findById(participant.challengeId);
-      const user = await User.findOne({ googleId: participant.userId });
+      const challenge = challengeMap.get(participant.challengeId.toString());
+      const user = userMap.get(participant.userId);
       
       if (!challenge) {
         console.log(`⚠️  Challenge not found for participant: ${participant.challengeId}`);
@@ -1116,18 +1162,8 @@ const checkNewParticipants = async () => {
         
         // Check if a welcome message already exists for this participant
         // Check both with userId and by message content to catch any edge cases
-        const existingWelcome = await ChatMessage.findOne({
-          challengeId: challenge._id.toString(),
-          messageType: 'welcomeCard',
-          $or: [
-            { userId: participant.userId },
-            { sender: botName, message: { $regex: userName.split(' ')[0], $options: 'i' } }
-          ],
-          isBot: true
-        });
-        
-        // If welcome message already exists, mark as welcomed and skip
-        if (existingWelcome) {
+      // If welcome message already exists, mark as welcomed and skip
+      if (welcomeKeySet.has(`${challenge._id.toString()}-${participant.userId}`)) {
           welcomedParticipants.add(key);
           console.log(`⏭️  Welcome card already exists for ${userName}, skipping`);
           continue;
@@ -1285,7 +1321,7 @@ const syncAllUsersData = async () => {
   }
 
   try {
-    const users = await User.find({});
+    const users = await User.find({}).select('googleId email').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
 
     await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
@@ -1509,7 +1545,11 @@ const start = async () => {
       // Check for weight loss percentage increases that may have been missed while bot was down
       // This will catch any increases that happened on today's weigh-in day before restart
       console.log('🎉 Checking for missed weight loss percentage increases on startup...');
-      checkWeightLossPercentageChanges();
+      if (typeof checkWeightLossPercentageChanges === 'function') {
+        checkWeightLossPercentageChanges();
+      } else {
+        console.log('⚠️ Skipping weight loss percentage check - function not defined');
+      }
     }, 2000); // 2 second delay to ensure all initialization is complete
     
     if (client) {

@@ -43,6 +43,11 @@ body {
     padding-top: calc(var(--safe-area-top) + 1rem);
     padding-bottom: 1rem;
   }
+
+  .safe-area-header.safe-area-header--compact {
+    padding-top: calc(var(--safe-area-top) + 0.5rem);
+    padding-bottom: 0.5rem;
+  }
 }
 
 .platform-android .safe-area-header {

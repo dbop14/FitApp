@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { UserProvider } from './context/UserContext'
 import { ChallengeProvider } from './context/ChallengeContext'
 import { ChatNotificationProvider } from './context/ChatNotificationContext'
@@ -25,6 +25,38 @@ import AddToHomeScreen from './components/AddToHomeScreen'
 import NotificationPermissionDialog from './components/NotificationPermissionDialog'
 import UpdateAvailableDialog from './components/UpdateAvailableDialog'
 import ScrollToTop from './components/ScrollToTop'
+
+const StatusBarTheme = () => {
+  const location = useLocation()
+
+  React.useEffect(() => {
+    const blueHeaderPaths = [
+      '/dashboard',
+      '/leaderboard',
+      '/challenges',
+      '/completed-challenges',
+      '/settings',
+      '/account-settings',
+      '/notifications',
+      '/steps-history',
+      '/weight-history',
+      '/account'
+    ]
+    const isBlueHeaderPage = blueHeaderPaths.some((path) => (
+      location.pathname === path || location.pathname.startsWith(`${path}/`)
+    ))
+    const themeColor = isBlueHeaderPage ? '#1D4ED8' : '#ffffff'
+    let themeMeta = document.querySelector('meta[name="theme-color"]')
+    if (!themeMeta) {
+      themeMeta = document.createElement('meta')
+      themeMeta.setAttribute('name', 'theme-color')
+      document.head.appendChild(themeMeta)
+    }
+    themeMeta.setAttribute('content', themeColor)
+  }, [location.pathname])
+
+  return null
+}
 
 const App = () => {
   // Enable smart refetching when tab becomes visible
@@ -53,6 +85,7 @@ const App = () => {
               v7_relativeSplatPath: true
             }}
           >
+          <StatusBarTheme />
           <ScrollToTop />
           <AddToHomeScreen />
           <UpdateAvailableDialog />
