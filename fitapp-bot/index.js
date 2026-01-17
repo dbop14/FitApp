@@ -1335,26 +1335,42 @@ const sendChallengeStartReminders = async () => {
 // Sync all users' data from Google Fit
 const syncAllUsersData = async () => {
   console.log('🔄 Starting daily sync of all users data...');
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1316',message:'syncAllUsersData:entry',data:{mongoConnected,backendHost:'fitapp-backend',backendPort:3000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion agent log
   if (!mongoConnected) {
     console.error('❌ Cannot sync user data: MongoDB not connected.');
     return;
   }
 
   try {
-    const users = await User.find({}).select('googleId email').lean();
+    const users = await User.find({}).select('_id googleId').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1324',message:'syncAllUsersData:usersFound',data:{count:users.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
 
     await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
       if (user.googleId) {
         try {
-          const response = await fetch(`http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`);
+          const requestUrl = `http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`;
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1329',message:'syncAllUsersData:request',data:{userId:String(user._id),hasGoogleId:true,origin:'http://fitapp-backend:3000',path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion agent log
+          const response = await fetch(requestUrl);
           if (response.ok) {
             console.log(`✅ Successfully synced data for user ${user.email}`);
           } else {
             console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
           }
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1334',message:'syncAllUsersData:response',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion agent log
         } catch (err) {
           console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1336',message:'syncAllUsersData:error',data:{name:err.name,message:err.message,code:err.code || null,causeCode:err.cause?.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion agent log
         }
       }
     });
