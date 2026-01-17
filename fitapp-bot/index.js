@@ -37,7 +37,6 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
-const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
@@ -79,10 +78,6 @@ const registerMatrixUserIfNeeded = async () => {
   const botPassword = process.env.BOT_PASSWORD;
   const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
 
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:80',message:'matrixRegister:entry',data:{botUsername,hasPassword:!!botPassword,hasSharedSecret:!!MATRIX_REGISTRATION_SHARED_SECRET,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion agent log
-
   if (!MATRIX_REGISTRATION_SHARED_SECRET || !botPassword) {
     return { skipped: true };
   }
@@ -90,9 +85,6 @@ const registerMatrixUserIfNeeded = async () => {
   try {
     const nonceResponse = await fetch(`${matrixUrl}/_synapse/admin/v1/register`, { method: 'GET' });
     if (!nonceResponse.ok) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:91',message:'matrixRegister:nonceFailed',data:{status:nonceResponse.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion agent log
       return { skipped: false, status: nonceResponse.status };
     }
     const nonceData = await nonceResponse.json();
@@ -114,21 +106,8 @@ const registerMatrixUserIfNeeded = async () => {
       })
     });
 
-    let registerBody = null;
-    try {
-      registerBody = await registerResponse.json();
-    } catch (parseErr) {
-      registerBody = null;
-    }
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:114',message:'matrixRegister:result',data:{status:registerResponse.status,errcode:registerBody?.errcode || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion agent log
-
     return { skipped: false, status: registerResponse.status };
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:122',message:'matrixRegister:error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion agent log
     return { skipped: false, error: err.message };
   }
 };
