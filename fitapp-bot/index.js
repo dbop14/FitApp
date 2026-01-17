@@ -1339,6 +1339,7 @@ const syncAllUsersData = async () => {
   }
 
   try {
+    const botSecret = process.env.BOT_PASSWORD;
     const users = await User.find({}).select('_id googleId').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
 
@@ -1346,14 +1347,25 @@ const syncAllUsersData = async () => {
       if (user.googleId) {
         try {
           const requestUrl = `http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`;
-          const response = await fetch(requestUrl);
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1328',message:'syncAllUsersData:request',data:{hasBotPassword:!!botSecret,host:'fitapp-backend',path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion agent log
+          const response = await fetch(requestUrl, {
+            headers: botSecret ? { 'x-bot-secret': botSecret } : undefined
+          });
           if (response.ok) {
             console.log(`✅ Successfully synced data for user ${user.email}`);
           } else {
             console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
           }
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1335',message:'syncAllUsersData:response',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion agent log
         } catch (err) {
           console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1340',message:'syncAllUsersData:error',data:{message:err.message,code:err.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion agent log
         }
       }
     });
