@@ -73,6 +73,20 @@ const runWithConcurrency = async (items, limit, handler) => {
   await Promise.all(workers);
 };
 
+const isChangeStreamSupported = async () => {
+  try {
+    const admin = mongoose.connection?.db?.admin();
+    if (!admin) {
+      return { supported: false, reason: 'no_admin' };
+    }
+    const hello = await admin.command({ hello: 1 });
+    const supported = Boolean(hello?.setName);
+    return { supported, reason: supported ? 'replica_set' : 'standalone' };
+  } catch (err) {
+    return { supported: false, reason: 'error', error: err.message };
+  }
+};
+
 const registerMatrixUserIfNeeded = async () => {
   const botUsername = process.env.BOT_USERNAME || 'fitness_motivator';
   const botPassword = process.env.BOT_PASSWORD;
@@ -601,7 +615,18 @@ const startStepPointPolling = () => {
 };
 
 const startStepPointChangeStream = async () => {
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:603',message:'stepPointChangeStream:entry',data:{mongoConnected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion agent log
   try {
+    const support = await isChangeStreamSupported();
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:611',message:'stepPointChangeStream:support',data:{supported:support.supported,reason:support.reason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
+    if (!support.supported) {
+      console.warn(`⚠️ Step point change stream not supported (${support.reason}); using polling instead.`);
+      return false;
+    }
     stepPointChangeStream = ChallengeParticipant.watch([], { fullDocument: 'updateLookup' });
     console.log('✅ Step point change stream started');
 
@@ -629,6 +654,9 @@ const startStepPointChangeStream = async () => {
 
     stepPointChangeStream.on('error', (err) => {
       console.error('❌ Step point change stream error:', err.message);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:630',message:'stepPointChangeStream:error',data:{message:err.message,code:err.code || null,hasInterval:!!stepPointInterval},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion agent log
       if (!stepPointInterval) {
         startStepPointPolling();
       }
@@ -637,12 +665,18 @@ const startStepPointChangeStream = async () => {
     return true;
   } catch (err) {
     console.error('⚠️ Step point change stream unavailable, falling back to polling:', err.message);
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:639',message:'stepPointChangeStream:catch',data:{message:err.message,code:err.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion agent log
     return false;
   }
 };
 
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:646',message:'stepPointMonitoring:started',data:{started,willPoll:!started},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion agent log
   if (!started) {
     startStepPointPolling();
   }
