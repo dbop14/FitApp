@@ -1340,13 +1340,14 @@ const syncAllUsersData = async () => {
 
   try {
     const botSecret = process.env.BOT_PASSWORD;
+    const backendBaseUrl = process.env.BACKEND_API_URL || 'http://fitapp-backend:3000';
     const users = await User.find({}).select('_id googleId').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
 
     await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
       if (user.googleId) {
         try {
-          const requestUrl = `http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`;
+          const requestUrl = `${backendBaseUrl}/api/user/userdata?googleId=${user.googleId}`;
           // #region agent log
           fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1328',message:'syncAllUsersData:request',data:{hasBotPassword:!!botSecret,host:'fitapp-backend',path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
           // #endregion agent log
