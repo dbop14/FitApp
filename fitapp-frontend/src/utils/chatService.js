@@ -63,9 +63,6 @@ class ChatService {
 
   // Save messages to local storage
   saveToCache(challengeId, messages) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:63',message:'saveToCache entry',data:{challengeId,messageCount:messages?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     if (!challengeId || !messages) {
       return;
     }
@@ -74,50 +71,25 @@ class ChatService {
     let prunedMessages = this.pruneMessagesBySize(messages, this.maxCacheSizeBytes);
     // Then prune by count
     prunedMessages = this.pruneMessages(prunedMessages, this.maxCachedMessages);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:71',message:'after pruning',data:{prunedCount:prunedMessages.length,originalCount:messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     
     try {
       const cacheKey = this.getCacheKey(challengeId);
       const lastSyncKey = this.getLastSyncKey(challengeId);
       const serialized = JSON.stringify(prunedMessages);
-      const serializedSize = new Blob([serialized]).size;
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:77',message:'before quota check',data:{serializedSize},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       
       // Check if we're about to exceed quota before attempting save
       if (this.wouldExceedQuota(cacheKey, serialized)) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:80',message:'would exceed quota',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         // Aggressively clear old caches first
         this.clearOldChatCaches(challengeId);
       }
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:84',message:'before setItem',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       localStorage.setItem(cacheKey, serialized);
       // Update last sync timestamp
       localStorage.setItem(lastSyncKey, Date.now().toString());
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:87',message:'setItem success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:88',message:'setItem error',data:{errorName:error?.name,errorMessage:error?.message,isQuota:this.isQuotaExceededError(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       if (this.isQuotaExceededError(error)) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:90',message:'quota error detected',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         // Try more aggressive recovery
         const recovered = this.tryRecoverFromQuota(challengeId, prunedMessages);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:92',message:'recovery attempt',data:{recovered},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         if (!recovered) {
           // Last resort: clear all other chat caches and try again
           this.clearAllOtherChatCaches(challengeId);
@@ -125,14 +97,8 @@ class ChatService {
             const finalPruned = this.pruneMessages(prunedMessages, 50); // Very small cache
             localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(finalPruned));
             localStorage.setItem(this.getLastSyncKey(challengeId), Date.now().toString());
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:98',message:'last resort save success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
             this.warnCacheOnce('Chat cache saved with reduced size due to storage limits', error);
           } catch (retryError) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:100',message:'last resort save failed',data:{errorName:retryError?.name,errorMessage:retryError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
             this.warnCacheOnce('Failed to save chat cache (storage full)', retryError);
             // Don't throw - allow app to continue without cache
           }
@@ -348,15 +314,9 @@ class ChatService {
 
   // Check for new messages (lightweight check)
   async checkForNewMessages(challengeId) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:314',message:'checkForNewMessages entry',data:{challengeId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     try {
       // First check if user is logged in
       const storedUser = localStorage.getItem('fitapp_user');
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:318',message:'user check',data:{hasUser:!!storedUser},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       if (!storedUser) {
         // User is not logged in, silently return without logging
         return null;
@@ -367,10 +327,6 @@ class ChatService {
       
       // DO NOT LOG TOKEN INFO - This function is called too frequently
       // Any logging here will spam the console
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:329',message:'token check',data:{hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       if (!token) {
         // Only warn once per 5 minutes to prevent log spam
@@ -386,10 +342,6 @@ class ChatService {
       // Reset warning flag if token is found
       this.hasWarnedAboutMissingToken = false;
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:344',message:'before fetch',data:{apiUrl:`${API_BASE_URL}/api/chat/${challengeId}/messages`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
       // Fetch all messages (backend sorts ascending, we'll get the last one)
       let response;
       try {
@@ -399,22 +351,13 @@ class ChatService {
             'Content-Type': 'application/json'
           }
         });
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:350',message:'fetch completed',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
       } catch (fetchError) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:353',message:'fetch error caught',data:{errorName:fetchError?.name,errorMessage:fetchError?.message,errorType:fetchError?.constructor?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         // Network error (iOS PWA "Load failed" errors are caught here)
         // Silently return null to prevent error spam - this is expected on network issues
         return null;
       }
       
       if (!response.ok) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:361',message:'response not ok',data:{status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         // Throttle API error warnings - only log once per 5 minutes
         const now = Date.now();
         if (!this.lastApiErrorWarningTime || (now - this.lastApiErrorWarningTime) > 300000) {
@@ -434,17 +377,11 @@ class ChatService {
       }
 
       const messages = await response.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:375',message:'messages parsed',data:{messageCount:messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       if (messages.length === 0) return null;
 
       // Backend returns messages sorted ascending, so the last message is the newest
       const latestMessage = messages[messages.length - 1];
       const cachedMessages = this.loadFromCache(challengeId);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:380',message:'cache loaded',data:{cachedCount:cachedMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       if (cachedMessages.length === 0) return null;
 
@@ -453,26 +390,14 @@ class ChatService {
       // Check if we have new messages by comparing timestamps
       const latestTimestamp = new Date(latestMessage.timestamp).getTime();
       const cachedTimestamp = new Date(lastCachedMessage.timestamp).getTime();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:386',message:'timestamp comparison',data:{latestTimestamp,cachedTimestamp,hasNew:latestTimestamp>cachedTimestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       if (latestTimestamp > cachedTimestamp) {
         // Immediately update cache with the new message to prevent duplicate detections
         // This prevents the same message from being detected as "new" on subsequent checks
         const updatedCache = [...cachedMessages, latestMessage];
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:390',message:'before saveToCache',data:{updatedCacheCount:updatedCache.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         try {
           this.saveToCache(challengeId, updatedCache);
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:393',message:'saveToCache success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
         } catch (cacheError) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:395',message:'saveToCache error',data:{errorName:cacheError?.name,errorMessage:cacheError?.message,isQuota:this.isQuotaExceededError(cacheError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           // Log but don't fail - we can still return the new message info
           console.warn('Failed to update cache with new message:', cacheError);
         }
@@ -487,9 +412,6 @@ class ChatService {
 
       return { hasNew: false };
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'chatService.js:406',message:'catch block error',data:{errorName:error?.name,errorMessage:error?.message,errorType:error?.constructor?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // Don't log network errors - they're expected on iOS PWAs
       if (error?.name !== 'TypeError' || !error?.message?.includes('Load failed')) {
         console.warn('Failed to check for new messages:', error);
