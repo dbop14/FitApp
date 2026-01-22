@@ -70,15 +70,18 @@ const triggerPushNotifications = async (challengeId, sender, message, messageTyp
   const apiUrl = `${backendUrl}/api/chat/${challengeId}/messages`;
   
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:65',message:'triggerPushNotifications:entry',data:{challengeId:challengeId?.toString() || 'none',messageType,hasCardData:!!cardData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion agent log
+    // Add bot authentication header if available
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    const botSecret = process.env.BOT_SECRET || process.env.BOT_PASSWORD;
+    if (botSecret) {
+      headers['x-bot-secret'] = botSecret;
+    }
     
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify({
         sender,
         message,
@@ -92,23 +95,14 @@ const triggerPushNotifications = async (challengeId, sender, message, messageTyp
     });
     
     if (response.ok) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:85',message:'triggerPushNotifications:success',data:{challengeId:challengeId?.toString() || 'none',messageType,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
       console.log(`✅ Triggered push notifications via backend API for ${messageType}`);
       return true;
     } else {
       const errorText = await response.text();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:92',message:'triggerPushNotifications:failed',data:{challengeId:challengeId?.toString() || 'none',messageType,status:response.status,error:errorText.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
       console.error(`⚠️  Failed to trigger push notifications: ${response.status} - ${errorText.substring(0, 100)}`);
       return false;
     }
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:97',message:'triggerPushNotifications:error',data:{challengeId:challengeId?.toString() || 'none',messageType,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion agent log
     console.error(`⚠️  Error triggering push notifications: ${err.message}`);
     return false;
   }
@@ -132,10 +126,6 @@ const registerMatrixUserIfNeeded = async () => {
   const botPassword = process.env.BOT_PASSWORD;
   const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:80',message:'matrixRegister:entry',data:{botUsername,hasPassword:!!botPassword,hasSharedSecret:!!MATRIX_REGISTRATION_SHARED_SECRET,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion agent log
-
   if (!MATRIX_REGISTRATION_SHARED_SECRET || !botPassword) {
     return { skipped: true };
   }
@@ -143,9 +133,6 @@ const registerMatrixUserIfNeeded = async () => {
   try {
     const nonceResponse = await fetch(`${matrixUrl}/_synapse/admin/v1/register`, { method: 'GET' });
     if (!nonceResponse.ok) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:91',message:'matrixRegister:nonceFailed',data:{status:nonceResponse.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion agent log
       return { skipped: false, status: nonceResponse.status };
     }
     const nonceData = await nonceResponse.json();
@@ -173,15 +160,9 @@ const registerMatrixUserIfNeeded = async () => {
     } catch (parseErr) {
       registerBody = null;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:114',message:'matrixRegister:result',data:{status:registerResponse.status,errcode:registerBody?.errcode || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion agent log
 
     return { skipped: false, status: registerResponse.status };
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:122',message:'matrixRegister:error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion agent log
     return { skipped: false, error: err.message };
   }
 };
@@ -425,23 +406,14 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
 // Send card message with text message below
 const sendCardMessage = async (roomId, message, challengeId, botName, cardType, cardData, userPicture = null, userId = null) => {
   console.log(`📤 sendCardMessage called: type=${cardType}, roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}`);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:373',message:'sendCardMessage:entry',data:{cardType,hasMatrixClient:!!matrixClient,matrixConnected,hasRoomId:!!roomId,challengeId:challengeId?.toString() || 'none',userId:userId || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion agent log
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
     console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:375',message:'sendCardMessage:matrixNotConnected',data:{cardType,hasMatrixClient:!!matrixClient,matrixConnected,hasRoomId:!!roomId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion agent log
     return false;
   }
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:382',message:'sendCardMessage:duplicateCheck',data:{cardType,isDuplicate,challengeId:challengeId?.toString() || 'none',userId:userId || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -457,9 +429,6 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
     console.log(`✅ Sent message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
     console.log(`   Message type: ${cardType}, Challenge ID: ${challengeId?.toString() || 'none'}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:395',message:'sendCardMessage:matrixSent',data:{cardType,challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion agent log
     
     // Save message to MongoDB and trigger push notifications via backend API
     // This ensures push notifications are sent to all participants
@@ -486,14 +455,8 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
             });
             const savedMessage = await chatMessage.save();
             console.log(`⚠️  Backend API failed, saved directly to MongoDB (no push notifications): ${savedMessage._id}`);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:410',message:'sendCardMessage:fallbackMongoSave',data:{cardType,messageId:savedMessage._id.toString(),challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion agent log
           } catch (dbErr) {
             console.error('⚠️  Failed to save card message to MongoDB (fallback):', dbErr.message);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:422',message:'sendCardMessage:mongoSaveFailed',data:{cardType,error:dbErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion agent log
           }
         }
       }
@@ -553,14 +516,8 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
             });
             await chatMessage.save();
             console.log(`⚠️  Backend API failed, saved directly to MongoDB (no push notifications)`);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:473',message:'sendMatrixMessage:fallbackMongoSave',data:{messageType,challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion agent log
           } catch (dbErr) {
             console.error('⚠️  Failed to save message to MongoDB (fallback):', dbErr.message);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:475',message:'sendMatrixMessage:mongoSaveFailed',data:{messageType,error:dbErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion agent log
           }
         }
       }
@@ -806,9 +763,6 @@ const isWeighInDay = (weighInDay) => {
 
 // Send daily step progress update (plain text, not a card)
 const sendDailyStepUpdate = async () => {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:688',message:'sendDailyStepUpdate:entry',data:{mongoConnected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion agent log
   if (!mongoConnected) {
     return;
   }
@@ -888,9 +842,6 @@ const sendDailyStepUpdate = async () => {
         botName,
         'text'
       );
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:761',message:'sendDailyStepUpdate:messageSent',data:{challengeId:challenge._id.toString(),sendResult},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion agent log
       console.log(`   ✅ Daily step update sent for challenge ${challenge.name}`);
     }
     console.log(`✅ Finished sending daily step updates`);
@@ -1309,7 +1260,8 @@ const checkNewParticipants = async () => {
         // Check if a welcome message already exists for this participant
         // Check both with userId and by message content to catch any edge cases
       // If welcome message already exists, mark as welcomed and skip
-      if (welcomeKeySet.has(`${challenge._id.toString()}-${participant.userId}`)) {
+      const welcomeKey = `${challenge._id.toString()}-${participant.userId}`;
+      if (welcomeKeySet.has(welcomeKey)) {
           welcomedParticipants.add(key);
           console.log(`⏭️  Welcome card already exists for ${userName}, skipping`);
           continue;
@@ -1330,7 +1282,9 @@ const checkNewParticipants = async () => {
         if (timeDiff <= oneHour || challengeStartedRecently) {
           // Skip if winner already announced
           const challengeKey = challenge._id.toString();
-          if (announcedWinners.has(challengeKey)) continue;
+          if (announcedWinners.has(challengeKey)) {
+            continue;
+          }
 
           const firstName = userName.split(' ')[0];
           const message = `Welcome ${firstName} to the ${challenge.name} challenge! We're excited to have you on this fitness journey. Let's achieve our goals together!`;
@@ -1461,10 +1415,6 @@ const sendChallengeStartReminders = async () => {
 // Sync all users' data from Google Fit
 const syncAllUsersData = async () => {
   console.log('🔄 Starting daily sync of all users data...');
-  // #region agent log
-  const backendUrl = process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
-  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1339',message:'syncAllUsersData:entry',data:{mongoConnected,backendUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion agent log
   if (!mongoConnected) {
     console.error('❌ Cannot sync user data: MongoDB not connected.');
     return;
@@ -1473,9 +1423,6 @@ const syncAllUsersData = async () => {
   try {
     const users = await User.find({}).select('_id googleId').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1444',message:'syncAllUsersData:usersFound',data:{count:users.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
 
     await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
       if (user.googleId) {
@@ -1485,23 +1432,14 @@ const syncAllUsersData = async () => {
           // Backend always runs on port 3000 inside container
           const backendUrl = process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
           const requestUrl = `${backendUrl}/api/user/userdata?googleId=${user.googleId}`;
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1358',message:'syncAllUsersData:request',data:{userId:String(user._id),hasGoogleId:true,backendUrl,path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion agent log
           const response = await fetch(requestUrl);
           if (response.ok) {
             console.log(`✅ Successfully synced data for user ${user.email}`);
           } else {
             console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
           }
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1466',message:'syncAllUsersData:response',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion agent log
         } catch (err) {
           console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1471',message:'syncAllUsersData:error',data:{name:err.name,message:err.message,code:err.code || null,causeCode:err.cause?.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion agent log
         }
       }
     });
@@ -1528,18 +1466,12 @@ const setupCronJobs = () => {
   // Daily sync at 12 AM (midnight)
   cron.schedule('0 0 * * *', () => {
     console.log('🔄 Running daily user data sync (midnight)...');
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1398',message:'cronJob:executed',data:{job:'dailySync',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
     syncAllUsersData();
   }, cronOptions);
 
   // Daily step updates at 12 PM (noon)
   cron.schedule('0 12 * * *', async () => {
     console.log('📊 Running daily step update (noon)...');
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1404',message:'cronJob:executed',data:{job:'dailyStepUpdateNoon',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
     await syncAllUsersSteps();
     sendDailyStepUpdate();
   }, cronOptions);
@@ -1561,18 +1493,12 @@ const setupCronJobs = () => {
   // Weigh-in reminders - check daily at 8 AM
   cron.schedule('0 8 * * *', () => {
     console.log('⚖️  Checking for weigh-in reminders...');
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1425',message:'cronJob:executed',data:{job:'weighInReminder',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
     sendWeighInReminder();
   }, cronOptions);
 
   // Weight loss celebrations - check daily at 9 AM (after weigh-in day)
   cron.schedule('0 9 * * *', () => {
     console.log('🎉 Checking for weight loss celebrations...');
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1431',message:'cronJob:executed',data:{job:'weightLossCelebrations',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion agent log
     checkWeightLossCelebrations();
   }, cronOptions);
 
@@ -1721,14 +1647,6 @@ const start = async () => {
     setTimeout(() => {
       checkNewParticipants();
       checkStepPointChanges();
-      // Check for weight loss percentage increases that may have been missed while bot was down
-      // This will catch any increases that happened on today's weigh-in day before restart
-      console.log('🎉 Checking for missed weight loss percentage increases on startup...');
-      if (typeof checkWeightLossPercentageChanges === 'function') {
-        checkWeightLossPercentageChanges();
-      } else {
-        console.log('⚠️ Skipping weight loss percentage check - function not defined');
-      }
     }, 2000); // 2 second delay to ensure all initialization is complete
     
     if (client) {
