@@ -375,7 +375,11 @@ const Chat = () => {
           }
         }
       } catch (error) {
-        console.log('Error checking for new messages:', error);
+        // Silently handle network errors - they're expected on iOS PWAs
+        // Only log non-network errors
+        if (error?.name !== 'TypeError' || !error?.message?.includes('Load failed')) {
+          console.log('Error checking for new messages:', error);
+        }
       }
     }, 3000); // Check every 3 seconds for better real-time feel
     
