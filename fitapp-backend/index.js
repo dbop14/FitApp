@@ -1,6 +1,9 @@
 const express = require('express')
 const app = express()
-const PORT = 3000
+// Backend port: 3000 for production, configurable via PORT env var
+// Development maps host port 3001 to container port 3000
+// Production maps host port 3000 to container port 3000
+const PORT = process.env.PORT || 3000
 const cors = require('cors')
 const { google } = require('googleapis')
 const cron = require('node-cron')
@@ -192,12 +195,20 @@ function isChallengeEnded(challenge) {
 const { ensureValidGoogleTokens } = require('./utils/googleAuth');
 
 // Connect to MongoDB
-const mongoUri = process.env.MONGO_URI || 'mongodb://mongoosedb:27017/fitapp';
+// Add replicaSet parameter if not already present (for replica set mode)
+let mongoUri = process.env.MONGO_URI || 'mongodb://mongoosedb:27017/fitapp';
+if (!mongoUri.includes('replicaSet=') && !mongoUri.includes('?')) {
+  mongoUri += '?replicaSet=rs0';
+} else if (!mongoUri.includes('replicaSet=') && mongoUri.includes('?')) {
+  mongoUri += '&replicaSet=rs0';
+}
 console.log(`🔌 Connecting to MongoDB at ${mongoUri.replace(/\/\/.*@/, '//***:***@')}`);
 
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 30000,
+  connectTimeoutMS: 30000
 }).catch(err => {
   console.error('❌ MongoDB connection error on initial connect:', err.message);
 });

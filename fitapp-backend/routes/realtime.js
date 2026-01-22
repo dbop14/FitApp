@@ -266,8 +266,15 @@ router.get('/events/:googleId', async (req, res) => {
     if (connection) {
       console.log(`🔌 SSE connection closed for user ${googleId} (${connectionId})`)
       activeConnections.delete(connectionId)
-      if (changeStream) {
-        changeStream.close().catch(() => {}) // Silently handle close errors
+      if (changeStream && typeof changeStream.close === 'function') {
+        try {
+          const closeResult = changeStream.close()
+          if (closeResult && typeof closeResult.catch === 'function') {
+            closeResult.catch(() => {}) // Silently handle close errors
+          }
+        } catch (err) {
+          // Ignore errors when closing change stream
+        }
       }
       clearInterval(pollInterval)
       clearInterval(keepAliveInterval)
@@ -282,8 +289,15 @@ router.get('/events/:googleId', async (req, res) => {
       if (connection) {
         console.log(`🔌 SSE connection reset for user ${googleId} (${connectionId})`)
         activeConnections.delete(connectionId)
-        if (changeStream) {
-          changeStream.close().catch(() => {})
+        if (changeStream && typeof changeStream.close === 'function') {
+          try {
+            const closeResult = changeStream.close()
+            if (closeResult && typeof closeResult.catch === 'function') {
+              closeResult.catch(() => {})
+            }
+          } catch (err) {
+            // Ignore errors when closing change stream
+          }
         }
         clearInterval(pollInterval)
         clearInterval(keepAliveInterval)
@@ -292,8 +306,15 @@ router.get('/events/:googleId', async (req, res) => {
       // Only log unexpected errors
       console.error(`❌ SSE connection error for user ${googleId}:`, error)
       activeConnections.delete(connectionId)
-      if (changeStream) {
-        changeStream.close().catch(() => {})
+      if (changeStream && typeof changeStream.close === 'function') {
+        try {
+          const closeResult = changeStream.close()
+          if (closeResult && typeof closeResult.catch === 'function') {
+            closeResult.catch(() => {})
+          }
+        } catch (err) {
+          // Ignore errors when closing change stream
+        }
       }
       clearInterval(pollInterval)
       clearInterval(keepAliveInterval)
@@ -306,8 +327,15 @@ router.get('/events/:googleId', async (req, res) => {
       console.error(`❌ SSE response error for user ${googleId}:`, error)
     }
     activeConnections.delete(connectionId)
-    if (changeStream) {
-      changeStream.close().catch(() => {})
+    if (changeStream && typeof changeStream.close === 'function') {
+      try {
+        const closeResult = changeStream.close()
+        if (closeResult && typeof closeResult.catch === 'function') {
+          closeResult.catch(() => {})
+        }
+      } catch (err) {
+        // Ignore errors when closing change stream
+      }
     }
     clearInterval(pollInterval)
     clearInterval(keepAliveInterval)

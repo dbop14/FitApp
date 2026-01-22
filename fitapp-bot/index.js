@@ -37,7 +37,7 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
-const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb';
+const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327';
 const BOT_TIMEZONE = 'America/New_York';
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
@@ -61,6 +61,59 @@ const getDayBoundsInTimeZone = (date, timeZone = BOT_TIMEZONE) => {
   return { start, end };
 };
 
+// Helper function to trigger push notifications via backend API
+const triggerPushNotifications = async (challengeId, sender, message, messageType = 'text', cardData = undefined, userId = undefined, userPicture = undefined) => {
+  // Use BACKEND_URL or BACKEND_API_URL (docker-compose uses BACKEND_API_URL)
+  // Default to 'backend' service name (works in both dev and prod docker-compose)
+  // Backend always runs on port 3000 inside container
+  const backendUrl = process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
+  const apiUrl = `${backendUrl}/api/chat/${challengeId}/messages`;
+  
+  try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:65',message:'triggerPushNotifications:entry',data:{challengeId:challengeId?.toString() || 'none',messageType,hasCardData:!!cardData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion agent log
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender,
+        message,
+        isBot: true,
+        isSystem: false,
+        messageType,
+        cardData,
+        userId,
+        userPicture
+      })
+    });
+    
+    if (response.ok) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:85',message:'triggerPushNotifications:success',data:{challengeId:challengeId?.toString() || 'none',messageType,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion agent log
+      console.log(`✅ Triggered push notifications via backend API for ${messageType}`);
+      return true;
+    } else {
+      const errorText = await response.text();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:92',message:'triggerPushNotifications:failed',data:{challengeId:challengeId?.toString() || 'none',messageType,status:response.status,error:errorText.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion agent log
+      console.error(`⚠️  Failed to trigger push notifications: ${response.status} - ${errorText.substring(0, 100)}`);
+      return false;
+    }
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:97',message:'triggerPushNotifications:error',data:{challengeId:challengeId?.toString() || 'none',messageType,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion agent log
+    console.error(`⚠️  Error triggering push notifications: ${err.message}`);
+    return false;
+  }
+};
+
 const runWithConcurrency = async (items, limit, handler) => {
   const safeLimit = Math.max(1, Number.isFinite(limit) ? limit : 1);
   let index = 0;
@@ -80,7 +133,7 @@ const registerMatrixUserIfNeeded = async () => {
   const matrixUrl = process.env.MATRIX_HOMESERVER_URL || 'http://synapse:8008';
 
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:80',message:'matrixRegister:entry',data:{botUsername,hasPassword:!!botPassword,hasSharedSecret:!!MATRIX_REGISTRATION_SHARED_SECRET,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:80',message:'matrixRegister:entry',data:{botUsername,hasPassword:!!botPassword,hasSharedSecret:!!MATRIX_REGISTRATION_SHARED_SECRET,matrixUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion agent log
 
   if (!MATRIX_REGISTRATION_SHARED_SECRET || !botPassword) {
@@ -91,7 +144,7 @@ const registerMatrixUserIfNeeded = async () => {
     const nonceResponse = await fetch(`${matrixUrl}/_synapse/admin/v1/register`, { method: 'GET' });
     if (!nonceResponse.ok) {
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:91',message:'matrixRegister:nonceFailed',data:{status:nonceResponse.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:91',message:'matrixRegister:nonceFailed',data:{status:nonceResponse.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion agent log
       return { skipped: false, status: nonceResponse.status };
     }
@@ -121,13 +174,13 @@ const registerMatrixUserIfNeeded = async () => {
       registerBody = null;
     }
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:114',message:'matrixRegister:result',data:{status:registerResponse.status,errcode:registerBody?.errcode || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:114',message:'matrixRegister:result',data:{status:registerResponse.status,errcode:registerBody?.errcode || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
     // #endregion agent log
 
     return { skipped: false, status: registerResponse.status };
   } catch (err) {
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:122',message:'matrixRegister:error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:122',message:'matrixRegister:error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion agent log
     return { skipped: false, error: err.message };
   }
@@ -372,14 +425,23 @@ const hasMessageBeenSentToday = async (challengeId, message, botName, messageTyp
 // Send card message with text message below
 const sendCardMessage = async (roomId, message, challengeId, botName, cardType, cardData, userPicture = null, userId = null) => {
   console.log(`📤 sendCardMessage called: type=${cardType}, roomId=${roomId?.substring(0, 20)}..., hasClient=${!!matrixClient}, connected=${matrixConnected}`);
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:373',message:'sendCardMessage:entry',data:{cardType,hasMatrixClient:!!matrixClient,matrixConnected,hasRoomId:!!roomId,challengeId:challengeId?.toString() || 'none',userId:userId || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion agent log
   if (!matrixClient || !matrixConnected || !roomId) {
     console.log('⚠️  Cannot send Matrix message: client not connected or no room ID');
     console.log(`   Details: matrixClient=${!!matrixClient}, matrixConnected=${matrixConnected}, roomId=${!!roomId}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:375',message:'sendCardMessage:matrixNotConnected',data:{cardType,hasMatrixClient:!!matrixClient,matrixConnected,hasRoomId:!!roomId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion agent log
     return false;
   }
 
   // Check if this message was already sent today
   const isDuplicate = await hasMessageBeenSentToday(challengeId, message, botName, cardType, userId);
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:382',message:'sendCardMessage:duplicateCheck',data:{cardType,isDuplicate,challengeId:challengeId?.toString() || 'none',userId:userId || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion agent log
   if (isDuplicate) {
     console.log(`⏭️  Skipping duplicate message: type=${cardType}, challengeId=${challengeId?.toString() || 'none'}, userId=${userId || 'none'}`);
     return false;
@@ -395,33 +457,45 @@ const sendCardMessage = async (roomId, message, challengeId, botName, cardType, 
     await matrixClient.sendEvent(roomId, 'm.room.message', content);
     console.log(`✅ Sent message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
     console.log(`   Message type: ${cardType}, Challenge ID: ${challengeId?.toString() || 'none'}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:395',message:'sendCardMessage:matrixSent',data:{cardType,challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion agent log
     
-    // Save card message to MongoDB
-    if (challengeId && mongoConnected) {
-      try {
-        const chatMessage = new ChatMessage({
-          challengeId: challengeId.toString(),
-          sender: botName,
-          message: message, // Full text message
-          messageType: cardType,
-          imageUrl: userPicture,
-          cardData: cardData,
-          isBot: true,
-          isSystem: false,
-          userId: userId,
-          userPicture: userPicture,
-          timestamp: new Date()
-        });
-        const savedMessage = await chatMessage.save();
-        console.log(`✅ Saved card message to MongoDB for app display`);
-        console.log(`   Message ID: ${savedMessage._id}`);
-        console.log(`   Message Type: ${savedMessage.messageType}`);
-        console.log(`   Challenge ID: ${savedMessage.challengeId}`);
-        console.log(`   User ID: ${savedMessage.userId || 'none'}`);
-        console.log(`   Has Card Data: ${!!savedMessage.cardData}`);
-      } catch (dbErr) {
-        console.error('⚠️  Failed to save card message to MongoDB:', dbErr.message);
-        console.error('   Error details:', dbErr);
+    // Save message to MongoDB and trigger push notifications via backend API
+    // This ensures push notifications are sent to all participants
+    if (challengeId) {
+      const pushResult = await triggerPushNotifications(challengeId, botName, message, cardType, cardData, userId, userPicture);
+      if (pushResult) {
+        console.log(`✅ Saved card message and triggered push notifications via backend API`);
+      } else {
+        // Fallback: save directly to MongoDB if backend API fails
+        if (mongoConnected) {
+          try {
+            const chatMessage = new ChatMessage({
+              challengeId: challengeId.toString(),
+              sender: botName,
+              message: message,
+              messageType: cardType,
+              imageUrl: userPicture,
+              cardData: cardData,
+              isBot: true,
+              isSystem: false,
+              userId: userId,
+              userPicture: userPicture,
+              timestamp: new Date()
+            });
+            const savedMessage = await chatMessage.save();
+            console.log(`⚠️  Backend API failed, saved directly to MongoDB (no push notifications): ${savedMessage._id}`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:410',message:'sendCardMessage:fallbackMongoSave',data:{cardType,messageId:savedMessage._id.toString(),challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion agent log
+          } catch (dbErr) {
+            console.error('⚠️  Failed to save card message to MongoDB (fallback):', dbErr.message);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:422',message:'sendCardMessage:mongoSaveFailed',data:{cardType,error:dbErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion agent log
+          }
+        }
       }
     }
     
@@ -458,23 +532,37 @@ const sendMatrixMessage = async (roomId, message, challengeId, botName = 'Fitnes
     console.log(`✅ Sent Matrix message to room ${roomId.substring(0, 20)}...: ${message.substring(0, 50)}...`);
     console.log(`   Bot name: ${botName}, Challenge ID: ${challengeId?.toString() || 'none'}, Message Type: ${messageType}`);
     
-    // Also save to MongoDB so it appears in the app
-    if (challengeId && mongoConnected) {
-      try {
-        const chatMessage = new ChatMessage({
-          challengeId: challengeId.toString(),
-          sender: botName,
-          message: message,
-          messageType: messageType,
-          isBot: true,
-          isSystem: false,
-          timestamp: new Date()
-        });
-        await chatMessage.save();
-        console.log(`✅ Saved message to MongoDB for app display`);
-      } catch (dbErr) {
-        console.error('⚠️  Failed to save message to MongoDB:', dbErr.message);
-        // Continue even if MongoDB save fails
+    // Save message to MongoDB and trigger push notifications via backend API
+    // This ensures push notifications are sent to all participants
+    if (challengeId) {
+      const pushResult = await triggerPushNotifications(challengeId, botName, message, messageType);
+      if (pushResult) {
+        console.log(`✅ Saved message and triggered push notifications via backend API`);
+      } else {
+        // Fallback: save directly to MongoDB if backend API fails
+        if (mongoConnected) {
+          try {
+            const chatMessage = new ChatMessage({
+              challengeId: challengeId.toString(),
+              sender: botName,
+              message: message,
+              messageType: messageType,
+              isBot: true,
+              isSystem: false,
+              timestamp: new Date()
+            });
+            await chatMessage.save();
+            console.log(`⚠️  Backend API failed, saved directly to MongoDB (no push notifications)`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:473',message:'sendMatrixMessage:fallbackMongoSave',data:{messageType,challengeId:challengeId?.toString() || 'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion agent log
+          } catch (dbErr) {
+            console.error('⚠️  Failed to save message to MongoDB (fallback):', dbErr.message);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:475',message:'sendMatrixMessage:mongoSaveFailed',data:{messageType,error:dbErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion agent log
+          }
+        }
       }
     }
     
@@ -561,9 +649,7 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
 
 // Monitor step point changes
 const checkStepPointChanges = async () => {
-  console.log('[DEBUG] checkStepPointChanges:entry - mongoConnected:', mongoConnected);
   if (!mongoConnected) {
-    console.log('[DEBUG] checkStepPointChanges:earlyReturn - MongoDB not connected');
     return;
   }
 
@@ -580,7 +666,6 @@ const checkStepPointChanges = async () => {
           .select('challengeId userId stepGoalPoints lastStepDate lastStepCount')
           .lean()
       : [];
-    console.log('[DEBUG] checkStepPointChanges:participantsFound - count:', participants.length);
     
     let totalChecked = 0;
     let increasesFound = 0;
@@ -621,10 +706,31 @@ const startStepPointPolling = () => {
   }, STEP_POINT_POLL_INTERVAL_MS);
 };
 
+// Check if MongoDB is configured as a replica set
+const isReplicaSet = async () => {
+  try {
+    const adminDb = mongoose.connection.db.admin();
+    const status = await adminDb.serverStatus();
+    // Check if this is a replica set member
+    return !!(status.repl && status.repl.setName);
+  } catch (err) {
+    // If we can't check, assume it's not a replica set
+    return false;
+  }
+};
+
 const startStepPointChangeStream = async () => {
+  // Check if MongoDB is a replica set before attempting change streams
+  const isReplSet = await isReplicaSet();
+  if (!isReplSet) {
+    console.log('ℹ️  MongoDB is not configured as a replica set - using polling instead of change streams');
+    console.log('💡 Tip: Configure MongoDB as a replica set for real-time change detection');
+    return false;
+  }
+
   try {
     stepPointChangeStream = ChallengeParticipant.watch([], { fullDocument: 'updateLookup' });
-    console.log('✅ Step point change stream started');
+    console.log('✅ Step point change stream started (real-time detection enabled)');
 
     stepPointChangeStream.on('change', async (change) => {
       if (!change?.fullDocument) {
@@ -649,7 +755,12 @@ const startStepPointChangeStream = async () => {
     });
 
     stepPointChangeStream.on('error', (err) => {
-      console.error('❌ Step point change stream error:', err.message);
+      // Only log as warning if it's the replica set error (expected in standalone mode)
+      if (err.message && err.message.includes('replica sets')) {
+        console.log('ℹ️  Change stream requires replica set - falling back to polling (this is expected for standalone MongoDB)');
+      } else {
+        console.error('❌ Step point change stream error:', err.message);
+      }
       if (!stepPointInterval) {
         startStepPointPolling();
       }
@@ -657,7 +768,12 @@ const startStepPointChangeStream = async () => {
 
     return true;
   } catch (err) {
-    console.error('⚠️ Step point change stream unavailable, falling back to polling:', err.message);
+    // Only log as warning if it's the replica set error (expected in standalone mode)
+    if (err.message && err.message.includes('replica sets')) {
+      console.log('ℹ️  Change stream requires replica set - using polling instead (this is expected for standalone MongoDB)');
+    } else {
+      console.error('⚠️ Step point change stream unavailable, falling back to polling:', err.message);
+    }
     return false;
   }
 };
@@ -665,7 +781,11 @@ const startStepPointChangeStream = async () => {
 const startStepPointMonitoring = async () => {
   const started = await startStepPointChangeStream();
   if (!started) {
+    console.log('📊 Using polling for step point changes (every 10 minutes)');
+    console.log('⚠️  Polling is less efficient - consider configuring MongoDB as a replica set for real-time updates');
     startStepPointPolling();
+  } else {
+    console.log('⚡ Real-time step point monitoring active via change streams');
   }
 };
 
@@ -686,6 +806,9 @@ const isWeighInDay = (weighInDay) => {
 
 // Send daily step progress update (plain text, not a card)
 const sendDailyStepUpdate = async () => {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:688',message:'sendDailyStepUpdate:entry',data:{mongoConnected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion agent log
   if (!mongoConnected) {
     return;
   }
@@ -758,13 +881,16 @@ const sendDailyStepUpdate = async () => {
       const botName = challenge.botName || 'Fitness Motivator';
       console.log(`   📤 Sending daily step update to room ${challenge.matrixRoomId} with ${participantData.length} participants`);
       // Send as plain text message, not a card
-      await sendMatrixMessage(
+      const sendResult = await sendMatrixMessage(
         challenge.matrixRoomId,
         message,
         challenge._id,
         botName,
         'text'
       );
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:761',message:'sendDailyStepUpdate:messageSent',data:{challengeId:challenge._id.toString(),sendResult},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion agent log
       console.log(`   ✅ Daily step update sent for challenge ${challenge.name}`);
     }
     console.log(`✅ Finished sending daily step updates`);
@@ -1336,7 +1462,8 @@ const sendChallengeStartReminders = async () => {
 const syncAllUsersData = async () => {
   console.log('🔄 Starting daily sync of all users data...');
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1316',message:'syncAllUsersData:entry',data:{mongoConnected,backendHost:'fitapp-backend',backendPort:3000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  const backendUrl = process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
+  fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1339',message:'syncAllUsersData:entry',data:{mongoConnected,backendUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion agent log
   if (!mongoConnected) {
     console.error('❌ Cannot sync user data: MongoDB not connected.');
@@ -1347,15 +1474,19 @@ const syncAllUsersData = async () => {
     const users = await User.find({}).select('_id googleId').lean();
     console.log(`🔍 Found ${users.length} users to sync.`);
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1324',message:'syncAllUsersData:usersFound',data:{count:users.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1444',message:'syncAllUsersData:usersFound',data:{count:users.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion agent log
 
     await runWithConcurrency(users, SYNC_CONCURRENCY, async (user) => {
       if (user.googleId) {
         try {
-          const requestUrl = `http://fitapp-backend:3000/api/user/userdata?googleId=${user.googleId}`;
+          // Use BACKEND_URL or BACKEND_API_URL (docker-compose uses BACKEND_API_URL)
+          // Default to 'backend' service name (works in both dev and prod docker-compose)
+          // Backend always runs on port 3000 inside container
+          const backendUrl = process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
+          const requestUrl = `${backendUrl}/api/user/userdata?googleId=${user.googleId}`;
           // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1329',message:'syncAllUsersData:request',data:{userId:String(user._id),hasGoogleId:true,origin:'http://fitapp-backend:3000',path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1358',message:'syncAllUsersData:request',data:{userId:String(user._id),hasGoogleId:true,backendUrl,path:'/api/user/userdata'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
           // #endregion agent log
           const response = await fetch(requestUrl);
           if (response.ok) {
@@ -1364,12 +1495,12 @@ const syncAllUsersData = async () => {
             console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
           }
           // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1334',message:'syncAllUsersData:response',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1466',message:'syncAllUsersData:response',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
           // #endregion agent log
         } catch (err) {
           console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
           // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1336',message:'syncAllUsersData:error',data:{name:err.name,message:err.message,code:err.code || null,causeCode:err.cause?.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1471',message:'syncAllUsersData:error',data:{name:err.name,message:err.message,code:err.code || null,causeCode:err.cause?.code || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
           // #endregion agent log
         }
       }
@@ -1397,12 +1528,18 @@ const setupCronJobs = () => {
   // Daily sync at 12 AM (midnight)
   cron.schedule('0 0 * * *', () => {
     console.log('🔄 Running daily user data sync (midnight)...');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1398',message:'cronJob:executed',data:{job:'dailySync',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
     syncAllUsersData();
   }, cronOptions);
 
   // Daily step updates at 12 PM (noon)
   cron.schedule('0 12 * * *', async () => {
     console.log('📊 Running daily step update (noon)...');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1404',message:'cronJob:executed',data:{job:'dailyStepUpdateNoon',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
     await syncAllUsersSteps();
     sendDailyStepUpdate();
   }, cronOptions);
@@ -1424,12 +1561,18 @@ const setupCronJobs = () => {
   // Weigh-in reminders - check daily at 8 AM
   cron.schedule('0 8 * * *', () => {
     console.log('⚖️  Checking for weigh-in reminders...');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1425',message:'cronJob:executed',data:{job:'weighInReminder',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
     sendWeighInReminder();
   }, cronOptions);
 
   // Weight loss celebrations - check daily at 9 AM (after weigh-in day)
   cron.schedule('0 9 * * *', () => {
     console.log('🎉 Checking for weight loss celebrations...');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:1431',message:'cronJob:executed',data:{job:'weightLossCelebrations',time:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion agent log
     checkWeightLossCelebrations();
   }, cronOptions);
 
