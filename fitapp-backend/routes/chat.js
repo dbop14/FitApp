@@ -16,9 +16,13 @@ router.get('/:challengeId/messages', async (req, res) => {
   }
   
   try {
+    // Get the most recent messages (sort descending, limit, then reverse for chronological order)
     const messages = await ChatMessage.find({ challengeId })
-      .sort({ timestamp: 1 })
+      .sort({ timestamp: -1 }) // Sort descending to get newest first
       .limit(100); // Limit to last 100 messages
+    
+    // Reverse to show oldest to newest for display (chronological order)
+    messages.reverse();
     
     res.json(messages);
   } catch (err) {
