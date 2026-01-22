@@ -103,16 +103,44 @@ const Chat = () => {
       try {
         // Update chatService cache (localStorage)
         chatService.saveToCache(activeChallenge._id, messages);
-        
-        // Also update sessionStorage for backward compatibility
+      } catch (e) {
+        // Ignore storage errors - chatService handles quota errors internally
+        console.warn('Failed to save to chatService cache:', e);
+      }
+      
+      // Also update sessionStorage for backward compatibility (with error handling)
+      try {
         const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
-        const cappedMessages = chatService.pruneMessages(messages, chatService.maxCachedMessages || 300);
+        const cappedMessages = chatService.pruneMessages(messages, chatService.maxCachedMessages || 200);
         sessionStorage.setItem(cacheKey, JSON.stringify({
           messages: cappedMessages,
           timestamp: Date.now()
         }))
       } catch (e) {
-        // Ignore storage errors
+        // Ignore sessionStorage errors - not critical
+        if (e?.name === 'QuotaExceededError') {
+          // Try to clear old sessionStorage entries
+          try {
+            const keysToRemove = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              if (key && key.startsWith('fitapp_chat_messages_') && key !== `fitapp_chat_messages_${activeChallenge._id}`) {
+                keysToRemove.push(key);
+              }
+            }
+            keysToRemove.forEach(key => sessionStorage.removeItem(key));
+            // Retry once after cleanup
+            const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+            const cappedMessages = chatService.pruneMessages(messages, 50); // Very small cache
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              messages: cappedMessages,
+              timestamp: Date.now()
+            }))
+          } catch (retryError) {
+            // Give up on sessionStorage caching
+            console.warn('Failed to save to sessionStorage after cleanup:', retryError);
+          }
+        }
       }
     }
   }, [messages, activeChallenge?._id])

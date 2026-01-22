@@ -20,9 +20,10 @@ class ChatService {
     this.lastTokenWarningTime = 0;
     this.lastApiErrorWarningTime = 0;
     this.apiErrorWarningCount = 0;
-    this.maxCachedMessages = 300;
-    this.maxOfflineMessages = 50;
+    this.maxCachedMessages = 200; // Reduced from 300 to prevent quota issues
+    this.maxOfflineMessages = 30; // Reduced from 50
     this.lastCacheWarningTime = 0;
+    this.maxCacheSizeBytes = 2 * 1024 * 1024; // 2MB per challenge cache limit
   }
 
   // Get cache key for a specific challenge
@@ -60,16 +61,45 @@ class ChatService {
 
   // Save messages to local storage
   saveToCache(challengeId, messages) {
-    const prunedMessages = this.pruneMessages(messages, this.maxCachedMessages);
+    if (!challengeId || !messages) {
+      return;
+    }
+
+    // First, try to prune based on size to prevent quota errors
+    let prunedMessages = this.pruneMessagesBySize(messages, this.maxCacheSizeBytes);
+    // Then prune by count
+    prunedMessages = this.pruneMessages(prunedMessages, this.maxCachedMessages);
+    
     try {
-      localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(prunedMessages));
+      const cacheKey = this.getCacheKey(challengeId);
+      const lastSyncKey = this.getLastSyncKey(challengeId);
+      const serialized = JSON.stringify(prunedMessages);
+      
+      // Check if we're about to exceed quota before attempting save
+      if (this.wouldExceedQuota(cacheKey, serialized)) {
+        // Aggressively clear old caches first
+        this.clearOldChatCaches(challengeId);
+      }
+      
+      localStorage.setItem(cacheKey, serialized);
       // Update last sync timestamp
-      localStorage.setItem(this.getLastSyncKey(challengeId), Date.now().toString());
+      localStorage.setItem(lastSyncKey, Date.now().toString());
     } catch (error) {
       if (this.isQuotaExceededError(error)) {
+        // Try more aggressive recovery
         const recovered = this.tryRecoverFromQuota(challengeId, prunedMessages);
         if (!recovered) {
-          this.warnCacheOnce('Failed to save chat cache (storage full)', error);
+          // Last resort: clear all other chat caches and try again
+          this.clearAllOtherChatCaches(challengeId);
+          try {
+            const finalPruned = this.pruneMessages(prunedMessages, 50); // Very small cache
+            localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(finalPruned));
+            localStorage.setItem(this.getLastSyncKey(challengeId), Date.now().toString());
+            this.warnCacheOnce('Chat cache saved with reduced size due to storage limits', error);
+          } catch (retryError) {
+            this.warnCacheOnce('Failed to save chat cache (storage full)', retryError);
+            // Don't throw - allow app to continue without cache
+          }
         }
         return;
       }
@@ -175,8 +205,14 @@ class ChatService {
         timestamp: new Date(msg.timestamp)
       }));
 
-      this.saveToCache(challengeId, processedMessages);
-      console.log('Fetched and cached messages:', processedMessages.length);
+      // Try to save to cache, but don't fail if it doesn't work
+      try {
+        this.saveToCache(challengeId, processedMessages);
+        console.log('Fetched and cached messages:', processedMessages.length);
+      } catch (cacheError) {
+        // Log but don't throw - we still have the messages from API
+        console.warn('Failed to cache messages, but continuing with API data:', cacheError);
+      }
       
       return processedMessages;
     } catch (error) {
@@ -235,8 +271,13 @@ class ChatService {
         msg.id === optimisticMessage.id ? { ...savedMessage, timestamp: new Date(savedMessage.timestamp) } : msg
       );
       
-      this.saveToCache(challengeId, updatedMessages);
-      console.log('Updated cache with saved message');
+      try {
+        this.saveToCache(challengeId, updatedMessages);
+        console.log('Updated cache with saved message');
+      } catch (cacheError) {
+        // Log but don't fail - message was successfully sent to server
+        console.warn('Failed to update cache after sending message:', cacheError);
+      }
       
       return savedMessage;
     } catch (error) {
@@ -345,7 +386,12 @@ class ChatService {
         // Immediately update cache with the new message to prevent duplicate detections
         // This prevents the same message from being detected as "new" on subsequent checks
         const updatedCache = [...cachedMessages, latestMessage];
-        this.saveToCache(challengeId, updatedCache);
+        try {
+          this.saveToCache(challengeId, updatedCache);
+        } catch (cacheError) {
+          // Log but don't fail - we can still return the new message info
+          console.warn('Failed to update cache with new message:', cacheError);
+        }
         
         return {
           hasNew: true,
@@ -400,6 +446,59 @@ class ChatService {
       return messages;
     }
     return messages.slice(messages.length - maxCount);
+  }
+
+  // Prune messages based on size (bytes) to prevent quota issues
+  pruneMessagesBySize(messages, maxBytes) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return messages;
+    }
+    
+    // Start from the end (most recent messages) and work backwards
+    let totalSize = 0;
+    const result = [];
+    
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      const messageSize = new Blob([JSON.stringify(message)]).size;
+      
+      if (totalSize + messageSize > maxBytes && result.length > 0) {
+        break;
+      }
+      
+      result.unshift(message);
+      totalSize += messageSize;
+    }
+    
+    return result;
+  }
+
+  // Check if saving would exceed quota
+  wouldExceedQuota(key, value) {
+    try {
+      // Estimate current localStorage usage
+      let currentSize = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) {
+          const item = localStorage.getItem(k);
+          if (item) {
+            currentSize += new Blob([item]).size;
+          }
+        }
+      }
+      
+      // Estimate new size
+      const existingValue = localStorage.getItem(key);
+      const existingSize = existingValue ? new Blob([existingValue]).size : 0;
+      const newSize = new Blob([value]).size;
+      const estimatedTotal = currentSize - existingSize + newSize;
+      
+      // Most browsers have ~5-10MB limit, be conservative
+      return estimatedTotal > 4 * 1024 * 1024; // 4MB threshold
+    } catch {
+      return false; // If we can't check, proceed anyway
+    }
   }
 
   isQuotaExceededError(error) {
@@ -479,6 +578,110 @@ class ChatService {
     keysToRemove.forEach((key) => {
       localStorage.removeItem(key);
     });
+  }
+
+  // Clear old chat caches based on last sync time (keep only recent ones)
+  clearOldChatCaches(currentChallengeId) {
+    try {
+      const currentCacheKey = this.getCacheKey(currentChallengeId);
+      const currentLastSyncKey = this.getLastSyncKey(currentChallengeId);
+      const currentOfflineKey = this.getOfflineMessagesKey(currentChallengeId);
+      
+      const now = Date.now();
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      const keysToRemove = [];
+      const challengeSyncTimes = [];
+
+      // First pass: collect all challenge sync times
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        if (key.startsWith(this.lastSyncKey) && key !== currentLastSyncKey) {
+          try {
+            const timestamp = parseInt(localStorage.getItem(key) || '0');
+            if (timestamp > 0) {
+              const challengeId = key.replace(`${this.lastSyncKey}_`, '');
+              challengeSyncTimes.push({ challengeId, timestamp, key });
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+
+      // Sort by timestamp (oldest first)
+      challengeSyncTimes.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Remove old caches (keep only the 3 most recent challenges)
+      const toKeep = 3;
+      const toRemove = challengeSyncTimes.slice(0, Math.max(0, challengeSyncTimes.length - toKeep));
+      
+      toRemove.forEach(({ challengeId }) => {
+        keysToRemove.push(this.getCacheKey(challengeId));
+        keysToRemove.push(this.getLastSyncKey(challengeId));
+        keysToRemove.push(this.getOfflineMessagesKey(challengeId));
+      });
+
+      // Also remove any caches without sync timestamps (orphaned)
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        if (key.startsWith(this.cacheKey) && key !== currentCacheKey) {
+          const challengeId = key.replace(`${this.cacheKey}_`, '');
+          const hasSyncKey = localStorage.getItem(this.getLastSyncKey(challengeId));
+          if (!hasSyncKey) {
+            keysToRemove.push(key);
+            keysToRemove.push(this.getOfflineMessagesKey(challengeId));
+          }
+        }
+      }
+
+      keysToRemove.forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // Ignore removal errors
+        }
+      });
+    } catch (error) {
+      console.warn('Error clearing old chat caches:', error);
+    }
+  }
+
+  // Clear all other chat caches (more aggressive)
+  clearAllOtherChatCaches(currentChallengeId) {
+    try {
+      const currentCacheKey = this.getCacheKey(currentChallengeId);
+      const currentLastSyncKey = this.getLastSyncKey(currentChallengeId);
+      const currentOfflineKey = this.getOfflineMessagesKey(currentChallengeId);
+      const keysToRemove = [];
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        const isChatKey =
+          key.startsWith(this.cacheKey) ||
+          key.startsWith(this.lastSyncKey) ||
+          key.startsWith(this.offlineMessagesKey);
+
+        if (isChatKey && key !== currentCacheKey && key !== currentLastSyncKey && key !== currentOfflineKey) {
+          keysToRemove.push(key);
+        }
+      }
+
+      keysToRemove.forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // Ignore removal errors
+        }
+      });
+    } catch (error) {
+      console.warn('Error clearing all other chat caches:', error);
+    }
   }
 }
 
