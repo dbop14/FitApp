@@ -383,7 +383,23 @@ class ChatService {
       const latestMessage = messages[messages.length - 1];
       const cachedMessages = this.loadFromCache(challengeId);
       
-      if (cachedMessages.length === 0) return null;
+      // If cache is empty but we have messages from API, treat as new messages
+      if (cachedMessages.length === 0) {
+        // Update cache with all messages
+        try {
+          this.saveToCache(challengeId, messages);
+        } catch (cacheError) {
+          // Log but don't fail - we can still return the new message info
+          console.warn('Failed to update cache with messages:', cacheError);
+        }
+        
+        return {
+          hasNew: true,
+          count: messages.length,
+          latestTimestamp: new Date(latestMessage.timestamp),
+          latestMessage: latestMessage
+        };
+      }
 
       const lastCachedMessage = cachedMessages[cachedMessages.length - 1];
       

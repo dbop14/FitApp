@@ -109,36 +109,40 @@ const Chat = () => {
       }
       
       // Also update sessionStorage for backward compatibility (with error handling)
-      try {
-        const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
-        const cappedMessages = chatService.pruneMessages(messages, chatService.maxCachedMessages || 200);
-        sessionStorage.setItem(cacheKey, JSON.stringify({
-          messages: cappedMessages,
-          timestamp: Date.now()
-        }))
-      } catch (e) {
-        // Ignore sessionStorage errors - not critical
-        if (e?.name === 'QuotaExceededError') {
-          // Try to clear old sessionStorage entries
-          try {
-            const keysToRemove = [];
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const key = sessionStorage.key(i);
-              if (key && key.startsWith('fitapp_chat_messages_') && key !== `fitapp_chat_messages_${activeChallenge._id}`) {
-                keysToRemove.push(key);
+      // Skip sessionStorage on iOS PWAs due to very strict quotas
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      if (!isIOS) {
+        try {
+          const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+          const cappedMessages = chatService.pruneMessages(messages, chatService.maxCachedMessages || 200);
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            messages: cappedMessages,
+            timestamp: Date.now()
+          }))
+        } catch (e) {
+          // Ignore sessionStorage errors - not critical
+          if (e?.name === 'QuotaExceededError') {
+            // Try to clear old sessionStorage entries
+            try {
+              const keysToRemove = [];
+              for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key && key.startsWith('fitapp_chat_messages_') && key !== `fitapp_chat_messages_${activeChallenge._id}`) {
+                  keysToRemove.push(key);
+                }
               }
+              keysToRemove.forEach(key => sessionStorage.removeItem(key));
+              // Retry once after cleanup with even smaller cache
+              const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+              const cappedMessages = chatService.pruneMessages(messages, 25); // Very small cache
+              sessionStorage.setItem(cacheKey, JSON.stringify({
+                messages: cappedMessages,
+                timestamp: Date.now()
+              }))
+            } catch (retryError) {
+              // Give up on sessionStorage caching - it's not critical
+              // Silently fail to avoid console spam
             }
-            keysToRemove.forEach(key => sessionStorage.removeItem(key));
-            // Retry once after cleanup
-            const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
-            const cappedMessages = chatService.pruneMessages(messages, 50); // Very small cache
-            sessionStorage.setItem(cacheKey, JSON.stringify({
-              messages: cappedMessages,
-              timestamp: Date.now()
-            }))
-          } catch (retryError) {
-            // Give up on sessionStorage caching
-            console.warn('Failed to save to sessionStorage after cleanup:', retryError);
           }
         }
       }
@@ -430,22 +434,25 @@ const Chat = () => {
       return;
     }
     
-    // Check cache first
-    try {
-      const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
-      const cached = sessionStorage.getItem(cacheKey)
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        if (parsed.messages) {
-          setMessages(parsed.messages)
-          setIsConnected(true)
-          hasEverBeenReadyRef.current = true
-          setLoading(false) // Show cached messages immediately
-          // Still fetch fresh data in background
+    // Check cache first (skip sessionStorage on iOS due to strict quotas)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (!isIOS) {
+      try {
+        const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+        const cached = sessionStorage.getItem(cacheKey)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (parsed.messages) {
+            setMessages(parsed.messages)
+            setIsConnected(true)
+            hasEverBeenReadyRef.current = true
+            setLoading(false) // Show cached messages immediately
+            // Still fetch fresh data in background
+          }
         }
+      } catch (e) {
+        // Ignore cache errors
       }
-    } catch (e) {
-      // Ignore cache errors
     }
     
     try {
