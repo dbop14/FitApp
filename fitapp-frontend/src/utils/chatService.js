@@ -20,6 +20,9 @@ class ChatService {
     this.lastTokenWarningTime = 0;
     this.lastApiErrorWarningTime = 0;
     this.apiErrorWarningCount = 0;
+    this.maxCachedMessages = 300;
+    this.maxOfflineMessages = 50;
+    this.lastCacheWarningTime = 0;
   }
 
   // Get cache key for a specific challenge
@@ -57,11 +60,19 @@ class ChatService {
 
   // Save messages to local storage
   saveToCache(challengeId, messages) {
+    const prunedMessages = this.pruneMessages(messages, this.maxCachedMessages);
     try {
-      localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(messages));
+      localStorage.setItem(this.getCacheKey(challengeId), JSON.stringify(prunedMessages));
       // Update last sync timestamp
       localStorage.setItem(this.getLastSyncKey(challengeId), Date.now().toString());
     } catch (error) {
+      if (this.isQuotaExceededError(error)) {
+        const recovered = this.tryRecoverFromQuota(challengeId, prunedMessages);
+        if (!recovered) {
+          this.warnCacheOnce('Failed to save chat cache (storage full)', error);
+        }
+        return;
+      }
       console.warn('Failed to save chat cache:', error);
     }
   }
@@ -81,9 +92,16 @@ class ChatService {
     try {
       const key = this.getOfflineMessagesKey(challengeId);
       const offlineMessages = JSON.parse(localStorage.getItem(key) || '[]');
-      offlineMessages.push(message);
-      localStorage.setItem(key, JSON.stringify(offlineMessages));
+      const cappedMessages = [...offlineMessages, message].slice(-this.maxOfflineMessages);
+      localStorage.setItem(key, JSON.stringify(cappedMessages));
     } catch (error) {
+      if (this.isQuotaExceededError(error)) {
+        const recovered = this.tryRecoverFromQuota(challengeId, [message], true);
+        if (!recovered) {
+          this.warnCacheOnce('Failed to save offline message (storage full)', error);
+        }
+        return;
+      }
       console.warn('Failed to save offline message:', error);
     }
   }
@@ -372,6 +390,95 @@ class ChatService {
     } catch (error) {
       return null;
     }
+  }
+
+  pruneMessages(messages, maxCount) {
+    if (!Array.isArray(messages)) {
+      return [];
+    }
+    if (messages.length <= maxCount) {
+      return messages;
+    }
+    return messages.slice(messages.length - maxCount);
+  }
+
+  isQuotaExceededError(error) {
+    return error?.name === 'QuotaExceededError' || error?.code === 22;
+  }
+
+  warnCacheOnce(message, error) {
+    const now = Date.now();
+    if (!this.lastCacheWarningTime || now - this.lastCacheWarningTime > 300000) {
+      console.warn(message, error);
+      this.lastCacheWarningTime = now;
+    }
+  }
+
+  tryRecoverFromQuota(challengeId, messages, isOffline = false) {
+    try {
+      // Attempt to free space by clearing other chat caches
+      this.clearOtherChatCaches(challengeId);
+    } catch {
+      // Ignore cleanup failures
+    }
+
+    const cacheKey = isOffline
+      ? this.getOfflineMessagesKey(challengeId)
+      : this.getCacheKey(challengeId);
+    const lastSyncKey = this.getLastSyncKey(challengeId);
+    const fallbackLimits = isOffline ? [10, 5, 1] : [200, 100, 50];
+
+    for (const limit of fallbackLimits) {
+      try {
+        const trimmed = this.pruneMessages(messages, limit);
+        localStorage.setItem(cacheKey, JSON.stringify(trimmed));
+        if (!isOffline) {
+          localStorage.setItem(lastSyncKey, Date.now().toString());
+        }
+        return true;
+      } catch (error) {
+        if (!this.isQuotaExceededError(error)) {
+          console.warn('Failed to save chat cache:', error);
+          return false;
+        }
+      }
+    }
+
+    // Last resort: drop this cache entry to avoid repeated failures
+    try {
+      localStorage.removeItem(cacheKey);
+      if (!isOffline) {
+        localStorage.removeItem(lastSyncKey);
+      }
+    } catch {
+      // Ignore cleanup failures
+    }
+    return false;
+  }
+
+  clearOtherChatCaches(currentChallengeId) {
+    const currentCacheKey = this.getCacheKey(currentChallengeId);
+    const currentLastSyncKey = this.getLastSyncKey(currentChallengeId);
+    const currentOfflineKey = this.getOfflineMessagesKey(currentChallengeId);
+    const keysToRemove = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+
+      const isChatKey =
+        key.startsWith(this.cacheKey) ||
+        key.startsWith(this.lastSyncKey) ||
+        key.startsWith(this.offlineMessagesKey);
+
+      if (isChatKey && key !== currentCacheKey && key !== currentLastSyncKey && key !== currentOfflineKey) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      localStorage.removeItem(key);
+    });
   }
 }
 
