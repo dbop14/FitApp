@@ -309,8 +309,9 @@ router.get('/userdata', async (req, res) => {
   console.log(`📥 GET /api/user/userdata - googleId: ${req.query.googleId}`);
   const { googleId } = req.query;
   if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
+  let user = null; // Declare outside try block so it's available in catch
   try {
-    const user = await User.findOne({ googleId });
+    user = await User.findOne({ googleId });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -516,7 +517,7 @@ router.get('/userdata', async (req, res) => {
     // This ensures the frontend always gets data even if sync fails
     // Try to fetch user again if not already available
     let userForError = user;
-    if (!userForError) {
+    if (!userForError && googleId) {
       try {
         userForError = await User.findOne({ googleId });
       } catch (dbErr) {
