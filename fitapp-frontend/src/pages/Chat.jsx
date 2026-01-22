@@ -106,8 +106,9 @@ const Chat = () => {
         
         // Also update sessionStorage for backward compatibility
         const cacheKey = `fitapp_chat_messages_${activeChallenge._id}`
+        const cappedMessages = chatService.pruneMessages(messages, chatService.maxCachedMessages || 300);
         sessionStorage.setItem(cacheKey, JSON.stringify({
-          messages,
+          messages: cappedMessages,
           timestamp: Date.now()
         }))
       } catch (e) {
