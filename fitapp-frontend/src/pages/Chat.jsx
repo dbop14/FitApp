@@ -76,15 +76,16 @@ const Chat = () => {
   }, [userChallenges, completedChallenges])
   
   // Load cached messages immediately when active challenge changes
+  // Note: Cache may be pruned, so we'll fetch fresh from API in initializeChat
   useEffect(() => {
     if (activeChallenge?._id) {
       // Load from cache immediately (synchronously) for instant display
+      // This is just for quick UI feedback - initializeChat will fetch complete data
       const cachedMessages = chatService.loadFromCache(activeChallenge._id);
       if (cachedMessages.length > 0) {
         setMessages(cachedMessages);
         setIsConnected(true);
-        setLoading(false);
-        setHasLoadedMessages(true);
+        // Don't set loading to false here - let initializeChat handle it after fetching complete data
         // Update last seen message count
         lastSeenMessageCountRef.current = cachedMessages.length;
       } else {
@@ -461,9 +462,9 @@ const Chat = () => {
       }
       setError(null);
       
-      // Load existing messages from cache/API
-      // fetchMessages will use cache if it's fresh (< 2 minutes), otherwise fetch from API
-      const existingMessages = await chatService.fetchMessages(activeChallenge._id, false);
+      // Load existing messages from API (force refresh to ensure we have all messages)
+      // Cache may be pruned, so always fetch from API on initialization
+      const existingMessages = await chatService.fetchMessages(activeChallenge._id, true);
       
       setMessages(existingMessages || []);
       setHasLoadedMessages(true);

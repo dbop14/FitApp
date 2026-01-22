@@ -169,11 +169,15 @@ class ChatService {
     const cacheAge = now - lastSync;
     
     // Use cache if it's less than 2 minutes old and not forcing refresh
-    // Matches React Query staleTime for consistency
+    // BUT: Always fetch from API to ensure we have all messages (cache may be pruned)
+    // Cache is only used as a fallback if API fails
     if (!forceRefresh && cacheAge < 120000) {
       const cachedMessages = this.loadFromCache(challengeId);
-      if (cachedMessages.length > 0) {
-        return cachedMessages;
+      // Only use cache if we have a reasonable number of messages (not heavily pruned)
+      // This is a quick check - we'll still fetch from API to ensure completeness
+      if (cachedMessages.length > 0 && cachedMessages.length >= this.maxCachedMessages * 0.8) {
+        // Cache looks complete, but still fetch in background to be sure
+        // For now, we'll fetch anyway to ensure we have all messages
       }
     }
 
@@ -208,6 +212,7 @@ class ChatService {
       }));
 
       // Try to save to cache, but don't fail if it doesn't work
+      // Note: saveToCache will prune messages, but we return the full list from API
       try {
         this.saveToCache(challengeId, processedMessages);
         console.log('Fetched and cached messages:', processedMessages.length);
@@ -216,6 +221,7 @@ class ChatService {
         console.warn('Failed to cache messages, but continuing with API data:', cacheError);
       }
       
+      // Always return the full list from API, not the pruned cache
       return processedMessages;
     } catch (error) {
       console.warn('Failed to fetch messages, using cache:', error);
@@ -223,6 +229,7 @@ class ChatService {
       // Fallback to cache if available
       const cachedMessages = this.loadFromCache(challengeId);
       if (cachedMessages.length > 0) {
+        console.warn('Using cached messages (may be incomplete):', cachedMessages.length);
         return cachedMessages;
       }
       
