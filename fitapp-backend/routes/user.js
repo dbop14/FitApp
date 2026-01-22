@@ -514,14 +514,23 @@ router.get('/userdata', async (req, res) => {
     console.error('Failed to fetch Google Fit data:', err);
     // If Google Fit fetch fails, return stored data instead of error
     // This ensures the frontend always gets data even if sync fails
-    if (user) {
-      console.log(`📊 Returning stored data due to Google Fit sync error for ${user.email}`);
+    // Try to fetch user again if not already available
+    let userForError = user;
+    if (!userForError) {
+      try {
+        userForError = await User.findOne({ googleId });
+      } catch (dbErr) {
+        console.error('Failed to fetch user in error handler:', dbErr.message);
+      }
+    }
+    if (userForError) {
+      console.log(`📊 Returning stored data due to Google Fit sync error for ${userForError.email}`);
       res.json({ 
-        steps: user.steps || 0, 
-        weight: user.weight || null, 
-        lastSync: user.lastSync || null,
-        name: user.name || null,
-        picture: user.picture || null
+        steps: userForError.steps || 0, 
+        weight: userForError.weight || null, 
+        lastSync: userForError.lastSync || null,
+        name: userForError.name || null,
+        picture: userForError.picture || null
       });
     } else {
       console.error('User not found, cannot return stored data');

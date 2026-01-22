@@ -68,6 +68,58 @@ docker-compose up -d --build
 # Wait a moment for containers to start
 sleep 5
 
+# Wait for MongoDB to be ready and initialize replica set if needed
+echo "⏳ Waiting for MongoDB to be ready..."
+MONGO_READY=false
+MONGO_CONTAINER="fitapp-dev-db"
+for i in {1..30}; do
+    if docker exec "$MONGO_CONTAINER" mongo --port 27017 --eval "db.adminCommand('ping')" --quiet > /dev/null 2>&1; then
+        MONGO_READY=true
+        echo "✅ MongoDB is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "⚠️  MongoDB is not responding after 30 seconds"
+        echo "   Replica set initialization will be skipped"
+        MONGO_READY=false
+        break
+    fi
+    sleep 1
+done
+
+# Initialize MongoDB replica set if needed
+if [ "$MONGO_READY" = true ]; then
+    echo "🔍 Checking MongoDB replica set status..."
+    
+    # Check if replica set is already initialized
+    RS_STATUS=$(docker exec "$MONGO_CONTAINER" mongo --port 27017 --eval "try { rs.status().set; } catch(err) { print('NOT_INIT'); }" --quiet 2>/dev/null)
+    
+    if echo "$RS_STATUS" | grep -q "rs0"; then
+        echo "✅ MongoDB replica set already initialized: rs0"
+    else
+        echo "🔧 Initializing MongoDB replica set..."
+        INIT_RESULT=$(docker exec "$MONGO_CONTAINER" mongo --port 27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongoosedb:27017'}]})" --quiet 2>&1)
+        INIT_EXIT=$?
+        
+        if [ $INIT_EXIT -eq 0 ]; then
+            echo "✅ MongoDB replica set initialized successfully"
+            echo "⏳ Waiting for replica set to become ready..."
+            sleep 5
+            
+            # Verify initialization
+            RS_VERIFY=$(docker exec "$MONGO_CONTAINER" mongo --port 27017 --eval "rs.status().set" --quiet 2>/dev/null)
+            if echo "$RS_VERIFY" | grep -q "rs0"; then
+                echo "✅ Replica set verified: rs0"
+            else
+                echo "⚠️  Warning: Replica set initialization may not have completed"
+            fi
+        else
+            echo "⚠️  Warning: Replica set initialization may have failed"
+            echo "$INIT_RESULT"
+        fi
+    fi
+fi
+
 # Show status
 echo ""
 echo "📊 Development Container Status:"
