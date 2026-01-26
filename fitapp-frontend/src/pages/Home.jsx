@@ -74,9 +74,9 @@ const Home = () => {
             </div>
           </section>
 
-          {/* Privacy Policy Link - Prominent and immediately visible */}
+          {/* Privacy Policy and Terms of Service Links - Prominent and immediately visible */}
           <section className="mb-8">
-            <div className="bg-white border-2 border-blue-300 rounded-lg p-6 max-w-4xl mx-auto text-center">
+            <div className="bg-white border-2 border-blue-300 rounded-lg p-6 max-w-4xl mx-auto text-center space-y-4">
               <p className="text-lg text-gray-800">
                 <strong>Privacy Policy:</strong> For information about how we collect, use, and protect your data, please review our{' '}
                 <a 
@@ -85,6 +85,16 @@ const Home = () => {
                   title="Privacy Policy"
                 >
                   Privacy Policy
+                </a>.
+              </p>
+              <p className="text-lg text-gray-800">
+                <strong>Terms of Service:</strong> By using FitApp, you agree to our{' '}
+                <a 
+                  href="https://fitapp.herringm.com/terms-of-service" 
+                  className="text-blue-600 hover:text-blue-800 underline font-bold text-xl"
+                  title="Terms of Service"
+                >
+                  Terms of Service
                 </a>.
               </p>
             </div>

@@ -5,7 +5,7 @@ const FitnessHistorySchema = new mongoose.Schema({
   date: { type: Date, required: true, index: true }, // Date (normalized to start of day)
   steps: { type: Number, default: 0 },
   weight: { type: Number }, // Weight in lbs (can be null if not recorded that day)
-  source: { type: String, enum: ['google-fit', 'manual', 'sync'], default: 'sync' }, // How the data was obtained
+  source: { type: String, enum: ['google-fit', 'fitbit', 'manual', 'sync'], default: 'sync' }, // How the data was obtained
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

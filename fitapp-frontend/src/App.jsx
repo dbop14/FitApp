@@ -13,8 +13,10 @@ import CompletedChallenges from './pages/CompletedChallenges'
 import Chat from './pages/Chat'
 import Settings from './pages/Settings'
 import AccountSettings from './pages/AccountSettings'
+import DataSourceSettings from './pages/DataSourceSettings'
 import Notifications from './pages/Notifications'
 import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 import Home from './pages/Home'
 import StepsHistory from './pages/StepsHistory'
 import WeightHistory from './pages/WeightHistory'
@@ -37,6 +39,7 @@ const StatusBarTheme = () => {
       '/completed-challenges',
       '/settings',
       '/account-settings',
+      '/data-source-settings',
       '/notifications',
       '/steps-history',
       '/weight-history',
@@ -107,6 +110,9 @@ const App = () => {
             {/* Public Privacy Policy page */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
+            {/* Public Terms of Service page */}
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+
             {/* ✅ Protected pages wrapped with Navbar layout */}
             <Route
               path="/dashboard"
@@ -161,6 +167,14 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <MainLayout><AccountSettings /></MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/data-source-settings"
+              element={
+                <ProtectedRoute>
+                  <MainLayout><DataSourceSettings /></MainLayout>
                 </ProtectedRoute>
               }
             />

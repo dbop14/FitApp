@@ -109,9 +109,85 @@ const StepsHistory = () => {
     return Date.now() < (parseInt(expiry, 10) - bufferTime)
   }
 
+  // Fetch missing days from the appropriate data source (Google Fit or Fitbit)
+  const fetchMissingDaysFromDataSource = async (missingDays, dayMap) => {
+    if (missingDays.length === 0) {
+      return dayMap
+    }
+    
+    // Check user's data source
+    const dataSource = user?.dataSource || 'google-fit'
+    
+    // For Fitbit, fetch from backend which handles Fitbit API calls
+    if (dataSource === 'fitbit') {
+      return await fetchMissingDaysFromFitbit(missingDays, dayMap)
+    }
+    
+    // For Google Fit, use existing logic
+    if (!hasValidGoogleFitPermissions()) {
+      return dayMap
+    }
+    
+    return await fetchMissingDaysFromGoogleFit(missingDays, dayMap)
+  }
+  
+  // Fetch missing days from Fitbit via backend
+  const fetchMissingDaysFromFitbit = async (missingDays, dayMap) => {
+    try {
+      const sortedMissingDays = [...missingDays].sort((a, b) => a - b)
+      const startDate = new Date(sortedMissingDays[0])
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(sortedMissingDays[sortedMissingDays.length - 1])
+      endDate.setHours(23, 59, 59, 999)
+      
+      console.log('🔄 Fetching missing days from Fitbit via backend:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        missingDaysCount: missingDays.length
+      })
+      
+      const apiUrl = getApiUrl()
+      const startDateStr = startDate.toISOString().split('T')[0]
+      const endDateStr = endDate.toISOString().split('T')[0]
+      
+      const response = await fetchWithAuth(
+        `${apiUrl}/api/user/fitness-history/${user.sub}?startDate=${startDateStr}&endDate=${endDateStr}&limit=100`
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        const today = new Date()
+        
+        data.forEach(entry => {
+          if (entry.date && entry.steps !== null && entry.steps !== undefined) {
+            const entryDate = new Date(entry.date)
+            const dateKey = entryDate.toISOString().split('T')[0]
+            
+            // Only update if this day was missing and we found data
+            if (dayMap.has(dateKey) && dayMap.get(dateKey).steps === 0 && entry.steps > 0) {
+              const isToday = entryDate.toDateString() === today.toDateString()
+              dayMap.set(dateKey, {
+                date: entryDate,
+                steps: entry.steps,
+                isToday
+              })
+              console.log(`✅ Fetched ${entry.steps} steps for ${dateKey} from Fitbit`)
+            }
+          }
+        })
+      } else {
+        console.warn('⚠️ Failed to fetch missing days from Fitbit:', response.status)
+      }
+    } catch (error) {
+      console.error('❌ Error fetching missing days from Fitbit:', error)
+    }
+    
+    return dayMap
+  }
+  
   // Fetch missing days from Google Fit
   const fetchMissingDaysFromGoogleFit = async (missingDays, dayMap) => {
-    if (missingDays.length === 0 || !hasValidGoogleFitPermissions()) {
+    if (!hasValidGoogleFitPermissions()) {
       return dayMap
     }
 
@@ -383,10 +459,10 @@ const StepsHistory = () => {
             }
           })
           
-          // Fetch missing days from Google Fit if available
+          // Fetch missing days from the appropriate data source if available
           let finalDayMap = dayMap
           if (missingDays.length > 0) {
-            finalDayMap = await fetchMissingDaysFromGoogleFit(missingDays, dayMap)
+            finalDayMap = await fetchMissingDaysFromDataSource(missingDays, dayMap)
           }
           
           // Convert to array and sort by date

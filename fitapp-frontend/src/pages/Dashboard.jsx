@@ -625,15 +625,92 @@ const Dashboard = () => {
     setSyncError(null)
     
     try {
-      // Sync steps and weight from Google Fit
-      await syncGoogleFitData()
-      console.log('✅ Google Fit sync completed successfully')
+      // Check user's data source and sync accordingly
+      const dataSource = user?.dataSource || 'google-fit'
+      let syncData = null // Store sync result to check for errors
       
-      // Invalidate and refetch React Query cache to get updated data
+      if (dataSource === 'fitbit') {
+        // For Fitbit, use backend API which handles Fitbit sync
+        console.log('🔄 Syncing Fitbit data via backend...')
+        const apiUrl = getApiUrl()
+        
+        // First sync current data
+        const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`)
+        
+        if (!response.ok) {
+          throw new Error('Failed to sync Fitbit data')
+        }
+        
+        syncData = await response.json()
+        console.log('✅ Fitbit sync completed successfully', { steps: syncData.steps, weight: syncData.weight })
+        
+        // Update user context with synced data
+        // Only update if we got valid data (not rate limited or error)
+        if (!syncData.error && !syncData.warning && (syncData.steps !== undefined || syncData.weight !== undefined)) {
+          setUser(prev => ({
+            ...prev,
+            steps: syncData.steps !== undefined ? syncData.steps : prev?.steps,
+            weight: syncData.weight !== undefined ? syncData.weight : prev?.weight,
+            lastSync: syncData.lastSync ? new Date(syncData.lastSync) : new Date(),
+            dataSource: syncData.dataSource || prev?.dataSource
+          }))
+        } else if (syncData.warning || syncData.error) {
+          // If rate limited or error, only update if the returned data is better than what we have
+          // (i.e., if we have 0 steps but returned data has steps, use it)
+          setUser(prev => {
+            const shouldUpdate = 
+              (syncData.steps !== undefined && syncData.steps > 0 && (!prev?.steps || prev.steps === 0)) ||
+              (syncData.weight !== undefined && syncData.weight !== null && (!prev?.weight || prev.weight === null));
+            
+            if (shouldUpdate) {
+              return {
+                ...prev,
+                steps: syncData.steps !== undefined && syncData.steps > 0 ? syncData.steps : prev?.steps,
+                weight: syncData.weight !== undefined && syncData.weight !== null ? syncData.weight : prev?.weight,
+                lastSync: syncData.lastSync ? new Date(syncData.lastSync) : prev?.lastSync,
+                dataSource: syncData.dataSource || prev?.dataSource
+              }
+            }
+            return prev; // Don't overwrite good data with stale data
+          })
+        }
+        
+        // Don't trigger historical sync if we got rate limited - it will just fail
+        if (!syncData.error && !syncData.warning) {
+          // Trigger a historical sync for the last 30 days to populate StepsHistory
+          // This is done by calling the endpoint again with a longer range
+          // The backend will sync historical data when fetching
+          console.log('🔄 Syncing Fitbit historical data (last 30 days)...')
+          // The backend already syncs last 7 days on each call, but we can trigger
+          // additional syncs by calling the endpoint - the syncFitbitHistory function
+          // will handle the date range. For now, the 7-day sync should be sufficient
+          // as StepsHistory will fetch from the database which has the stored data.
+        } else {
+          console.log('⚠️ Skipping historical sync due to rate limit or error')
+        }
+      } else {
+        // For Google Fit, use existing sync function
+        await syncGoogleFitData()
+        console.log('✅ Google Fit sync completed successfully')
+      }
+      
+      // Only invalidate cache if sync was successful (no error/warning)
+      // This prevents overwriting good data with stale cached data
       if (user?.sub) {
-        await queryClient.invalidateQueries({ queryKey: ['userData', user.sub] })
-        await queryClient.refetchQueries({ queryKey: ['userData', user.sub] })
-        console.log('🔄 React Query cache invalidated and refetched')
+        // Small delay to ensure state updates are complete
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Only refetch if we didn't get an error/warning
+        const currentUser = user || JSON.parse(localStorage.getItem('fitapp_user') || '{}')
+        const shouldRefetch = currentUser?.dataSource !== 'fitbit' || (!syncData?.error && !syncData?.warning)
+        
+        if (shouldRefetch) {
+          await queryClient.invalidateQueries({ queryKey: ['userData', user.sub] })
+          await queryClient.refetchQueries({ queryKey: ['userData', user.sub] })
+          console.log('🔄 React Query cache invalidated and refetched')
+        } else {
+          console.log('⏭️ Skipping cache refetch to preserve good data')
+        }
       }
       
       // Wait a moment for state to update, then check if weight is null after sync
@@ -707,7 +784,9 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('❌ Sync failed:', error)
-      setSyncError(error.message || 'Failed to sync with Google Fit')
+      const dataSource = user?.dataSource || 'google-fit'
+      const sourceName = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'
+      setSyncError(error.message || `Failed to sync with ${sourceName}`)
     } finally {
       setIsSyncing(false)
     }

@@ -78,7 +78,8 @@ const OAuthCallback = () => {
           picture: userData.picture || null,
           steps: userData.steps || 0,
           weight: userData.weight || null,
-          lastSync: userData.lastSync || null
+          lastSync: userData.lastSync || null,
+          dataSource: userData.dataSource || 'google-fit' // Preserve data source preference
         }
         
         console.log('👤 Frontend user data prepared:', frontendUserData)

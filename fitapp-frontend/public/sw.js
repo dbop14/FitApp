@@ -1,9 +1,10 @@
 // Icon version: Update this when icons change (must match manifest _iconVersion)
 const ICON_VERSION = 2;
-// Increment cache version to force service worker update (especially for Safari PWA)
-const SW_VERSION = 6; // Incremented to force cache update
-const CACHE_NAME = `fitapp-cache-v${SW_VERSION}-icons-${ICON_VERSION}`; // Increment version to force update
-const API_CACHE_NAME = `fitapp-api-cache-v${SW_VERSION}`; // Separate cache for API responses
+// Build version: Auto-injected by Vite plugin during build (timestamp-based)
+// This ensures every build gets a unique version without manual updates
+const SW_VERSION = '__BUILD_VERSION__'; // Will be replaced during build
+const CACHE_NAME = `fitapp-cache-v${SW_VERSION}-icons-${ICON_VERSION}`;
+const API_CACHE_NAME = `fitapp-api-cache-v${SW_VERSION}`;
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -212,9 +213,9 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Handle messages from the main thread to show notifications
-// This is required for iOS PWA notifications
+// Handle messages from the main thread
 self.addEventListener('message', (event) => {
+  // Handle notification requests (required for iOS PWA notifications)
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     
@@ -227,6 +228,12 @@ self.addEventListener('message', (event) => {
           console.error('❌ Failed to show notification:', error);
         })
     );
+  }
+  
+  // Handle skip waiting request (for immediate updates)
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('🔄 Skipping waiting phase, activating new service worker immediately');
+    self.skipWaiting();
   }
 });
 

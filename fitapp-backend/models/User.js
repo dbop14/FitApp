@@ -10,7 +10,12 @@ const UserSchema = new mongoose.Schema({
   lastSync: Date,
   accessToken: String,
   refreshToken: String,
-  tokenExpiry: Number
+  tokenExpiry: Number,
+  dataSource: { type: String, enum: ['google-fit', 'fitbit'], default: 'google-fit' },
+  fitbitAccessToken: String,
+  fitbitRefreshToken: String,
+  fitbitTokenExpiry: Number,
+  fitbitUserId: String
 });
 
 module.exports = mongoose.model('User', UserSchema); 

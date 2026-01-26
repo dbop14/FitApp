@@ -28,13 +28,14 @@ export const useUserData = () => {
       
       const data = await response.json()
       
-      // Update user context with name/picture if they're provided (from backend)
-      if (data.name !== undefined || data.picture !== undefined) {
+      // Update user context with name/picture/dataSource if they're provided (from backend)
+      if (data.name !== undefined || data.picture !== undefined || data.dataSource !== undefined) {
         setUser(prev => {
           if (!prev) return prev
           const updates = {}
           if (data.name !== undefined) updates.name = data.name
           if (data.picture !== undefined) updates.picture = data.picture
+          if (data.dataSource !== undefined) updates.dataSource = data.dataSource
           return { ...prev, ...updates }
         })
       }
@@ -44,8 +45,9 @@ export const useUserData = () => {
         weight: data.weight,
         lastSync: data.lastSync,
         name: data.name,
-        picture: data.picture
-      }
+        picture: data.picture,
+        dataSource: data.dataSource
+      };
     },
     enabled: !!user?.sub, // Only run if user exists
     staleTime: 2 * 60 * 1000, // 2 minutes (matches global config)
