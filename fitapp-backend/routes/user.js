@@ -7,6 +7,7 @@ const FitnessHistory = require('../models/FitnessHistory');
 const { google } = require('googleapis');
 const { broadcastUserUpdate } = require('./realtime');
 const { ensureValidGoogleTokens } = require('../utils/googleAuth');
+const { fetchFitbitData, syncFitbitHistory } = require('../services/fitbitService');
 
 // POST /api/user/userdata - upsert user fitness data
 router.post('/userdata', async (req, res) => {
@@ -304,7 +305,7 @@ router.post('/userdata', async (req, res) => {
   }
 });
 
-// GET /api/user/userdata?googleId=... - get stored user data, optionally sync from Google Fit
+// GET /api/user/userdata?googleId=... - get stored user data, optionally sync from Google Fit or Fitbit
 router.get('/userdata', async (req, res) => {
   console.log(`📥 GET /api/user/userdata - googleId: ${req.query.googleId}`);
   const { googleId } = req.query;
@@ -316,6 +317,169 @@ router.get('/userdata', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // Determine data source (default to google-fit for backward compatibility)
+    const dataSource = user.dataSource || 'google-fit';
+    
+    // If using Fitbit, check for Fitbit tokens
+    if (dataSource === 'fitbit') {
+      if (!user.fitbitAccessToken) {
+        console.log(`📊 Returning stored data for ${user.email} (no Fitbit access token available)`);
+        return res.json({ 
+          steps: user.steps || 0, 
+          weight: user.weight || null, 
+          lastSync: user.lastSync || null,
+          name: user.name || null,
+          picture: user.picture || null,
+          dataSource: dataSource
+        });
+      }
+      
+      // Fetch data from Fitbit
+      try {
+        // Check if we synced recently (within last 2 minutes) to avoid rate limits
+        const now = new Date();
+        const lastSyncTime = user.lastSync ? new Date(user.lastSync) : null;
+        const timeSinceLastSync = lastSyncTime ? (now - lastSyncTime) : Infinity;
+        const recentSyncThreshold = 2 * 60 * 1000; // 2 minutes
+        
+        // If we synced recently and have valid data, return stored data to avoid rate limits
+        if (timeSinceLastSync < recentSyncThreshold && user.steps !== null && user.steps !== undefined) {
+          console.log(`📊 Returning recent Fitbit data (synced ${Math.round(timeSinceLastSync / 1000)}s ago) to avoid rate limits`);
+          const cachedResponse = { 
+            steps: user.steps || 0, 
+            weight: user.weight || null, 
+            lastSync: user.lastSync || null,
+            name: user.name || null,
+            picture: user.picture || null,
+            dataSource: dataSource
+          };
+          return res.json(cachedResponse);
+        }
+        
+        const start = new Date(now);
+        start.setDate(start.getDate() - 7); // Query last 7 days for weight
+        start.setHours(0, 0, 0, 0);
+        
+        const fitbitData = await fetchFitbitData(user, start, now);
+        
+        // Update user with Fitbit data
+        // If API call failed (rate limit, etc.), preserve stored steps instead of overwriting with 0
+        const previousSteps = user.steps;
+        const previousWeight = user.weight;
+        
+        // Only update steps if API call succeeded OR if we got valid data (> 0)
+        // If API failed and returned 0, preserve existing stored steps
+        if (fitbitData.stepsFetchFailed && fitbitData.steps === 0 && user.steps > 0) {
+          // API call failed, preserve stored steps
+          console.log(`⚠️ Fitbit API failed, preserving stored steps: ${user.steps}`);
+        } else {
+          // API call succeeded or returned valid data, use it
+          user.steps = fitbitData.steps || 0;
+        }
+        if (fitbitData.weight !== null && fitbitData.weight !== undefined) {
+          user.weight = fitbitData.weight;
+        }
+        user.lastSync = new Date();
+        await user.save();
+        
+        // Store today's data in history
+        const today = FitnessHistory.normalizeDate(new Date());
+        await FitnessHistory.findOneAndUpdate(
+          { userId: googleId, date: today },
+          {
+            $set: {
+              steps: fitbitData.steps || 0,
+              weight: fitbitData.weight || null,
+              source: 'fitbit',
+              updatedAt: new Date()
+            },
+            $setOnInsert: {
+              createdAt: new Date()
+            }
+          },
+          { upsert: true }
+        );
+        
+        // Sync historical data - sync last 30 days to populate history properly
+        // This ensures StepsHistory has data to display
+        const historyStart = new Date(now);
+        historyStart.setDate(historyStart.getDate() - 30); // Sync last 30 days
+        historyStart.setHours(0, 0, 0, 0);
+        
+        try {
+          await syncFitbitHistory(user, historyStart, now);
+          console.log(`📊 Synced Fitbit history for ${user.email} (last 30 days)`);
+        } catch (historyError) {
+          console.error('⚠️ Error syncing Fitbit history:', historyError);
+          // Don't fail the request if history sync fails
+        }
+        
+        // Broadcast update if data changed
+        const didStepsChange = user.steps !== previousSteps;
+        const didWeightChange = user.weight !== previousWeight;
+        if (didStepsChange || didWeightChange) {
+          broadcastUserUpdate(user.googleId, {
+            steps: user.steps,
+            weight: user.weight,
+            lastSync: user.lastSync
+          });
+        }
+        
+        const responseData = { 
+          steps: user.steps, 
+          weight: user.weight || null, 
+          lastSync: user.lastSync,
+          name: user.name || null,
+          picture: user.picture || null,
+          dataSource: dataSource
+        };
+        return res.json(responseData);
+      } catch (fitbitError) {
+        console.error('❌ Failed to fetch Fitbit data:', fitbitError);
+        
+        // Check if this is a rate limit error (429)
+        const isRateLimit = fitbitError.message && (
+          fitbitError.message.includes('429') || 
+          fitbitError.message.includes('RESOURCE_EXHAUSTED') ||
+          fitbitError.message.includes('rate limit')
+        );
+        
+        // If rate limited and we have recent data, return it
+        if (isRateLimit) {
+          const lastSyncTime = user.lastSync ? new Date(user.lastSync) : null;
+          const timeSinceLastSync = lastSyncTime ? (Date.now() - lastSyncTime.getTime()) : Infinity;
+          const recentDataThreshold = 10 * 60 * 1000; // 10 minutes
+          
+          if (timeSinceLastSync < recentDataThreshold && user.steps !== null && user.steps !== undefined) {
+            console.log(`⚠️ Fitbit rate limited, returning recent stored data (synced ${Math.round(timeSinceLastSync / 1000)}s ago)`);
+            return res.json({ 
+              steps: user.steps || 0, 
+              weight: user.weight || null, 
+              lastSync: user.lastSync || null,
+              name: user.name || null,
+              picture: user.picture || null,
+              dataSource: dataSource,
+              warning: 'Fitbit rate limited, using recent stored data'
+            });
+          } else {
+            console.log(`⚠️ Fitbit rate limited and stored data is old (${Math.round(timeSinceLastSync / 1000)}s ago), returning it anyway`);
+          }
+        }
+        
+        // Return stored data on error (but don't overwrite if frontend has newer data)
+        return res.json({ 
+          steps: user.steps || 0, 
+          weight: user.weight || null, 
+          lastSync: user.lastSync || null,
+          name: user.name || null,
+          picture: user.picture || null,
+          dataSource: dataSource,
+          error: isRateLimit ? 'Fitbit rate limited, returning stored data' : 'Fitbit sync failed, returning stored data'
+        });
+      }
+    }
+    
+    // Default: Google Fit (existing logic)
     // If user has no access token, just return stored data
     if (!user.accessToken) {
       console.log(`📊 Returning stored data for ${user.email} (no access token available)`);
@@ -324,7 +488,8 @@ router.get('/userdata', async (req, res) => {
         weight: user.weight || null, 
         lastSync: user.lastSync || null,
         name: user.name || null,
-        picture: user.picture || null
+        picture: user.picture || null,
+        dataSource: dataSource
       });
     }
 
@@ -376,16 +541,91 @@ router.get('/userdata', async (req, res) => {
         endTimeMillis: end.getTime()
       }),
     });
+    
+    // Check if API call failed
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Google Fit API error: ${response.status} - ${errorText}`);
+      // Return stored data instead of overwriting with 0
+      return res.json({ 
+        steps: user.steps || 0, 
+        weight: user.weight || null, 
+        lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null,
+        dataSource: dataSource,
+        error: 'Google Fit API failed, returning stored data'
+      });
+    }
+    
     const data = await response.json();
     
     // Store historical data for each day in the response
+    let todaySteps = 0;
+    let todayWeight = null;
     if (data.bucket && data.bucket.length > 0) {
       for (const bucket of data.bucket) {
-        // Google Fit returns startTimeMillisNanos (nanoseconds) - convert to milliseconds
-        const bucketStartMillis = bucket.startTimeMillisNanos ? 
-          parseInt(bucket.startTimeMillisNanos) / 1000000 : 
-          bucket.startTimeMillis;
-        const bucketDate = FitnessHistory.normalizeDate(new Date(bucketStartMillis));
+        // Google Fit API can return timestamps in different formats:
+        // - startTimeMillisNanos: nanoseconds (need to divide by 1,000,000)
+        // - startTimeMillis: milliseconds (use directly)
+        // Sometimes startTimeMillisNanos is actually in milliseconds despite the name
+        const rawNanos = bucket.startTimeMillisNanos;
+        const rawMillis = bucket.startTimeMillis;
+        
+        let bucketStartMillis;
+        if (rawMillis !== undefined && rawMillis !== null) {
+          // Prefer startTimeMillis if available (already in milliseconds)
+          bucketStartMillis = typeof rawMillis === 'string' ? parseInt(rawMillis, 10) : rawMillis;
+        } else if (rawNanos !== undefined && rawNanos !== null) {
+          // If only startTimeMillisNanos is available, check if it's actually nanoseconds or milliseconds
+          const nanos = typeof rawNanos === 'string' ? parseInt(rawNanos, 10) : rawNanos;
+          // If the value is very large (> year 2200 in milliseconds), assume it's nanoseconds
+          // Otherwise, assume it's already in milliseconds (despite the field name)
+          const year2200InMillis = 7258118400000;
+          if (nanos > year2200InMillis) {
+            bucketStartMillis = nanos / 1000000; // Convert nanoseconds to milliseconds
+          } else {
+            bucketStartMillis = nanos; // Already in milliseconds
+          }
+        } else {
+          console.warn(`⚠️ Bucket missing timestamp fields, skipping:`, { 
+            hasNanos: rawNanos !== undefined, 
+            hasMillis: rawMillis !== undefined,
+            bucketKeys: Object.keys(bucket)
+          });
+          continue;
+        }
+        
+        // Validate timestamp before creating Date
+        if (bucketStartMillis === null || bucketStartMillis === undefined || isNaN(bucketStartMillis) || bucketStartMillis <= 0) {
+          console.warn(`⚠️ Invalid bucket timestamp, skipping: ${bucketStartMillis}`, { 
+            rawNanos, 
+            rawMillis, 
+            calculated: bucketStartMillis 
+          });
+          continue;
+        }
+        
+        // Additional validation: check if timestamp is reasonable (between 1970 and 2100)
+        const minTimestamp = 0; // Jan 1, 1970
+        const maxTimestamp = 4102444800000; // Jan 1, 2100
+        if (bucketStartMillis < minTimestamp || bucketStartMillis > maxTimestamp) {
+          console.warn(`⚠️ Timestamp out of reasonable range: ${bucketStartMillis}, skipping bucket`);
+          continue;
+        }
+        
+        const bucketDateObj = new Date(bucketStartMillis);
+        // Validate Date object is valid
+        if (isNaN(bucketDateObj.getTime())) {
+          console.warn(`⚠️ Invalid Date created from timestamp ${bucketStartMillis}, skipping bucket`, {
+            rawNanos,
+            rawMillis,
+            calculated: bucketStartMillis
+          });
+          continue;
+        }
+        
+        const bucketDate = FitnessHistory.normalizeDate(bucketDateObj);
         
         const stepsData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.step_count.delta');
         const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight');
@@ -393,6 +633,13 @@ router.get('/userdata', async (req, res) => {
         const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
         const weightKg = weightData?.point?.[0]?.value?.[0]?.fpVal ?? null;
         const weight = weightKg ? Math.round(weightKg * 2.20462 * 100) / 100 : null; // Convert kg to lbs
+        
+        // Track today's data
+        const today = FitnessHistory.normalizeDate(new Date());
+        if (bucketDate.getTime() === today.getTime()) {
+          todaySteps = steps;
+          todayWeight = weight;
+        }
         
         // Store each day's data in history (only if we have data for that day)
         if (steps > 0 || weight !== null) {
@@ -423,10 +670,15 @@ router.get('/userdata', async (req, res) => {
       const bucketStartMillis = b.startTimeMillisNanos ? 
         parseInt(b.startTimeMillisNanos) / 1000000 : 
         b.startTimeMillis;
+      // Validate timestamp before comparing
+      if (!bucketStartMillis || isNaN(bucketStartMillis) || bucketStartMillis <= 0) {
+        return false;
+      }
       return bucketStartMillis >= todayStart.getTime();
     });
     const stepsData = todayBucket?.dataset?.find(d => d.dataTypeName === 'com.google.step_count.delta');
-    const stepsFromGoogleFit = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
+    // If no data found, use null (not 0) to indicate API returned no data vs actual 0 steps
+    const stepsFromGoogleFit = stepsData?.point?.[0]?.value?.[0]?.intVal ?? (data.bucket && data.bucket.length > 0 ? 0 : null);
     
     // Get the MOST RECENT weight from the last 7 days (not just today's)
     let weight = null;
@@ -503,14 +755,17 @@ router.get('/userdata', async (req, res) => {
     }
     // Return values: prefer Google Fit value when present, otherwise return stored DB value
     const weightToReturn = (weight !== null && weight !== undefined) ? weight : (user.weight || null);
-
-    res.json({ 
-      steps, 
+    // Use the calculated 'steps' value which already has the preservation logic applied
+    const stepsToReturn = steps;
+    const responseData = { 
+      steps: stepsToReturn, 
       weight: weightToReturn, 
       lastSync: user.lastSync,
       name: user.name || null,
-      picture: user.picture || null
-    });
+      picture: user.picture || null,
+      dataSource: dataSource
+    };
+    res.json(responseData);
   } catch (err) {
     console.error('Failed to fetch Google Fit data:', err);
     // If Google Fit fetch fails, return stored data instead of error
@@ -531,7 +786,8 @@ router.get('/userdata', async (req, res) => {
         weight: userForError.weight || null, 
         lastSync: userForError.lastSync || null,
         name: userForError.name || null,
-        picture: userForError.picture || null
+        picture: userForError.picture || null,
+        dataSource: userForError.dataSource || 'google-fit'
       });
     } else {
       console.error('User not found, cannot return stored data');
@@ -581,6 +837,75 @@ router.put('/profile', async (req, res) => {
   } catch (err) {
     console.error('❌ Failed to update user profile:', err);
     res.status(500).json({ error: 'Failed to update profile', details: err.message });
+  }
+});
+
+// PUT /api/user/datasource - update user's data source preference
+router.put('/datasource', async (req, res) => {
+  const { googleId, dataSource } = req.body;
+  
+  if (!googleId) {
+    return res.status(400).json({ error: 'Missing googleId' });
+  }
+  
+  if (!dataSource || !['google-fit', 'fitbit'].includes(dataSource)) {
+    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit" or "fitbit"' });
+  }
+  
+  try {
+    const user = await User.findOne({ googleId });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // If switching to Fitbit, check if user has Fitbit tokens
+    if (dataSource === 'fitbit' && !user.fitbitAccessToken) {
+      return res.status(400).json({ 
+        error: 'Fitbit not connected. Please connect your Fitbit account first.',
+        requiresAuth: true
+      });
+    }
+    
+    // Update data source
+    user.dataSource = dataSource;
+    await user.save();
+    
+    console.log(`✅ Updated data source for user ${googleId} to ${dataSource}`);
+    
+    res.json({ 
+      message: 'Data source updated successfully',
+      dataSource: user.dataSource
+    });
+  } catch (err) {
+    console.error('❌ Failed to update data source:', err);
+    res.status(500).json({ error: 'Failed to update data source', details: err.message });
+  }
+});
+
+// GET /api/user/datasource?googleId=... - get user's data source preference and connection status
+router.get('/datasource', async (req, res) => {
+  const { googleId } = req.query;
+  
+  if (!googleId) {
+    return res.status(400).json({ error: 'Missing googleId' });
+  }
+  
+  try {
+    const user = await User.findOne({ googleId });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      dataSource: user.dataSource || 'google-fit',
+      googleFitConnected: !!user.accessToken,
+      fitbitConnected: !!user.fitbitAccessToken
+    });
+  } catch (err) {
+    console.error('❌ Failed to get data source status:', err);
+    res.status(500).json({ error: 'Failed to get data source status', details: err.message });
   }
 });
 

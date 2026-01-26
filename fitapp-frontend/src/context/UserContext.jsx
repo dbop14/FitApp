@@ -526,7 +526,7 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Auto-refresh function that syncs Google Fit data and step points
+  // Auto-refresh function that syncs data based on user's dataSource preference
   const autoRefreshUserData = async (silent = true) => {
     if (!user?.sub) {
       return null;
@@ -536,39 +536,71 @@ export const UserProvider = ({ children }) => {
       if (!silent) console.log('🔄 Auto-refreshing user data...');
       
       const now = Date.now();
-      let syncedGoogleFit = false;
+      let syncedData = false;
+      const dataSource = user?.dataSource || 'google-fit';
       
-      // Check if we're rate limited
-      if (rateLimitedUntil.current && now < rateLimitedUntil.current) {
-        const remainingMinutes = Math.ceil((rateLimitedUntil.current - now) / 60000);
-        if (!silent) console.log(`⏳ Google Fit rate limited for ${remainingMinutes} more minute(s), skipping Google Fit sync`);
-      } else {
-        // Check if we synced recently (within last 2 minutes)
-        const timeSinceLastSync = lastGoogleFitSync.current ? now - lastGoogleFitSync.current : Infinity;
-        const minSyncInterval = 2 * 60 * 1000; // 2 minutes
-        
-        // Only sync Google Fit if user has valid permissions and enough time has passed
-        if (timeSinceLastSync >= minSyncInterval && hasValidGoogleFitPermissions()) {
-          try {
-            // 1. Try to sync Google Fit data
-            await syncGoogleFitData();
-            lastGoogleFitSync.current = now;
-            syncedGoogleFit = true;
-            if (!silent) console.log('✅ Google Fit data synced successfully');
-          } catch (error) {
-            // Handle rate limiting
-            if (error.message.includes('429') || error.message.includes('RATE_LIMIT_EXCEEDED')) {
-              console.log('⚠️ Google Fit rate limited, will retry in 5 minutes');
-              rateLimitedUntil.current = now + (5 * 60 * 1000); // 5 minutes
-            } else {
-              if (!silent) console.log('⚠️ Google Fit sync failed, continuing with step points sync:', error.message);
+      // Check user's data source preference
+      if (dataSource === 'fitbit') {
+        // For Fitbit, use backend API which handles Fitbit sync
+        try {
+          if (!silent) console.log('🔄 Syncing Fitbit data via backend...');
+          const apiUrl = getApiUrl();
+          const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            // Update user context with synced data
+            if (data.steps !== undefined || data.weight !== undefined) {
+              setUser(prev => ({
+                ...prev,
+                steps: data.steps !== undefined ? data.steps : prev?.steps,
+                weight: data.weight !== undefined ? data.weight : prev?.weight,
+                lastSync: data.lastSync ? new Date(data.lastSync) : new Date(),
+                dataSource: data.dataSource || prev?.dataSource || 'fitbit'
+              }));
             }
+            syncedData = true;
+            if (!silent) console.log('✅ Fitbit data synced successfully');
+          } else {
+            if (!silent) console.log('⚠️ Fitbit sync failed, continuing with step points sync');
           }
-        } else if (timeSinceLastSync < minSyncInterval) {
-          const nextSyncIn = Math.ceil((minSyncInterval - timeSinceLastSync) / 1000);
-          if (!silent) console.log(`🕐 Google Fit synced recently, next sync in ${nextSyncIn} seconds`);
-        } else if (!hasValidGoogleFitPermissions()) {
-          if (!silent) console.log('⚠️ User does not have valid Google Fit permissions, skipping sync');
+        } catch (error) {
+          if (!silent) console.log('⚠️ Fitbit sync error, continuing with step points sync:', error.message);
+        }
+      } else {
+        // Default: Google Fit sync
+        // Check if we're rate limited
+        if (rateLimitedUntil.current && now < rateLimitedUntil.current) {
+          const remainingMinutes = Math.ceil((rateLimitedUntil.current - now) / 60000);
+          if (!silent) console.log(`⏳ Google Fit rate limited for ${remainingMinutes} more minute(s), skipping Google Fit sync`);
+        } else {
+          // Check if we synced recently (within last 2 minutes)
+          const timeSinceLastSync = lastGoogleFitSync.current ? now - lastGoogleFitSync.current : Infinity;
+          const minSyncInterval = 2 * 60 * 1000; // 2 minutes
+          
+          // Only sync Google Fit if user has valid permissions and enough time has passed
+          if (timeSinceLastSync >= minSyncInterval && hasValidGoogleFitPermissions()) {
+            try {
+              // 1. Try to sync Google Fit data
+              await syncGoogleFitData();
+              lastGoogleFitSync.current = now;
+              syncedData = true;
+              if (!silent) console.log('✅ Google Fit data synced successfully');
+            } catch (error) {
+              // Handle rate limiting
+              if (error.message.includes('429') || error.message.includes('RATE_LIMIT_EXCEEDED')) {
+                console.log('⚠️ Google Fit rate limited, will retry in 5 minutes');
+                rateLimitedUntil.current = now + (5 * 60 * 1000); // 5 minutes
+              } else {
+                if (!silent) console.log('⚠️ Google Fit sync failed, continuing with step points sync:', error.message);
+              }
+            }
+          } else if (timeSinceLastSync < minSyncInterval) {
+            const nextSyncIn = Math.ceil((minSyncInterval - timeSinceLastSync) / 1000);
+            if (!silent) console.log(`🕐 Google Fit synced recently, next sync in ${nextSyncIn} seconds`);
+          } else if (!hasValidGoogleFitPermissions()) {
+            if (!silent) console.log('⚠️ User does not have valid Google Fit permissions, skipping sync');
+          }
         }
       }
       
@@ -579,7 +611,8 @@ export const UserProvider = ({ children }) => {
         if (stepPointResult?.summary?.totalPointsAwarded > 0) {
           console.log(`🎉 Auto-refresh earned ${stepPointResult.summary.totalPointsAwarded} point(s)!`);
         }
-        console.log(`📊 Auto-refresh complete: Google Fit ${syncedGoogleFit ? 'synced' : 'skipped'}, step points checked`);
+        const dataSourceName = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit';
+        console.log(`📊 Auto-refresh complete: ${dataSourceName} ${syncedData ? 'synced' : 'skipped'}, step points checked`);
       }
       
       return stepPointResult;
@@ -593,19 +626,25 @@ export const UserProvider = ({ children }) => {
   useEffect(() => {
     if (user?.sub && autoRefreshUserData && !isInitializing) {
       const hasNoFitnessData = user.steps === null || user.steps === undefined || user.weight === null || user.weight === undefined;
-      if (hasNoFitnessData && hasValidGoogleFitPermissions()) {
+      const dataSource = user?.dataSource || 'google-fit';
+      
+      // For Fitbit, always try to sync (backend handles token refresh)
+      // For Google Fit, check if user has valid permissions
+      const shouldSync = dataSource === 'fitbit' || hasValidGoogleFitPermissions();
+      
+      if (hasNoFitnessData && shouldSync) {
         // Small delay to let everything initialize, then auto-refresh
         const timeoutId = setTimeout(() => {
-          console.log('🔄 Auto-refreshing user with missing fitness data...');
+          console.log(`🔄 Auto-refreshing user with missing fitness data (dataSource: ${dataSource})...`);
           autoRefreshUserData(false);
         }, 2000);
         
         return () => clearTimeout(timeoutId);
-      } else if (hasNoFitnessData && !hasValidGoogleFitPermissions()) {
+      } else if (hasNoFitnessData && !shouldSync && dataSource === 'google-fit') {
         console.log('⚠️ User has no fitness data but also no valid Google Fit permissions - will need to login again');
       }
     }
-  }, [user?.sub, user?.steps, user?.weight, autoRefreshUserData, isInitializing]);
+  }, [user?.sub, user?.steps, user?.weight, user?.dataSource, autoRefreshUserData, isInitializing]);
 
   const syncGoogleFitData = async (token) => {
     try {

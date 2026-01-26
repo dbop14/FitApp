@@ -42,3 +42,38 @@ export const fetchWithAuth = async (url, options = {}) => {
 export const getApiUrl = () => {
   return import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
 };
+
+// Get user's data source preference and connection status
+export const getDataSourceStatus = async (googleId) => {
+  const apiUrl = getApiUrl();
+  const response = await fetchWithAuth(`${apiUrl}/api/user/datasource?googleId=${googleId}`);
+  
+  if (!response.ok) {
+    throw new Error('Failed to get data source status');
+  }
+  
+  return await response.json();
+};
+
+// Update user's data source preference
+export const updateDataSource = async (googleId, dataSource) => {
+  const apiUrl = getApiUrl();
+  const response = await fetchWithAuth(`${apiUrl}/api/user/datasource`, {
+    method: 'PUT',
+    body: JSON.stringify({ googleId, dataSource })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update data source');
+  }
+  
+  return await response.json();
+};
+
+// Initiate Fitbit OAuth flow
+export const initiateFitbitOAuth = (googleId) => {
+  const apiUrl = getApiUrl();
+  // Redirect to backend Fitbit OAuth endpoint
+  window.location.href = `${apiUrl}/api/auth/fitbit?googleId=${googleId}`;
+};

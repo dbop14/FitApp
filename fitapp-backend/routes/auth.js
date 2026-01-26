@@ -128,6 +128,10 @@ router.get('/auth/google/callback', async (req, res) => {
     } else {
       // Preserve existing name (may be custom)
       updateData.name = existingUser.name || profile.name;
+      // Preserve existing dataSource preference (e.g., 'fitbit' if previously set)
+      if (existingUser.dataSource) {
+        updateData.dataSource = existingUser.dataSource;
+      }
     }
     
     // Only update picture if:
@@ -172,6 +176,185 @@ router.get('/auth/google/callback', async (req, res) => {
     const errorMessage = err.message || 'OAuth failed';
     // Use the same frontendUrl detected earlier
     res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(errorMessage)}`);
+  }
+});
+
+// Fitbit OAuth Configuration
+const FITBIT_CLIENT_ID = process.env.FITBIT_CLIENT_ID;
+const FITBIT_CLIENT_SECRET = process.env.FITBIT_CLIENT_SECRET;
+const FITBIT_REDIRECT_URI = process.env.FITBIT_REDIRECT_URI || 'http://localhost:3000/api/auth/fitbit/callback';
+
+// Helper function to determine frontend URL (same logic as Google OAuth)
+function getFrontendUrl(req) {
+  const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
+  let frontendUrl = FRONTEND_URL;
+  
+  const requestHost = req.get('host') || req.hostname || '';
+  
+  if (requestHost.includes('fitappbackenddev.herringm.com')) {
+    frontendUrl = 'https://fitappdev.herringm.com';
+  } else if (requestHost.includes('fitappbackend.herringm.com') && !requestHost.includes('fitappbackenddev')) {
+    frontendUrl = 'https://fitapp.herringm.com';
+  } else if (requestHost.includes('localhost:3001')) {
+    frontendUrl = 'http://localhost:5174';
+  } else if (requestHost.includes('localhost:3000')) {
+    frontendUrl = 'http://localhost:5173';
+  } else if (FRONTEND_URL.includes('fitappdev.herringm.com')) {
+    frontendUrl = 'https://fitappdev.herringm.com';
+  } else if (FRONTEND_URL.includes('fitapp.herringm.com') && !FRONTEND_URL.includes('fitappdev')) {
+    frontendUrl = 'https://fitapp.herringm.com';
+  } else if (FRONTEND_URL.includes('localhost:5174')) {
+    frontendUrl = 'http://localhost:5174';
+  } else if (FRONTEND_URL.includes('localhost:5173')) {
+    frontendUrl = 'http://localhost:5173';
+  }
+  
+  return frontendUrl;
+}
+
+// 1. Start Fitbit OAuth flow
+router.get('/auth/fitbit', (req, res) => {
+  if (!FITBIT_CLIENT_ID || !FITBIT_CLIENT_SECRET) {
+    console.error('❌ Fitbit OAuth credentials not configured');
+    return res.status(500).json({ error: 'Fitbit OAuth not configured. Please check FITBIT_CLIENT_ID and FITBIT_CLIENT_SECRET environment variables.' });
+  }
+  
+  // Get googleId from query parameter (user must be logged in with Google first)
+  const { googleId } = req.query;
+  if (!googleId) {
+    return res.status(400).json({ error: 'Missing googleId. User must be logged in with Google first.' });
+  }
+  
+  // Required scopes for Fitbit
+  // Best practice: Only request scopes that are needed
+  // 'activity' - for steps and activity data
+  // 'weight' - for weight data
+  // 'profile' - for basic user profile information
+  const scopes = ['activity', 'weight', 'profile'];
+  const scopeString = scopes.join(' ');
+  
+  // Generate state parameter to include googleId for callback
+  const state = Buffer.from(JSON.stringify({ googleId })).toString('base64');
+  
+  // Fitbit OAuth 2.0 authorization URL
+  const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
+    `response_type=code&` +
+    `client_id=${FITBIT_CLIENT_ID}&` +
+    `redirect_uri=${encodeURIComponent(FITBIT_REDIRECT_URI)}&` +
+    `scope=${encodeURIComponent(scopeString)}&` +
+    `state=${encodeURIComponent(state)}`;
+  
+  console.log('🔐 Redirecting to Fitbit OAuth consent screen');
+  res.redirect(authUrl);
+});
+
+// 2. Handle Fitbit OAuth callback
+router.get('/auth/fitbit/callback', async (req, res) => {
+  const code = req.query.code;
+  const error = req.query.error;
+  const state = req.query.state;
+  
+  const frontendUrl = getFrontendUrl(req);
+  
+  if (error) {
+    console.error('❌ OAuth error from Fitbit:', error);
+    return res.redirect(`${frontendUrl}/data-source-settings?error=${encodeURIComponent(error)}`);
+  }
+  
+  if (!code) {
+    console.error('❌ Missing authorization code');
+    return res.redirect(`${frontendUrl}/data-source-settings?error=${encodeURIComponent('missing_code')}`);
+  }
+  
+  if (!state) {
+    console.error('❌ Missing state parameter');
+    return res.redirect(`${frontendUrl}/data-source-settings?error=${encodeURIComponent('missing_state')}`);
+  }
+  
+  try {
+    // Decode state to get googleId
+    const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+    const { googleId } = stateData;
+    
+    if (!googleId) {
+      throw new Error('Invalid state: missing googleId');
+    }
+    
+    // Find user by googleId
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      throw new Error('User not found. Please log in with Google first.');
+    }
+    
+    console.log('🔄 Exchanging Fitbit authorization code for tokens...');
+    
+    // Exchange authorization code for access token
+    const credentials = Buffer.from(`${FITBIT_CLIENT_ID}:${FITBIT_CLIENT_SECRET}`).toString('base64');
+    
+    const tokenResponse = await fetch('https://api.fitbit.com/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        client_id: FITBIT_CLIENT_ID,
+        grant_type: 'authorization_code',
+        redirect_uri: FITBIT_REDIRECT_URI,
+        code: code
+      })
+    });
+    
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('❌ Fitbit token exchange failed:', tokenResponse.status, errorText);
+      throw new Error(`Fitbit token exchange failed: ${tokenResponse.status}`);
+    }
+    
+    const tokenData = await tokenResponse.json();
+    
+    console.log(`✅ Got Fitbit tokens for user ${user.email}`);
+    console.log(`🔑 Has refresh token: ${!!tokenData.refresh_token}`);
+    
+    // Get Fitbit user ID from token response or fetch from profile
+    let fitbitUserId = '-'; // Default to current user
+    try {
+      const profileResponse = await fetch('https://api.fitbit.com/1/user/-/profile.json', {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`
+        }
+      });
+      
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        fitbitUserId = profileData.user?.encodedId || '-';
+      }
+    } catch (profileError) {
+      console.warn('⚠️ Could not fetch Fitbit user ID, using default:', profileError.message);
+    }
+    
+    // Update user with Fitbit tokens
+    const updateData = {
+      fitbitAccessToken: tokenData.access_token,
+      fitbitRefreshToken: tokenData.refresh_token,
+      fitbitTokenExpiry: Date.now() + (tokenData.expires_in * 1000),
+      fitbitUserId: fitbitUserId
+    };
+    
+    await User.findOneAndUpdate(
+      { googleId },
+      { $set: updateData },
+      { new: true }
+    );
+    
+    console.log(`💾 Fitbit tokens saved for ${user.email}`);
+    
+    // Redirect back to data source settings page
+    res.redirect(`${frontendUrl}/data-source-settings?success=fitbit_connected`);
+  } catch (err) {
+    console.error('❌ Fitbit OAuth callback error:', err);
+    const errorMessage = err.message || 'Fitbit OAuth failed';
+    res.redirect(`${frontendUrl}/data-source-settings?error=${encodeURIComponent(errorMessage)}`);
   }
 });
 

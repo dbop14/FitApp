@@ -538,26 +538,42 @@ const previousWeightLossPercentages = new Map(); // challengeId-userId -> weight
 const welcomedParticipants = new Set(); // challengeId-userId
 // Track announced winners
 const announcedWinners = new Set(); // challengeId
+// Track step point increases currently being processed to prevent duplicates
+const processingStepPointIncreases = new Set(); // challengeId-userId
 
 let stepPointInterval = null;
 let stepPointChangeStream = null;
 
 const handleStepPointIncrease = async (participant, previousPoints, currentPoints) => {
-  console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
-  previousStepPoints.set(`${participant.challengeId}-${participant.userId}`, currentPoints);
-
-  const lastStepDate = participant.lastStepDate ? new Date(participant.lastStepDate) : null;
-  const todayStr = getDateStringInTimeZone(new Date());
-  const lastStepDateStr = lastStepDate ? getDateStringInTimeZone(lastStepDate) : null;
-
-  if (!lastStepDateStr || lastStepDateStr !== todayStr) {
-    console.log(`   ⏭️ Skipping step point message - lastStepDate=${lastStepDateStr || 'none'} (today=${todayStr})`);
+  const key = `${participant.challengeId}-${participant.userId}`;
+  
+  // Check if we're already processing this participant's step point increase
+  if (processingStepPointIncreases.has(key)) {
+    console.log(`⏭️  Step point increase already being processed for ${participant.userId} in challenge ${participant.challengeId}, skipping duplicate`);
     return;
   }
 
-  // Get challenge and user info
-  const challenge = await Challenge.findById(participant.challengeId);
-  const user = await User.findOne({ googleId: participant.userId });
+  // Mark as processing
+  processingStepPointIncreases.add(key);
+
+  try {
+    console.log(`🔔 Step point increase detected: ${participant.userId} in challenge ${participant.challengeId} - ${previousPoints} -> ${currentPoints}`);
+    previousStepPoints.set(key, currentPoints);
+
+    // Use lastStepPointTimestamp to check if the point was actually earned today
+    // This prevents sending cards for historical data that was synced later
+    const lastStepPointTimestamp = participant.lastStepPointTimestamp ? new Date(participant.lastStepPointTimestamp) : null;
+    const todayStr = getDateStringInTimeZone(new Date());
+    const lastStepPointDateStr = lastStepPointTimestamp ? getDateStringInTimeZone(lastStepPointTimestamp) : null;
+
+    if (!lastStepPointDateStr || lastStepPointDateStr !== todayStr) {
+      console.log(`   ⏭️ Skipping step point message - lastStepPointTimestamp=${lastStepPointDateStr || 'none'} (today=${todayStr}) - point was earned on a different day`);
+      return;
+    }
+
+    // Get challenge and user info
+    const challenge = await Challenge.findById(participant.challengeId);
+    const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
   if (challenge && challenge.matrixRoomId && user) {
@@ -602,6 +618,10 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
   } else {
     console.log(`   ⚠️ Missing requirements: challenge=${!!challenge}, matrixRoomId=${!!challenge?.matrixRoomId}, user=${!!user}`);
   }
+  } finally {
+    // Always remove from processing set, even if there was an error
+    processingStepPointIncreases.delete(key);
+  }
 };
 
 // Monitor step point changes
@@ -620,7 +640,7 @@ const checkStepPointChanges = async () => {
     const activeChallengeIds = activeChallenges.map((challenge) => challenge._id.toString());
     const participants = activeChallengeIds.length > 0
       ? await ChallengeParticipant.find({ challengeId: { $in: activeChallengeIds } })
-          .select('challengeId userId stepGoalPoints lastStepDate lastStepCount')
+          .select('challengeId userId stepGoalPoints lastStepDate lastStepPointTimestamp lastStepCount')
           .lean()
       : [];
     
