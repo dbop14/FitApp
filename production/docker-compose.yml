@@ -12,7 +12,7 @@ services:
     volumes:
       - mongo_data_prod:/data/db
     networks:
-      - fitapp_prod
+      - synobridge
     healthcheck:
       test: mongo --port 27017 --eval "db.adminCommand('ping')" --quiet || exit 1
       interval: 5s
@@ -33,7 +33,7 @@ services:
       - synapse_data_prod:/data
     command: ["run", "--config-path=/data/homeserver.yaml"]
     networks:
-      - fitapp_prod
+      - synobridge
 
   fitness-bot:
     build:
@@ -55,7 +55,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - fitapp_prod
+      - synobridge
 
   backend:
     build:
@@ -88,7 +88,7 @@ services:
       - mongoosedb
       - synapse
     networks:
-      - fitapp_prod
+      - synobridge
 
   frontend:
     build:
