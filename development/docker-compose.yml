@@ -117,7 +117,7 @@ services:
     depends_on:
       - backend
     networks:
-      - fitapp_dev
+      - synobridge
 
 volumes:
   mongo_data_dev:
@@ -128,5 +128,5 @@ volumes:
   backend_uploads_dev:
 
 networks:
-  fitapp_dev:
-    name: fitapp_dev
+  synobridge:
+    external: true

@@ -193,6 +193,7 @@ function isChallengeEnded(challenge) {
 
 // Import Google Auth utility
 const { ensureValidGoogleTokens } = require('./utils/googleAuth');
+const backfillStepHistoryAndPoints = require('./scripts/backfillStepHistoryAndPoints');
 
 // Connect to MongoDB
 // Add replicaSet parameter if not already present (for replica set mode)
@@ -274,6 +275,23 @@ cron.schedule('5 * * * *', async () => {
 });
 
 console.log('⏰ Hourly step point recalculation scheduled (runs at :05)');
+
+// Nightly job to pull today's step data for users in active challenges
+// and ensure their step points are in sync before midnight reset.
+// Runs at 23:55 in America/New_York.
+cron.schedule('55 23 * * *', async () => {
+  try {
+    console.log('⏰ Starting nightly active-challenge step history backfill at 23:55...');
+    await backfillStepHistoryAndPoints();
+    console.log('✅ Nightly active-challenge step history backfill completed');
+  } catch (error) {
+    console.error('❌ Error during nightly step history backfill:', error);
+  }
+}, {
+  timezone: "America/New_York"
+});
+
+console.log('⏰ Nightly active-challenge step backfill scheduled (runs at 23:55)');
 
 // Increase JSON body size limit to 1MB to accommodate profile photos
 // Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)

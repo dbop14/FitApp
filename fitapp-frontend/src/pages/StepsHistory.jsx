@@ -19,7 +19,7 @@ import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
 
 const StepsHistory = () => {
   const navigate = useNavigate()
-  const { user, requestGoogleFitPermissions } = useContext(UserContext)
+  const { user } = useContext(UserContext)
   const { challenge: activeChallenge } = useChallenge()
   
   const [viewMode, setViewMode] = useState('W') // 'W' for week, 'M' for month
@@ -97,19 +97,9 @@ const StepsHistory = () => {
   
   const stepGoal = activeChallenge?.stepGoal || 10000
 
-  // Helper to check if user has valid Google Fit permissions
-  const hasValidGoogleFitPermissions = () => {
-    const token = localStorage.getItem('fitapp_access_token')
-    const expiry = localStorage.getItem('fitapp_access_token_expiry')
-    
-    if (!token || !expiry) return false
-    
-    // Check if token is expired (with 30 minute buffer)
-    const bufferTime = 30 * 60 * 1000 // 30 minutes
-    return Date.now() < (parseInt(expiry, 10) - bufferTime)
-  }
-
-  // Fetch missing days from the appropriate data source (Google Fit or Fitbit)
+  // Fetch missing days from the appropriate data source (currently Fitbit only).
+  // For Google Fit users, we now rely solely on backend FitnessHistory data so
+  // we do not call the Google Fit API directly from the frontend anymore.
   const fetchMissingDaysFromDataSource = async (missingDays, dayMap) => {
     if (missingDays.length === 0) {
       return dayMap
@@ -123,12 +113,9 @@ const StepsHistory = () => {
       return await fetchMissingDaysFromFitbit(missingDays, dayMap)
     }
     
-    // For Google Fit, use existing logic
-    if (!hasValidGoogleFitPermissions()) {
-      return dayMap
-    }
-    
-    return await fetchMissingDaysFromGoogleFit(missingDays, dayMap)
+    // For Google Fit (and any other sources), rely solely on backend FitnessHistory.
+    // Do not call Google Fit APIs directly from the frontend.
+    return dayMap
   }
   
   // Fetch missing days from Fitbit via backend
@@ -185,125 +172,6 @@ const StepsHistory = () => {
     return dayMap
   }
   
-  // Fetch missing days from Google Fit
-  const fetchMissingDaysFromGoogleFit = async (missingDays, dayMap) => {
-    if (!hasValidGoogleFitPermissions()) {
-      return dayMap
-    }
-
-    try {
-      const accessToken = localStorage.getItem('fitapp_access_token')
-      if (!accessToken) return dayMap
-
-      // Get date range for missing days
-      const sortedMissingDays = [...missingDays].sort((a, b) => a - b)
-      const startDate = new Date(sortedMissingDays[0])
-      startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(sortedMissingDays[sortedMissingDays.length - 1])
-      endDate.setHours(23, 59, 59, 999)
-
-      console.log('🔄 Fetching missing days from Google Fit:', {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        missingDaysCount: missingDays.length
-      })
-
-      const requestBody = {
-        aggregateBy: [
-          { dataTypeName: 'com.google.step_count.delta' }
-        ],
-        bucketByTime: { durationMillis: 24 * 60 * 60 * 1000 }, // Daily buckets
-        startTimeMillis: startDate.getTime(),
-        endTimeMillis: endDate.getTime()
-      }
-
-      let response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      // If we get 401 (Unauthorized), the token is invalid - refresh it and retry
-      if (response.status === 401 && requestGoogleFitPermissions) {
-        console.log('⚠️ Token invalid (401) on StepsHistory API call, refreshing token...');
-        try {
-          const newAccessToken = await requestGoogleFitPermissions();
-          // Retry the API call with the new token
-          response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${newAccessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
-          });
-          
-          console.log('📥 Retry StepsHistory API call response status:', response.status, response.statusText);
-        } catch (refreshError) {
-          console.error('❌ Failed to refresh token after 401 on StepsHistory call:', refreshError);
-          return dayMap; // Return existing dayMap on error
-        }
-      }
-
-      if (response.ok) {
-        const data = await response.json()
-        
-        if (data.bucket && data.bucket.length > 0) {
-          const today = new Date()
-          
-          data.bucket.forEach(bucket => {
-            // Google Fit returns startTimeMillisNanos (nanoseconds) - convert to milliseconds
-            const bucketStartMillis = bucket.startTimeMillisNanos ? 
-              parseInt(bucket.startTimeMillisNanos) / 1000000 : 
-              bucket.startTimeMillis
-            
-            // Validate the timestamp before creating Date
-            if (!bucketStartMillis || isNaN(bucketStartMillis) || bucketStartMillis <= 0) {
-              return // Skip invalid buckets
-            }
-            
-            const bucketDate = new Date(bucketStartMillis)
-            
-            // Validate the date is valid before using it
-            if (isNaN(bucketDate.getTime())) {
-              return // Skip invalid dates
-            }
-            
-            const dateKey = bucketDate.toISOString().split('T')[0]
-            
-            // Find step data in the bucket
-            const stepsData = bucket.dataset?.find(d => 
-              d.dataTypeName === 'com.google.step_count.delta' ||
-              d.dataSourceId?.includes('step_count.delta')
-            )
-            
-            const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0
-            
-            // Update dayMap if this day was missing and we found data
-            if (dayMap.has(dateKey) && dayMap.get(dateKey).steps === 0 && steps > 0) {
-              const isToday = bucketDate.toDateString() === today.toDateString()
-              dayMap.set(dateKey, {
-                date: bucketDate,
-                steps: steps,
-                isToday
-              })
-              console.log(`✅ Fetched ${steps} steps for ${dateKey} from Google Fit`)
-            }
-          })
-        }
-      } else {
-        console.warn('⚠️ Failed to fetch missing days from Google Fit:', response.status)
-      }
-    } catch (error) {
-      console.error('❌ Error fetching missing days from Google Fit:', error)
-    }
-
-    return dayMap
-  }
-
   // Calculate date range based on view mode
   const calculateDateRange = (mode, offset = 0) => {
     const today = new Date()
