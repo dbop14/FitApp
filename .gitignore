@@ -96,3 +96,5 @@ fitapp-backend/scripts/addYesterdayStepPoint.js
 fitapp-backend/scripts/addStepPoint.js
 FitBit Creds.png
 ENVIRONMENT_VARIABLES_CHECKLIST.md
+development/docker-compose.yml
+production/docker-compose.yml
