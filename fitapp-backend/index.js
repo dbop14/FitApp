@@ -55,6 +55,16 @@ const authenticateJWT = require('./middleware/auth');
 const DEFAULT_STEP_GOAL = 10000;
 const RECALC_LOOKBACK_DAYS = 7;
 
+// Application timezone (IANA name, e.g. America/New_York).
+// Used for cron jobs and day-based calculations on the backend.
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/New_York';
+
+// Get the offset in milliseconds between UTC and a given timezone at a specific date
+const getTimezoneOffsetMs = (date, timeZone) => {
+  const localized = new Date(date.toLocaleString('en-US', { timeZone }));
+  return localized.getTime() - date.getTime();
+};
+
 // Helper function for weight loss points rounding
 // .5 or higher rounds up, .4 or lower rounds down
 // Ensures points are never negative (minimum 0)
@@ -75,7 +85,7 @@ const getStepGoal = (challenge) => {
   return Number.isFinite(stepGoalNum) && stepGoalNum > 0 ? stepGoalNum : DEFAULT_STEP_GOAL;
 };
 
-const getDayKey = (date, timeZone = 'America/New_York') => {
+const getDayKey = (date, timeZone = APP_TIMEZONE) => {
   const zoned = new Date(date.toLocaleString('en-US', { timeZone }));
   zoned.setHours(0, 0, 0, 0);
   return zoned.getTime();
@@ -262,7 +272,7 @@ cron.schedule('0 0 * * *', async () => {
     console.error('❌ Error during daily step reset:', error);
   }
 }, {
-  timezone: "America/New_York" // Adjust timezone as needed (EDT/EST)
+  timezone: APP_TIMEZONE
 });
 
 console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
@@ -271,14 +281,14 @@ console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
 cron.schedule('5 * * * *', async () => {
   await recalculateStepPoints();
 }, {
-  timezone: "America/New_York"
+  timezone: APP_TIMEZONE
 });
 
 console.log('⏰ Hourly step point recalculation scheduled (runs at :05)');
 
 // Nightly job to pull today's step data for users in active challenges
 // and ensure their step points are in sync before midnight reset.
-// Runs at 23:55 in America/New_York.
+// Runs at 23:55 in the configured APP_TIMEZONE.
 cron.schedule('55 23 * * *', async () => {
   try {
     console.log('⏰ Starting nightly active-challenge step history backfill at 23:55...');
@@ -288,7 +298,7 @@ cron.schedule('55 23 * * *', async () => {
     console.error('❌ Error during nightly step history backfill:', error);
   }
 }, {
-  timezone: "America/New_York"
+  timezone: APP_TIMEZONE
 });
 
 console.log('⏰ Nightly active-challenge step backfill scheduled (runs at 23:55)');
@@ -593,12 +603,11 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       return res.status(500).json({ error: tokenError.message || 'Failed to validate/refresh tokens' });
     }
 
-    // Fetch Google Fit data - timezone-aware approach
+    // Fetch Google Fit data - timezone-aware approach using configured APP_TIMEZONE
     const now = new Date();
     
-    // Get user's local timezone offset (assuming they're in EDT/EST)
-    // The user mentioned they're in EDT (UTC-4), but let's be more flexible
-    const userTimezoneOffset = -4 * 60 * 60 * 1000; // Assume EDT (UTC-4) for now
+    // Get user's local time based on the configured application timezone
+    const userTimezoneOffset = getTimezoneOffsetMs(now, APP_TIMEZONE);
     const userLocalTime = new Date(now.getTime() + userTimezoneOffset);
     
     // Get today's start time (12:01 AM) and current time in user's timezone
@@ -607,16 +616,16 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
     const endOfToday = new Date(userLocalTime.getFullYear(), userLocalTime.getMonth(), userLocalTime.getDate(), 23, 59, 59, 999);
     
     console.log(`📊 Current UTC time: ${now.toISOString()}`);
-    console.log(`📊 Current user local time (EDT): ${userLocalTime.toISOString()}`);
+    console.log(`📊 Current user local time (${APP_TIMEZONE}): ${userLocalTime.toISOString()}`);
     // Enhanced timezone debugging
     console.log(`📊 === TIMEZONE DEBUGGING ===`);
     console.log(`📊 Current UTC time: ${now.toISOString()}`);
-    console.log(`📊 User timezone offset (hardcoded EDT): ${userTimezoneOffset}ms (${userTimezoneOffset / (60 * 60 * 1000)} hours)`);
-    console.log(`📊 Current user local time (EDT): ${userLocalTime.toISOString()}`);
+    console.log(`📊 User timezone offset (from APP_TIMEZONE=${APP_TIMEZONE}): ${userTimezoneOffset}ms (${userTimezoneOffset / (60 * 60 * 1000)} hours)`);
+    console.log(`📊 Current user local time (${APP_TIMEZONE}): ${userLocalTime.toISOString()}`);
     console.log(`📊 User local time string: ${userLocalTime.toString()}`);
     console.log(`📊 Fetching Google Fit data from ${startOfToday.toISOString()} to ${currentTime.toISOString()}`);
     console.log(`📊 This covers today only: from 12:01 AM to current time`);
-    console.log(`📊 Today's date in user's timezone: ${userLocalTime.toDateString()}`);
+    console.log(`📊 Today's date in configured timezone (${APP_TIMEZONE}): ${userLocalTime.toDateString()}`);
     console.log(`📊 Start of today: ${startOfToday.toDateString()} ${startOfToday.toTimeString()}`);
     console.log(`📊 Current time: ${currentTime.toDateString()} ${currentTime.toTimeString()}`);
     console.log(`📊 Time range in milliseconds: ${startOfToday.getTime()} to ${currentTime.getTime()}`);
@@ -852,16 +861,18 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       if (steps < 4500) {
         console.log(`📊 Trying fallback with daily buckets to get complete step data...`);
         
-        // Also try different timezone offsets to see if that affects the data
-        console.log(`📊 Trying different timezone offsets to find missing steps...`);
+        // Also try different timezone offsets around the configured APP_TIMEZONE
+        // to see if that affects the data returned by Google Fit.
+        console.log(`📊 Trying different timezone offsets (relative to APP_TIMEZONE=${APP_TIMEZONE}) to find missing steps...`);
+        const baseOffset = userTimezoneOffset;
+        const oneHour = 60 * 60 * 1000;
         const timezoneOffsets = [
-          -4 * 60 * 60 * 1000, // EDT (current)
-          -5 * 60 * 60 * 1000, // EST
-          -3 * 60 * 60 * 1000, // ADT
-          -6 * 60 * 60 * 1000, // CST
-          -7 * 60 * 60 * 1000, // MST
-          -8 * 60 * 60 * 1000, // PST
-          0 // UTC
+          baseOffset,               // configured timezone
+          baseOffset - oneHour,     // 1 hour earlier
+          baseOffset + oneHour,     // 1 hour later
+          baseOffset - 2 * oneHour, // 2 hours earlier
+          baseOffset + 2 * oneHour, // 2 hours later
+          0                         // UTC
         ];
         
         for (const offset of timezoneOffsets) {

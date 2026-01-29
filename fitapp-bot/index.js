@@ -37,7 +37,10 @@ const MAX_RETRIES = 10;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_WAIT_TIME = 120000; // 2 minutes max wait (prevents Docker timeouts)
 const MAX_RATE_LIMIT_RETRIES = 3; // Give up after 3 rate limit errors
-const BOT_TIMEZONE = 'America/New_York';
+const DEBUG_LOG_ENDPOINT = 'http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327';
+// Application timezone (IANA name, e.g. America/New_York). Falls back to BOT_TIMEZONE/legacy default.
+const APP_TIMEZONE = process.env.APP_TIMEZONE || process.env.BOT_TIMEZONE || 'America/New_York';
+const BOT_TIMEZONE = APP_TIMEZONE;
 const STEP_POINT_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const SYNC_CONCURRENCY = Number.parseInt(process.env.SYNC_CONCURRENCY || '5', 10);
 const MATRIX_REGISTRATION_SHARED_SECRET = process.env.MATRIX_REGISTRATION_SHARED_SECRET;
@@ -1483,7 +1486,7 @@ const syncAllUsersSteps = async () => {
 // Set up cron jobs
 const setupCronJobs = () => {
   const cronOptions = {
-    timezone: "America/New_York"
+    timezone: BOT_TIMEZONE
   };
 
   // Daily sync at 12 AM (midnight)
