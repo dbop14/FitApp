@@ -623,6 +623,10 @@ const Dashboard = () => {
     
     setIsSyncing(true)
     setSyncError(null)
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:handleSyncClick',message:'Sync started',data:{dataSource:user?.dataSource},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     try {
       // Check user's data source and sync accordingly
@@ -691,6 +695,9 @@ const Dashboard = () => {
       } else {
         // For Google Fit, use existing sync function
         await syncGoogleFitData()
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:after-syncGoogleFitData',message:'Google Fit sync completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         console.log('✅ Google Fit sync completed successfully')
       }
       
@@ -776,6 +783,9 @@ const Dashboard = () => {
           const participantResponse = await fetchWithAuth(`${apiUrl}/api/challenge/${activeChallenge._id}/participant/${user.sub}`)
           if (participantResponse.ok) {
             const participant = await participantResponse.json()
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:participant-after-sync',message:'Participant data after sync',data:{stepGoalPoints:participant.participant?.stepGoalPoints,points:participant.participant?.points},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
             setParticipantData(participant.participant)
           }
         } catch (err) {

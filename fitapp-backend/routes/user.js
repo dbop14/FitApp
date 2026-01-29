@@ -1,5 +1,16 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
+
+// #region agent log
+const DEBUG_LOG_PATH = path.join(__dirname, '..', '..', '.cursor', 'debug.log');
+const debugLog = (payload) => {
+  try {
+    fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: 'debug-session' }) + '\n');
+  } catch (e) {}
+};
+// #endregion
 const User = require('../models/User');
 const Challenge = require('../models/Challenge');
 const ChallengeParticipant = require('../models/ChallengeParticipant');
@@ -31,8 +42,15 @@ router.post('/userdata', async (req, res) => {
     // Check if this is today's data or historical data
     const today = FitnessHistory.normalizeDate(new Date());
     const isToday = targetDate.getTime() === today.getTime();
-    
-    // debug instrumentation removed
+
+    // #region agent log
+    debugLog({
+      hypothesisId: 'B',
+      location: 'user.js:userdata-entry',
+      message: 'POST /userdata received',
+      data: { googleId, steps, weight, date: dateStr, isToday, targetDate: targetDate.toISOString(), serverNow: new Date().toISOString() }
+    });
+    // #endregion
     
     // Only update user's current steps/weight if this is today's data
     // Historical data should only update FitnessHistory, not the user's current state
@@ -231,6 +249,30 @@ router.post('/userdata', async (req, res) => {
         const now = new Date();
         const lastStepPointDate = participant.lastStepDate ? new Date(participant.lastStepDate) : null;
         const canEarnPoint = isNewCalendarDay(lastStepPointDate);
+        const todayKey = getDayKey(new Date());
+        const lastKey = lastStepPointDate ? getDayKey(new Date(lastStepPointDate)) : null;
+        const stepGoalPointsBefore = participant.stepGoalPoints || 0;
+
+        // #region agent log
+        debugLog({
+          hypothesisId: 'A',
+          location: 'user.js:step-goal-check',
+          message: 'Step goal check (isToday path)',
+          data: {
+            email,
+            isToday,
+            stepsNum,
+            stepGoalNum,
+            reachedGoal: stepsNum >= stepGoalNum,
+            lastStepPointDate: lastStepPointDate?.toISOString(),
+            todayKey,
+            lastKey,
+            canEarnPoint,
+            stepGoalPointsBefore,
+            APP_TIMEZONE
+          }
+        });
+        // #endregion
         
         console.log(`🔍 Step goal check for ${email}:`, {
           steps: stepsNum,
@@ -264,10 +306,16 @@ router.post('/userdata', async (req, res) => {
           participant.points = stepPoints + weightLossPoints;
           
           pointsEarned += 1;
+          // #region agent log
+          debugLog({ hypothesisId: 'A', location: 'user.js:awarded', message: 'Step point awarded', data: { stepGoalPointsAfter: participant.stepGoalPoints } });
+          // #endregion
           console.log(`🏆 Step goal achieved! +1 point (${stepsNum.toLocaleString()} steps >= ${stepGoalNum.toLocaleString()} goal)`);
           console.log(`📊 Updated: ${participant.stepGoalPoints} step points, ${participant.stepGoalDaysAchieved} days achieved`);
           console.log(`📊 Total points: ${participant.points} (${stepPoints} step + ${weightLossPoints} weight loss)`);
         } else if (!canEarnPoint && stepsNum >= stepGoalNum) {
+          // #region agent log
+          debugLog({ hypothesisId: 'A', location: 'user.js:already-awarded', message: 'Goal met but point already awarded today', data: { stepGoalPoints: participant.stepGoalPoints } });
+          // #endregion
           console.log(`✅ Step goal met but point already awarded today`);
           // Still update total points to ensure consistency
           const stepPoints = participant.stepGoalPoints || 0;
