@@ -570,7 +570,11 @@ router.get('/userdata', async (req, res) => {
     const start = new Date(now);
     start.setDate(start.getDate() - 7); // Query last 7 days to get most recent weight
     start.setHours(0, 0, 0, 0);
-    const end = now;
+    
+    // Set end to the end of today (or next midnight) to ensure the last bucket (today)
+    // covers the full day range, preventing potential aggregation oddities for partial periods.
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
     
     // Get the current access token (may have been refreshed)
     const credentials = await oauth2Client.getAccessToken();
@@ -611,30 +615,6 @@ router.get('/userdata', async (req, res) => {
     
     const data = await response.json();
     
-    // #region agent log
-    try {
-      const debugLogUrl = process.env.DEBUG_LOG_URL || 'http://127.0.0.1:7244';
-      await fetch(`${debugLogUrl}/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'user.js:googleFitSync',
-          message: 'Google Fit Sync Data',
-          data: { 
-            email: user.email, 
-            buckets: data.bucket?.map(b => {
-              const d = new Date(parseInt(b.startTimeMillis));
-              const s = b.dataset?.[0]?.point?.[0]?.value?.[0]?.intVal;
-              return { date: d.toString(), steps: s };
-            })
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session'
-        })
-      }).catch(() => {});
-    } catch (e) {}
-    // #endregion
-
     // Store historical data for each day in the response
     let todaySteps = 0;
     let todayWeight = null;
