@@ -712,9 +712,37 @@ router.get('/userdata', async (req, res) => {
           const today = FitnessHistory.normalizeDate(new Date());
           const isHistorical = bucketDate.getTime() < today.getTime();
           
+          // #region agent log
+          debugLog({
+            hypothesisId: 'H',
+            location: 'user.js:HWM_check',
+            message: 'High Water Mark Check',
+            data: {
+              bucketDate: bucketDate.toISOString(),
+              today: today.toISOString(),
+              isHistorical,
+              existingEntrySteps: existingEntry?.steps,
+              newSteps: steps,
+              existingEntryId: existingEntry?._id
+            }
+          });
+          // #endregion
+
           if (existingEntry && isHistorical) {
             // Preserve higher step count
             if (existingEntry.steps > stepsToSave) {
+              // #region agent log
+              debugLog({
+                hypothesisId: 'H',
+                location: 'user.js:HWM_triggered',
+                message: 'Preserving higher step count',
+                data: {
+                  date: bucketDate.toISOString(),
+                  preservedSteps: existingEntry.steps,
+                  ignoredSteps: stepsToSave
+                }
+              });
+              // #endregion
               stepsToSave = existingEntry.steps;
               // If steps are lower and weight is null (or same), we might not need to update at all
               if (weight === null || weight === existingEntry.weight) {

@@ -443,12 +443,41 @@ async function recalcStepPointsForParticipant(participant, challenge) {
   }
 
   const oldStepPoints = participant.stepGoalPoints || 0;
-  const oldWeightLossPoints = participant.weightLossPoints || 0;
+  
+  // Recalculate weight loss points based on the most recent weight in history
+  // This ensures that even if Sync messed up the weight loss calc, Backfill fixes it
+  const mostRecentWeightEntry = await FitnessHistory.findOne(
+    { userId: participant.userId, weight: { $ne: null } },
+    {},
+    { sort: { date: -1 } }
+  );
+  
+  let newWeightLossPoints = participant.weightLossPoints || 0;
+  
+  if (mostRecentWeightEntry && mostRecentWeightEntry.weight && participant.startingWeight) {
+    const currentWeight = mostRecentWeightEntry.weight;
+    const totalWeightLost = participant.startingWeight - currentWeight;
+    const totalPercentLost = Math.max(0, (totalWeightLost / participant.startingWeight) * 100);
+    
+    // Helper to round points (same as user.js)
+    const roundWeightLossPoints = (percentage) => {
+      const decimal = percentage % 1;
+      if (decimal >= 0.5) {
+        return Math.ceil(percentage);
+      } else {
+        return Math.floor(percentage);
+      }
+    };
+    
+    newWeightLossPoints = roundWeightLossPoints(totalPercentLost);
+  }
+
   const newStepPoints = newStepGoalDays;
-  const newTotalPoints = newStepPoints + oldWeightLossPoints;
+  const newTotalPoints = newStepPoints + newWeightLossPoints;
 
   participant.stepGoalPoints = newStepPoints;
   participant.stepGoalDaysAchieved = newStepGoalDays;
+  participant.weightLossPoints = newWeightLossPoints; // Update this!
   participant.points = newTotalPoints;
   participant.lastStepDate = lastStepDate;
 
@@ -458,7 +487,7 @@ async function recalcStepPointsForParticipant(participant, challenge) {
   const maxSteps = history.reduce((max, entry) => Math.max(max, entry.steps || 0), 0);
   sendDebugLog({
     location: 'backfillStepHistoryAndPoints.js:recalcSummary',
-    message: 'Recalc step points summary',
+    message: 'Recalc step and weight points summary',
     data: {
       participantUserId: participant.userId,
       stepGoal,
@@ -466,16 +495,19 @@ async function recalcStepPointsForParticipant(participant, challenge) {
       newStepGoalDays,
       maxSteps,
       newStepPoints,
+      oldWeightLossPoints: participant.weightLossPoints,
+      newWeightLossPoints,
       newTotalPoints
     },
     hypothesisId: 'F'
   });
   // #endregion
 
-  console.log(`✅ Recalculated step points for user ${participant.userId} in challenge ${challenge.name}:`, {
+  console.log(`✅ Recalculated points for user ${participant.userId} in challenge ${challenge.name}:`, {
     oldStepPoints,
     newStepPoints,
-    weightLossPoints: oldWeightLossPoints,
+    oldWeightLossPoints: oldWeightLossPoints,
+    newWeightLossPoints,
     totalPoints: newTotalPoints
   });
 }
