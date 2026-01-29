@@ -28,21 +28,36 @@ const UpdateAvailableDialog = () => {
   }, []);
 
   const handleRefresh = () => {
-    if (waitingWorker) {
-      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    try {
+      if (waitingWorker) {
+        console.log('🔄 User accepted update, skipping waiting...');
+        waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      } else if (window.__FITAPP_SW_UPDATE__) {
+        console.log('🔄 Using global worker reference for update...');
+        window.__FITAPP_SW_UPDATE__.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        console.warn('⚠️ No waiting worker found to refresh');
+        // Fallback: reload anyway, might force update check
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error('❌ Error applying update:', e);
+      window.location.reload();
     }
     setShowDialog(false);
   };
 
   const handleDismiss = () => {
     setShowDialog(false);
+    // Clear the global reference so it doesn't pop up again immediately on remount
+    window.__FITAPP_SW_UPDATE__ = null; 
   };
 
   if (!showDialog) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4" style={{ pointerEvents: 'auto' }}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 relative">
         <div className="flex items-center space-x-3">
           <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
             <svg
