@@ -148,7 +148,10 @@ router.post('/userdata', async (req, res) => {
         }
       };
       
-      const getDayKey = (date, timeZone = 'America/New_York') => {
+      // Application timezone for day-boundary calculations
+      const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/New_York';
+
+      const getDayKey = (date, timeZone = APP_TIMEZONE) => {
         const zoned = new Date(date.toLocaleString('en-US', { timeZone }));
         zoned.setHours(0, 0, 0, 0);
         return zoned.getTime();
