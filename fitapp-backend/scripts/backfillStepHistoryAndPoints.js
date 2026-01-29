@@ -87,6 +87,7 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
     start.setDate(start.getDate() - (daysBack - 1));
     start.setHours(0, 0, 0, 0);
     const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
 
     // #region agent log
     fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:googleFitSync',message:'Google Fit Sync Date Range',data:{email:user.email,startLocal:start.toString(),startISO:start.toISOString(),endLocal:end.toString(),endISO:end.toISOString(),startMillis:start.getTime(),endMillis:end.getTime()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});

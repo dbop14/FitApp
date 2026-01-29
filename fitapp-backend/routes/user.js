@@ -698,21 +698,47 @@ router.get('/userdata', async (req, res) => {
         
         // Store each day's data in history (only if we have data for that day)
         if (steps > 0 || weight !== null) {
-          await FitnessHistory.findOneAndUpdate(
-            { userId: googleId, date: bucketDate },
-            {
-              $set: {
-                steps: steps || 0,
-                weight: weight || null,
-                source: 'google-fit',
-                updatedAt: new Date()
-              },
-              $setOnInsert: {
-                createdAt: new Date()
+          // Check for existing entry first to implement High Water Mark for steps
+          const existingEntry = await FitnessHistory.findOne({ userId: googleId, date: bucketDate });
+          
+          let shouldUpdate = true;
+          let stepsToSave = steps || 0;
+          
+          // If we have an existing entry and this is a historical date (not today),
+          // only update steps if the new value is higher.
+          // This prevents "flapping" if Google Fit returns slightly different aggregated values
+          // depending on the query window (7 days vs 30 days).
+          const today = FitnessHistory.normalizeDate(new Date());
+          const isHistorical = bucketDate.getTime() < today.getTime();
+          
+          if (existingEntry && isHistorical) {
+            // Preserve higher step count
+            if (existingEntry.steps > stepsToSave) {
+              stepsToSave = existingEntry.steps;
+              // If steps are lower and weight is null (or same), we might not need to update at all
+              if (weight === null || weight === existingEntry.weight) {
+                shouldUpdate = false;
               }
-            },
-            { upsert: true }
-          );
+            }
+          }
+          
+          if (shouldUpdate) {
+            await FitnessHistory.findOneAndUpdate(
+              { userId: googleId, date: bucketDate },
+              {
+                $set: {
+                  steps: stepsToSave,
+                  weight: weight || existingEntry?.weight || null, // Preserve existing weight if new is null
+                  source: 'google-fit',
+                  updatedAt: new Date()
+                },
+                $setOnInsert: {
+                  createdAt: new Date()
+                }
+              },
+              { upsert: true }
+            );
+          }
         }
       }
       console.log(`📊 Stored ${data.bucket.length} days of fitness history for ${user.email}`);
