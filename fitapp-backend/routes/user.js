@@ -184,9 +184,13 @@ router.post('/userdata', async (req, res) => {
       
       // Weight loss points - calculate continuously throughout the challenge
       // Use last recorded weight if current weight is not available (users don't need to weigh in daily)
-      // IMPORTANT: Do NOT overwrite lastWeight here - it should only be updated via the weight update endpoint
-      // If lastWeight is null, try to get the most recent weight from history
+      // If we have a new valid weight from the request, update lastWeight
+      // This ensures we use the freshest data from Sync (Google Fit/Fitbit)
       if (participant.startingWeight) {
+        if (weight !== undefined && weight !== null && weight > 0) {
+          participant.lastWeight = weight;
+        }
+
         // If lastWeight is not set, try to get the most recent weight from history
         if ((participant.lastWeight === undefined || participant.lastWeight === null)) {
           const mostRecentWeight = await FitnessHistory.findOne(
@@ -197,13 +201,10 @@ router.post('/userdata', async (req, res) => {
           
           if (mostRecentWeight && mostRecentWeight.weight) {
             participant.lastWeight = mostRecentWeight.weight;
-          } else if (weight !== undefined && weight !== null && weight > 0) {
-            // Fallback to current weight if no history
-            participant.lastWeight = weight;
           }
         }
         
-        // Use lastWeight for calculation (don't use weight parameter as it may be stale)
+        // Use lastWeight for calculation
         const currentWeight = participant.lastWeight;
         
         if (currentWeight !== undefined && currentWeight !== null) {
