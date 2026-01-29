@@ -1,6 +1,8 @@
 // Set timezone to New York to ensure consistent date boundaries
 process.env.TZ = 'America/New_York';
 
+const fs = require('fs');
+const path = require('path');
 const express = require('express')
 const app = express()
 // Backend port: 3000 for production, configurable via PORT env var
@@ -321,6 +323,19 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     cors: 'configured'
   });
+});
+
+// Debug log ingest: accept frontend/agent logs and append to workspace .cursor/debug.log (NDJSON)
+app.post('/api/debug-log', express.json(), (req, res) => {
+  try {
+    const payload = req.body && typeof req.body === 'object' ? req.body : { message: String(req.body) };
+    const logPath = path.join(__dirname, '..', '.cursor', 'debug.log');
+    const line = JSON.stringify({ ...payload, timestamp: payload.timestamp || Date.now(), sessionId: payload.sessionId || 'debug-session' }) + '\n';
+    fs.appendFileSync(logPath, line);
+    res.status(204).end();
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to write debug log' });
+  }
 });
 
 // Test endpoint to check environment variables

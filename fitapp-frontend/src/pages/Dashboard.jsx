@@ -12,6 +12,13 @@ import { useUserData } from '../hooks/useUserData'
 import { useChallenges } from '../hooks/useChallenges'
 import { useQueryClient } from '@tanstack/react-query'
 
+// #region agent log
+const debugLog = (payload) => {
+  const apiUrl = getApiUrl()
+  fetch(`${apiUrl}/api/debug-log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: 'debug-session' }) }).catch(() => {})
+}
+// #endregion
+
 /**
  * Dashboard Component - Refactored to align with unified design system
  * 
@@ -625,7 +632,7 @@ const Dashboard = () => {
     setSyncError(null)
 
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:handleSyncClick',message:'Sync started',data:{dataSource:user?.dataSource},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    debugLog({ location: 'Dashboard.jsx:handleSyncClick', message: 'Sync started', data: { dataSource: user?.dataSource }, hypothesisId: 'B' })
     // #endregion
     
     try {
@@ -646,6 +653,9 @@ const Dashboard = () => {
         }
         
         syncData = await response.json()
+        // #region agent log
+        debugLog({ location: 'Dashboard.jsx:after-Fitbit-sync', message: 'Fitbit sync completed', data: { steps: syncData.steps, weight: syncData.weight }, hypothesisId: 'C' })
+        // #endregion
         console.log('✅ Fitbit sync completed successfully', { steps: syncData.steps, weight: syncData.weight })
         
         // Update user context with synced data
@@ -696,7 +706,7 @@ const Dashboard = () => {
         // For Google Fit, use existing sync function
         await syncGoogleFitData()
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:after-syncGoogleFitData',message:'Google Fit sync completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+        debugLog({ location: 'Dashboard.jsx:after-syncGoogleFitData', message: 'Google Fit sync completed', data: {}, hypothesisId: 'C' })
         // #endregion
         console.log('✅ Google Fit sync completed successfully')
       }
@@ -784,7 +794,7 @@ const Dashboard = () => {
           if (participantResponse.ok) {
             const participant = await participantResponse.json()
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/2a0a55f1-b268-467d-aef8-a0a0284ba327',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:participant-after-sync',message:'Participant data after sync',data:{stepGoalPoints:participant.participant?.stepGoalPoints,points:participant.participant?.points},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+            debugLog({ location: 'Dashboard.jsx:participant-after-sync', message: 'Participant data after sync', data: { stepGoalPoints: participant.participant?.stepGoalPoints, points: participant.participant?.points }, hypothesisId: 'D' })
             // #endregion
             setParticipantData(participant.participant)
           }
