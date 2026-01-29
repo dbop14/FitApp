@@ -1,3 +1,6 @@
+// Set timezone to New York to ensure consistent date boundaries
+process.env.TZ = 'America/New_York';
+
 const express = require('express')
 const app = express()
 // Backend port: 3000 for production, configurable via PORT env var

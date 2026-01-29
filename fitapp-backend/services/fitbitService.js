@@ -296,7 +296,9 @@ async function syncFitbitHistory(user, startDate, endDate) {
       const bulkOps = [];
       
       for (const entry of stepsData['activities-steps']) {
-        const entryDate = FitnessHistory.normalizeDate(new Date(entry.dateTime));
+        // Parse as local midnight to prevent UTC shift
+        // Appending T00:00:00 to YYYY-MM-DD ensures it is parsed as local time
+        const entryDate = FitnessHistory.normalizeDate(new Date(entry.dateTime + 'T00:00:00'));
         const steps = entry.value ? parseInt(entry.value, 10) : 0;
         const dateStr = entry.dateTime.split('T')[0]; // Get date string for weight lookup
         const weight = weightMap.get(dateStr) || null;

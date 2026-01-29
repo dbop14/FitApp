@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+
+// Ensure the script runs in New York timezone
+process.env.TZ = 'America/New_York';
+
 const FitnessHistory = require('../models/FitnessHistory');
 const Challenge = require('../models/Challenge');
 const ChallengeParticipant = require('../models/ChallengeParticipant');
@@ -27,6 +31,16 @@ function normalizeDate(date) {
 }
 
 /**
+ * Format a date as YYYY-MM-DD using the local timezone.
+ */
+function formatDateYMD(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
  * Get the challenge date range as Date objects (normalized to day boundaries).
  * Challenge model stores dates as strings.
  */
@@ -35,12 +49,16 @@ function getChallengeDateRange(challenge) {
   let end = null;
 
   if (challenge.startDate) {
-    start = normalizeDate(new Date(challenge.startDate));
+    // If it is just a date string "YYYY-MM-DD", treat as local midnight
+    // (Appending T00:00:00 ensures it parses as local time instead of UTC)
+    const ds = challenge.startDate.length === 10 ? challenge.startDate + 'T00:00:00' : challenge.startDate;
+    start = normalizeDate(new Date(ds));
   }
 
   if (challenge.endDate) {
     // Treat endDate as inclusive; set to end of that calendar day
-    end = new Date(challenge.endDate);
+    const ds = challenge.endDate.length === 10 ? challenge.endDate + 'T00:00:00' : challenge.endDate;
+    end = new Date(ds);
     end.setHours(23, 59, 59, 999);
   }
 
@@ -63,15 +81,21 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
     const { oauth2Client } = await ensureValidGoogleTokens(user);
 
     const now = new Date();
+    // Force "now" to interpret current time in the correct timezone context if needed,
+    // though process.env.TZ handles the system time offset.
     const start = new Date(now);
     start.setDate(start.getDate() - (daysBack - 1));
     start.setHours(0, 0, 0, 0);
     const end = new Date(now);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:googleFitSync',message:'Google Fit Sync Date Range',data:{email:user.email,startLocal:start.toString(),startISO:start.toISOString(),endLocal:end.toString(),endISO:end.toISOString(),startMillis:start.getTime(),endMillis:end.getTime()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
     const credentials = await oauth2Client.getAccessToken();
     const accessToken = credentials.token || user.accessToken;
 
-    console.log(`📡 Syncing Google Fit history for ${user.email} from ${start.toISOString()} to ${end.toISOString()}`);
+    console.log(`📡 Syncing Google Fit history for ${user.email} from ${start.toString()} (${start.toISOString()}) to ${end.toString()}`);
 
     const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
       method: 'POST',
@@ -103,6 +127,21 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
       console.log(`ℹ️ No Google Fit buckets returned for ${user.email}`);
       return;
     }
+
+    // Cleanup existing entries in the range to prevent duplicates from timezone shifts
+    // We expand the window slightly (-12h to +12h) to catch legacy UTC-midnight entries
+    // which might be 4-5 hours "behind" the new NY-midnight entries.
+    const deleteStart = new Date(start);
+    deleteStart.setHours(deleteStart.getHours() - 12);
+    const deleteEnd = new Date(end);
+    deleteEnd.setHours(deleteEnd.getHours() + 12);
+
+    // Remove source filter to ensure we clean up 'sync' or 'manual' entries that collide
+    // with this authoritative backfill.
+    await FitnessHistory.deleteMany({
+      userId: user.googleId,
+      date: { $gte: deleteStart, $lte: deleteEnd }
+    });
 
     for (const bucket of data.bucket) {
       const rawNanos = bucket.startTimeMillisNanos;
@@ -227,10 +266,25 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
     start.setHours(0, 0, 0, 0);
     const end = new Date(now);
 
-    const startDateStr = start.toISOString().split('T')[0];
-    const endDateStr = end.toISOString().split('T')[0];
+    const startDateStr = formatDateYMD(start);
+    const endDateStr = formatDateYMD(end);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:fitbitSync',message:'Fitbit Sync Date Range',data:{email:user.email,startLocal:start.toString(),startDateStr,endLocal:end.toString(),endDateStr},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     console.log(`📡 Syncing Fitbit history for ${user.email} from ${startDateStr} to ${endDateStr}`);
+
+    // Cleanup existing entries in the range to prevent duplicates from timezone shifts
+    const deleteStart = new Date(start);
+    deleteStart.setHours(deleteStart.getHours() - 12);
+    const deleteEnd = new Date(end);
+    deleteEnd.setHours(deleteEnd.getHours() + 12);
+
+    await FitnessHistory.deleteMany({
+      userId: user.googleId,
+      date: { $gte: deleteStart, $lte: deleteEnd }
+    });
 
     const [stepsResponse, weightResponse] = await Promise.all([
       fetch(
@@ -290,7 +344,8 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
 
     for (const entry of stepsData['activities-steps']) {
       const entryDateStr = entry.dateTime;
-      const entryDate = normalizeDate(new Date(entryDateStr));
+      // Parse as local midnight to ensure it normalizes to the correct day
+      const entryDate = normalizeDate(new Date(entryDateStr + 'T00:00:00'));
       const steps = entry.value ? parseInt(entry.value, 10) : 0;
       const weight = weightMap.get(entryDateStr) || null;
 
@@ -426,6 +481,13 @@ async function recalcStepPointsForParticipant(participant, challenge) {
 
 async function backfillStepHistoryAndPoints() {
   console.log('🔧 Starting backfill of step history and points for challenge users...');
+  const now = new Date();
+  console.log(`🕒 Server Time Check: ${now.toString()}`);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:start',message:'Timezone check',data:{tzEnv:process.env.TZ,timeString:now.toString(),isoString:now.toISOString(),offset:now.getTimezoneOffset()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+
 
   const participants = await ChallengeParticipant.find({});
   if (participants.length === 0) {
@@ -444,7 +506,6 @@ async function backfillStepHistoryAndPoints() {
 
   // Determine which challenges are currently active.
   // Active = today is on/after startDate, and (no endDate OR today is on/before endDate).
-  const now = new Date();
   const todayStart = normalizeDate(now);
 
   const allChallengeIds = Array.from(new Set(participants.map(p => p.challengeId)));
