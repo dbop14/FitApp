@@ -95,12 +95,29 @@ router.post('/userdata', async (req, res) => {
     
     console.log(`📊 Storing fitness history for ${email} on ${dateStr}: steps=${steps}, weight=${weight}`);
     
+    // High Water Mark for historical dates: do not overwrite with lower step counts
+    // (Sync can POST historical days via saveFitnessHistoryToBackend; update-participant recalculates from FitnessHistory)
+    let stepsToSave = steps || 0;
+    let weightToSave = weight ?? null;
+    if (!isToday) {
+      const existing = await FitnessHistory.findOne({ userId: googleId, date: targetDate });
+      if (existing) {
+        if (existing.steps > stepsToSave) {
+          stepsToSave = existing.steps;
+          console.log(`🛡️ POST /userdata: preserving higher steps for ${dateStr}: ${existing.steps} (ignored ${steps || 0})`);
+        }
+        if ((weightToSave === null || weightToSave === undefined) && existing.weight != null) {
+          weightToSave = existing.weight;
+        }
+      }
+    }
+    
     await FitnessHistory.findOneAndUpdate(
       { userId: googleId, date: targetDate },
       {
         $set: {
-          steps: steps || 0,
-          weight: weight || null,
+          steps: stepsToSave,
+          weight: weightToSave,
           source: 'sync',
           updatedAt: new Date()
         },
@@ -110,7 +127,7 @@ router.post('/userdata', async (req, res) => {
       },
       { upsert: true }
     );
-    console.log(`✅ Stored fitness history for ${email} on ${dateStr}: steps=${steps}, weight=${weight || 'null'}`);
+    console.log(`✅ Stored fitness history for ${email} on ${dateStr}: steps=${stepsToSave}, weight=${weightToSave ?? 'null'}`);
 
     let pointsUpdates = [];
     
