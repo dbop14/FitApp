@@ -34,10 +34,10 @@ export const useLeaderboard = (challengeId) => {
       return await response.json()
     },
     enabled: !!challengeId && !!user?.sub,
-    staleTime: 1 * 60 * 1000, // 1 minute - leaderboard changes more frequently
+    staleTime: 30 * 1000, // 30 seconds - so refocus or remount picks up backfill/sync updates
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: false, // Use cache if data is fresh
+    refetchOnWindowFocus: true, // Refetch when tab gains focus (e.g. after running backfill script)
+    refetchOnMount: true, // Refetch when component mounts if data is stale
     retry: 1,
   })
 }

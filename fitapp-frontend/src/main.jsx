@@ -103,23 +103,6 @@ if ('serviceWorker' in navigator) {
     const swUrl = '/sw.js';
     let registration = null;
     let updateCheckInterval = null;
-    let isUserActive = true; // Track if user is actively using the app
-    let lastUserActivity = Date.now();
-
-    // Track user activity to determine if we should auto-update or prompt
-    const updateActivity = () => {
-      lastUserActivity = Date.now();
-      isUserActive = true;
-    };
-    ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
-      window.addEventListener(event, updateActivity, { passive: true });
-    });
-
-    // Check if user has been inactive (no activity for 2 minutes)
-    const checkUserActivity = () => {
-      const inactiveTime = Date.now() - lastUserActivity;
-      isUserActive = inactiveTime < 120000; // 2 minutes
-    };
 
     navigator.serviceWorker.register(swUrl)
       .then((reg) => {
@@ -149,21 +132,13 @@ if ('serviceWorker' in navigator) {
         updateCheckInterval = setInterval(checkForUpdates, 5 * 60 * 1000);
 
         // Check for updates when user navigates (route changes)
-        // This ensures updates are applied quickly when user is actively using the app
         let navigationCheckTimeout = null;
         const checkOnNavigation = () => {
-          // Debounce navigation checks
           if (navigationCheckTimeout) clearTimeout(navigationCheckTimeout);
           navigationCheckTimeout = setTimeout(() => {
-            checkUserActivity();
             if (registration && registration.waiting) {
-              // Update is waiting - apply it if user is active, otherwise prompt
-              if (isUserActive) {
-                console.log('🔄 Update available, applying automatically on navigation');
-                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-              } else {
-                console.log('🆕 Update available: user inactive, will prompt on next activity');
-              }
+              console.log('🔄 Update available, applying on navigation...');
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             } else {
               checkForUpdates();
             }
@@ -176,39 +151,23 @@ if ('serviceWorker' in navigator) {
         // Also check when visibility changes (user returns to tab)
         document.addEventListener('visibilitychange', () => {
           if (!document.hidden) {
-            checkUserActivity();
             checkForUpdates();
-            // If update is waiting and user just returned, apply it
-            if (registration && registration.waiting && isUserActive) {
-              console.log('🔄 Update available, applying automatically after visibility change');
+            if (registration && registration.waiting) {
+              console.log('🔄 Update available, applying after visibility change...');
               registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
           }
         });
 
-        // Show "update available" prompt when a new SW is installed
-        // Only show if user is actively using the app (otherwise auto-update in background)
+        // When a new SW is installed, apply it immediately so controllerchange triggers reload
         registration.onupdatefound = () => {
           const newWorker = registration.installing;
           if (!newWorker) return;
 
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              checkUserActivity();
-              
-              // If user is inactive, auto-update in background
-              if (!isUserActive) {
-                console.log('🔄 Update available, applying automatically (user inactive)');
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-                return;
-              }
-
-              // If user is active, show prompt
-              console.log('🆕 Update available: prompting user to refresh');
-              window.__FITAPP_SW_UPDATE__ = newWorker;
-              window.dispatchEvent(
-                new CustomEvent('fitapp:sw-update', { detail: { worker: newWorker } })
-              );
+              console.log('🔄 Update available, applying and refreshing...');
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         };
@@ -224,12 +183,8 @@ if ('serviceWorker' in navigator) {
             }
           });
         } else if (registration.waiting) {
-          console.log('⏳ Service Worker is waiting...');
-          // If there's already a waiting worker, apply it if user is inactive
-          checkUserActivity();
-          if (!isUserActive) {
-            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-          }
+          console.log('⏳ Service Worker is waiting, applying and refreshing...');
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
 
         // Cleanup on page unload

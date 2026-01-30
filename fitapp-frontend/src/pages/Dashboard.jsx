@@ -414,7 +414,8 @@ const Dashboard = () => {
     fetchUserRank()
   }, [userChallenges.length, user?.sub])
 
-  // Fetch most recent weight from history when not in a challenge and current weight is null
+  // Fetch most recent weight from history when current weight is null so the Weight card
+  // can show the most recent value from Google Fit/Fitbit (including when in a challenge).
   useEffect(() => {
     const fetchMostRecentWeight = async () => {
       // Only fetch if not in a challenge and current weight is null/undefined
@@ -443,7 +444,7 @@ const Dashboard = () => {
       setIsLoadingWeight(true)
       try {
         const apiUrl = getApiUrl()
-        const historyResponse = await fetchWithAuth(`${apiUrl}/api/user/fitness-history/${user.sub}?limit=1`)
+        const historyResponse = await fetchWithAuth(`${apiUrl}/api/user/fitness-history/${user.sub}?limit=30`)
         
         if (historyResponse.ok) {
           const history = await historyResponse.json()
@@ -464,7 +465,7 @@ const Dashboard = () => {
     }
     
     fetchMostRecentWeight()
-  }, [activeChallenge, user?.sub, user?.weight, userData?.weight])
+  }, [user?.sub, user?.weight, userData?.weight])
 
   // Auto-refresh user data when Dashboard page loads
   useEffect(() => {
@@ -741,7 +742,7 @@ const Dashboard = () => {
         
         try {
           const apiUrl = getApiUrl()
-          const historyResponse = await fetchWithAuth(`${apiUrl}/api/user/fitness-history/${user.sub}?limit=1`)
+          const historyResponse = await fetchWithAuth(`${apiUrl}/api/user/fitness-history/${user.sub}?limit=30`)
           
           if (historyResponse.ok) {
             const history = await historyResponse.json()
@@ -979,12 +980,14 @@ const Dashboard = () => {
                 variant="light"
                 title="Current Weight"
               value={(() => {
-                // Use participant's lastWeight if available (last recorded weight in challenge)
-                // Fallback to user.weight, then to most recent weight from history
-                const weightToShow = participantData?.lastWeight ?? currentUserData?.weight ?? mostRecentWeight;
-                
-                return weightToShow !== null && weightToShow !== undefined 
-                  ? `${weightToShow.toFixed(1)} lbs` 
+                // On weigh-in day: prefer the value submitted via Confirm Weight (participantData.lastWeight)
+                // Otherwise: use most recent weight synced from preferred data source (Google Fit/Fitbit)
+                const isWeighInDay = !!(shouldPromptForWeight && activeChallenge);
+                const weightToShow = isWeighInDay
+                  ? (participantData?.lastWeight ?? currentUserData?.weight ?? mostRecentWeight)
+                  : (currentUserData?.weight ?? mostRecentWeight);
+                return weightToShow !== null && weightToShow !== undefined
+                  ? `${weightToShow.toFixed(1)} lbs`
                   : 'N/A';
               })()}
               subtitle={(() => {

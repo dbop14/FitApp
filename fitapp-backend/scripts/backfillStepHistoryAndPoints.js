@@ -31,6 +31,60 @@ function normalizeDate(date) {
 }
 
 /**
+ * Safely upsert a fitness history entry, merging with any existing duplicates
+ * in a ±12h window (delete legacy/loose matches only). Backfill uses the
+ * current API response as source of truth (no High Water Mark here).
+ */
+async function smartUpsertFitnessHistory(userId, date, steps, weight, source) {
+    const canonicalDate = date;
+    const startWindow = new Date(canonicalDate);
+    startWindow.setHours(startWindow.getHours() - 12);
+    const endWindow = new Date(canonicalDate);
+    endWindow.setHours(endWindow.getHours() + 12);
+
+    const candidates = await FitnessHistory.find({
+        userId,
+        date: { $gte: startWindow, $lte: endWindow }
+    });
+
+    const exactMatches = candidates.filter(c => c.date.getTime() === canonicalDate.getTime());
+    const looseMatches = candidates.filter(c => c.date.getTime() !== canonicalDate.getTime());
+
+    // Always use incoming API data as source of truth for backfill (no HWM)
+    const stepsToSave = steps || 0;
+    let weightToSave = weight;
+    if ((weightToSave === undefined || weightToSave === null) && exactMatches.length > 0 && exactMatches[0].weight) {
+        weightToSave = exactMatches[0].weight;
+    }
+
+    if (looseMatches.length > 0) {
+        await FitnessHistory.deleteMany({ _id: { $in: looseMatches.map(c => c._id) } });
+    }
+
+    if (exactMatches.length > 0) {
+        await FitnessHistory.findByIdAndUpdate(exactMatches[0]._id, {
+            steps: stepsToSave,
+            weight: weightToSave ?? null,
+            source,
+            updatedAt: new Date()
+        });
+        if (exactMatches.length > 1) {
+            await FitnessHistory.deleteMany({ _id: { $in: exactMatches.slice(1).map(c => c._id) } });
+        }
+    } else {
+        await FitnessHistory.create({
+            userId,
+            date: canonicalDate,
+            steps: stepsToSave,
+            weight: weightToSave ?? null,
+            source,
+            updatedAt: new Date(),
+            createdAt: new Date()
+        });
+    }
+}
+
+/**
  * Format a date as YYYY-MM-DD using the local timezone.
  */
 function formatDateYMD(date) {
@@ -129,20 +183,9 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
       return;
     }
 
-    // Cleanup existing entries in the range to prevent duplicates from timezone shifts
-    // We expand the window slightly (-12h to +12h) to catch legacy UTC-midnight entries
-    // which might be 4-5 hours "behind" the new NY-midnight entries.
-    const deleteStart = new Date(start);
-    deleteStart.setHours(deleteStart.getHours() - 12);
-    const deleteEnd = new Date(end);
-    deleteEnd.setHours(deleteEnd.getHours() + 12);
-
-    // Remove source filter to ensure we clean up 'sync' or 'manual' entries that collide
-    // with this authoritative backfill.
-    await FitnessHistory.deleteMany({
-      userId: user.googleId,
-      date: { $gte: deleteStart, $lte: deleteEnd }
-    });
+    // Cleanup removed to support High Water Mark logic.
+    // Timezone alignment is now fixed via process.env.TZ, so duplicates shouldn't occur.
+    // findOneAndUpdate with consistent date normalization handles upserts correctly.
 
     for (const bucket of data.bucket) {
       const rawNanos = bucket.startTimeMillisNanos;
@@ -222,21 +265,14 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
 
       // IMPORTANT: For history backfill we always write the day,
       // even when steps === 0 so we can distinguish "no data" vs "0 steps".
-      await FitnessHistory.findOneAndUpdate(
-        { userId: user.googleId, date: bucketDate },
-        {
-          $set: {
-            steps: steps || 0,
-            // We don't backfill weight here; points depend only on steps
-            weight: undefined,
-            source: 'google-fit',
-            updatedAt: new Date()
-          },
-          $setOnInsert: {
-            createdAt: new Date()
-          }
-        },
-        { upsert: true }
+      
+      // Use smart upsert to handle deduplication and High Water Mark
+      await smartUpsertFitnessHistory(
+        user.googleId,
+        bucketDate,
+        steps,
+        undefined, // Google Fit aggregated steps endpoint doesn't return weight in this call
+        'google-fit'
       );
     }
 
@@ -276,16 +312,8 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
 
     console.log(`📡 Syncing Fitbit history for ${user.email} from ${startDateStr} to ${endDateStr}`);
 
-    // Cleanup existing entries in the range to prevent duplicates from timezone shifts
-    const deleteStart = new Date(start);
-    deleteStart.setHours(deleteStart.getHours() - 12);
-    const deleteEnd = new Date(end);
-    deleteEnd.setHours(deleteEnd.getHours() + 12);
-
-    await FitnessHistory.deleteMany({
-      userId: user.googleId,
-      date: { $gte: deleteStart, $lte: deleteEnd }
-    });
+    // Cleanup removed to support High Water Mark logic.
+    // Timezone alignment is now fixed via process.env.TZ, so duplicates shouldn't occur.
 
     const [stepsResponse, weightResponse] = await Promise.all([
       fetch(
@@ -351,20 +379,13 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
       const weight = weightMap.get(entryDateStr) || null;
 
       // Always write the entry, even when steps === 0 and weight === null.
-      await FitnessHistory.findOneAndUpdate(
-        { userId: user.googleId, date: entryDate },
-        {
-          $set: {
-            steps: steps || 0,
-            weight: weight || null,
-            source: 'fitbit',
-            updatedAt: new Date()
-          },
-          $setOnInsert: {
-            createdAt: new Date()
-          }
-        },
-        { upsert: true }
+      // Use smart upsert to handle deduplication and High Water Mark
+      await smartUpsertFitnessHistory(
+        user.googleId,
+        entryDate,
+        steps,
+        weight,
+        'fitbit'
       );
     }
 
@@ -443,6 +464,7 @@ async function recalcStepPointsForParticipant(participant, challenge) {
   }
 
   const oldStepPoints = participant.stepGoalPoints || 0;
+  const oldWeightLossPoints = participant.weightLossPoints || 0;
   
   // Recalculate weight loss points based on the most recent weight in history
   // This ensures that even if Sync messed up the weight loss calc, Backfill fixes it
