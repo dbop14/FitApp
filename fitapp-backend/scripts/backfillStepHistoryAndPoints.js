@@ -223,7 +223,14 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
         continue;
       }
 
-      const bucketDate = normalizeDate(bucketDateObj);
+      // Use the bucket's UTC calendar date at midnight NY so one bucket = one stored day.
+      // (normalizeDate(bucketDateObj) would treat UTC midnight as previous NY day and cause
+      // duplicate/off-by-one counts when recalc runs.)
+      const bucketDate = normalizeDate(new Date(
+        bucketDateObj.getUTCFullYear(),
+        bucketDateObj.getUTCMonth(),
+        bucketDateObj.getUTCDate()
+      ));
 
       const stepsData = bucket.dataset?.find(d =>
         d.dataTypeName === 'com.google.step_count.delta' ||

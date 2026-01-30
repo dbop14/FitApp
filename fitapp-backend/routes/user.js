@@ -95,8 +95,8 @@ router.post('/userdata', async (req, res) => {
     
     console.log(`📊 Storing fitness history for ${email} on ${dateStr}: steps=${steps}, weight=${weight}`);
     
-    // High Water Mark for historical dates: do not overwrite with lower step counts
-    // (Sync can POST historical days via saveFitnessHistoryToBackend; update-participant recalculates from FitnessHistory)
+    // Historical dates: backfill/GET are source of truth. Do not overwrite with lower (preserve)
+    // or higher (client Sync can inflate); only allow filling missing days.
     let stepsToSave = steps || 0;
     let weightToSave = weight ?? null;
     if (!isToday) {
@@ -105,6 +105,9 @@ router.post('/userdata', async (req, res) => {
         if (existing.steps > stepsToSave) {
           stepsToSave = existing.steps;
           console.log(`🛡️ POST /userdata: preserving higher steps for ${dateStr}: ${existing.steps} (ignored ${steps || 0})`);
+        } else if (existing.steps < stepsToSave) {
+          stepsToSave = existing.steps;
+          console.log(`🛡️ POST /userdata: not inflating steps for ${dateStr}: keeping ${existing.steps} (ignored client ${steps || 0})`);
         }
         if ((weightToSave === null || weightToSave === undefined) && existing.weight != null) {
           weightToSave = existing.weight;
