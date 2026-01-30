@@ -344,7 +344,6 @@ router.get('/events/:googleId', async (req, res) => {
 
 // Helper function to broadcast updates (can be called from other routes)
 const broadcastUserUpdate = (googleId, data) => {
-  // debug instrumentation removed
   const connections = Array.from(activeConnections.values())
     .filter(conn => conn.googleId === googleId && conn.res)
   
@@ -368,7 +367,6 @@ const broadcastUserUpdate = (googleId, data) => {
             lastSync: data.lastSync
           }
           console.log(`📡 Broadcasted update to ${googleId}`)
-          // debug instrumentation removed
         } else {
           // Connection is dead, find and remove it
           const connectionId = Array.from(activeConnections.entries())

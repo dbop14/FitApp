@@ -12,13 +12,6 @@ import { useUserData } from '../hooks/useUserData'
 import { useChallenges } from '../hooks/useChallenges'
 import { useQueryClient } from '@tanstack/react-query'
 
-// #region agent log
-const debugLog = (payload) => {
-  const apiUrl = getApiUrl()
-  fetch(`${apiUrl}/api/debug-log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: 'debug-session' }) }).catch(() => {})
-}
-// #endregion
-
 /**
  * Dashboard Component - Refactored to align with unified design system
  * 
@@ -631,10 +624,6 @@ const Dashboard = () => {
     
     setIsSyncing(true)
     setSyncError(null)
-
-    // #region agent log
-    debugLog({ location: 'Dashboard.jsx:handleSyncClick', message: 'Sync started', data: { dataSource: user?.dataSource }, hypothesisId: 'B' })
-    // #endregion
     
     try {
       // Check user's data source and sync accordingly
@@ -654,9 +643,6 @@ const Dashboard = () => {
         }
         
         syncData = await response.json()
-        // #region agent log
-        debugLog({ location: 'Dashboard.jsx:after-Fitbit-sync', message: 'Fitbit sync completed', data: { steps: syncData.steps, weight: syncData.weight }, hypothesisId: 'C' })
-        // #endregion
         console.log('✅ Fitbit sync completed successfully', { steps: syncData.steps, weight: syncData.weight })
         
         // Update user context with synced data
@@ -706,9 +692,6 @@ const Dashboard = () => {
       } else {
         // For Google Fit, use existing sync function
         await syncGoogleFitData()
-        // #region agent log
-        debugLog({ location: 'Dashboard.jsx:after-syncGoogleFitData', message: 'Google Fit sync completed', data: {}, hypothesisId: 'C' })
-        // #endregion
         console.log('✅ Google Fit sync completed successfully')
       }
       
@@ -794,9 +777,6 @@ const Dashboard = () => {
           const participantResponse = await fetchWithAuth(`${apiUrl}/api/challenge/${activeChallenge._id}/participant/${user.sub}`)
           if (participantResponse.ok) {
             const participant = await participantResponse.json()
-            // #region agent log
-            debugLog({ location: 'Dashboard.jsx:participant-after-sync', message: 'Participant data after sync', data: { stepGoalPoints: participant.participant?.stepGoalPoints, points: participant.participant?.points }, hypothesisId: 'D' })
-            // #endregion
             setParticipantData(participant.participant)
           }
         } catch (err) {

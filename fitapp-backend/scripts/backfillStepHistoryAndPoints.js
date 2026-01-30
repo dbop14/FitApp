@@ -10,19 +10,6 @@ const User = require('../models/User');
 const { ensureValidGoogleTokens } = require('../utils/googleAuth');
 const { ensureValidFitbitTokens } = require('../utils/fitbitAuth');
 
-/** Base URL for debug log ingest (e.g. http://127.0.0.1:7244 or http://host.docker.internal:7244 when running in Docker). */
-const DEBUG_LOG_BASE = (process.env.DEBUG_LOG_URL || 'http://127.0.0.1:7244').replace(/\/$/, '');
-const DEBUG_LOG_INGEST = `${DEBUG_LOG_BASE}/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb`;
-
-function sendDebugLog(payload) {
-  if (!DEBUG_LOG_BASE) return;
-  fetch(DEBUG_LOG_INGEST, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: 'debug-session' })
-  }).catch(() => {});
-}
-
 /**
  * Normalize a JS Date to start-of-day using the same helper as the model.
  */
@@ -143,10 +130,6 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
     const end = new Date(now);
     end.setHours(23, 59, 59, 999);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:googleFitSync',message:'Google Fit Sync Date Range',data:{email:user.email,startLocal:start.toString(),startISO:start.toISOString(),endLocal:end.toString(),endISO:end.toISOString(),startMillis:start.getTime(),endMillis:end.getTime()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
     const credentials = await oauth2Client.getAccessToken();
     const accessToken = credentials.token || user.accessToken;
 
@@ -175,9 +158,6 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
     }
 
     const data = await response.json();
-    // #region agent log
-    sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:googleFitBuckets', message: 'Google Fit API response', data: { email: user.email, bucketCount: data.bucket?.length ?? 0, hasBucket: !!data.bucket }, hypothesisId: 'C' });
-    // #endregion
     if (!data.bucket || data.bucket.length === 0) {
       console.log(`ℹ️ No Google Fit buckets returned for ${user.email}`);
       return;
@@ -238,38 +218,6 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
       );
       const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
 
-      // #region agent log
-      // Hypothesis G: we might be undercounting because we're only taking
-      // the first point instead of summing all step_count.delta points in the bucket.
-      const stepPoints = [];
-      (bucket.dataset || []).forEach(d => {
-        if (
-          d.dataTypeName === 'com.google.step_count.delta' ||
-          (typeof d.dataSourceId === 'string' && d.dataSourceId.includes('step_count.delta'))
-        ) {
-          (d.point || []).forEach(pt => {
-            const v = pt?.value?.[0]?.intVal;
-            if (typeof v === 'number' && Number.isFinite(v)) {
-              stepPoints.push(v);
-            }
-          });
-        }
-      });
-      const sumSteps = stepPoints.reduce((acc, v) => acc + v, 0);
-      sendDebugLog({
-        location: 'backfillStepHistoryAndPoints.js:googleFitBucketSteps',
-        message: 'Google Fit bucket steps detail',
-        data: {
-          email: user.email,
-          bucketDate: bucketDate.toISOString().slice(0, 10),
-          firstPointSteps: steps,
-          sumSteps,
-          pointCount: stepPoints.length
-        },
-        hypothesisId: 'G'
-      });
-      // #endregion
-
       // IMPORTANT: For history backfill we always write the day,
       // even when steps === 0 so we can distinguish "no data" vs "0 steps".
       
@@ -312,10 +260,6 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
 
     const startDateStr = formatDateYMD(start);
     const endDateStr = formatDateYMD(end);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:fitbitSync',message:'Fitbit Sync Date Range',data:{email:user.email,startLocal:start.toString(),startDateStr,endLocal:end.toString(),endDateStr},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
 
     console.log(`📡 Syncing Fitbit history for ${user.email} from ${startDateStr} to ${endDateStr}`);
 
@@ -369,10 +313,6 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
       });
     }
 
-    // #region agent log
-    const activitiesStepsLen = (stepsData && stepsData['activities-steps']) ? stepsData['activities-steps'].length : 0;
-    sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:fitbitSteps', message: 'Fitbit steps response', data: { email: user.email, hasStepsData: !!stepsData, activitiesStepsLength: activitiesStepsLen }, hypothesisId: 'C' });
-    // #endregion
     if (!stepsData || !stepsData['activities-steps']) {
       console.log(`ℹ️ No Fitbit steps time series for ${user.email}`);
       return;
@@ -442,28 +382,6 @@ async function recalcStepPointsForParticipant(participant, challenge) {
   const uniqueGoalDateKeys = new Set(goalDates.map(d => d.toISOString()));
   const newStepGoalDays = uniqueGoalDateKeys.size;
 
-  // #region agent log
-  const historyByDay = history.map(entry => ({
-    date: entry.date.toISOString().slice(0, 10),
-    steps: entry.steps || 0
-  }));
-  sendDebugLog({
-    location: 'backfillStepHistoryAndPoints.js:recalcHistory',
-    message: 'FitnessHistory recalc details',
-    data: {
-      participantUserId: participant.userId,
-      participantUserIdType: typeof participant.userId,
-      queryStart: queryStart.toISOString(),
-      queryEnd: queryEnd.toISOString(),
-      historyCount: history.length,
-      stepGoal,
-      newStepGoalDays,
-      historyByDay
-    },
-    hypothesisId: 'D'
-  });
-  // #endregion
-
   // Determine the last day where the goal was met
   let lastStepDate = null;
   if (goalDates.length > 0) {
@@ -512,26 +430,6 @@ async function recalcStepPointsForParticipant(participant, challenge) {
 
   await participant.save();
 
-  // #region agent log
-  const maxSteps = history.reduce((max, entry) => Math.max(max, entry.steps || 0), 0);
-  sendDebugLog({
-    location: 'backfillStepHistoryAndPoints.js:recalcSummary',
-    message: 'Recalc step and weight points summary',
-    data: {
-      participantUserId: participant.userId,
-      stepGoal,
-      historyCount: history.length,
-      newStepGoalDays,
-      maxSteps,
-      newStepPoints,
-      oldWeightLossPoints: participant.weightLossPoints,
-      newWeightLossPoints,
-      newTotalPoints
-    },
-    hypothesisId: 'F'
-  });
-  // #endregion
-
   console.log(`✅ Recalculated points for user ${participant.userId} in challenge ${challenge.name}:`, {
     oldStepPoints,
     newStepPoints,
@@ -546,20 +444,12 @@ async function backfillStepHistoryAndPoints() {
   const now = new Date();
   console.log(`🕒 Server Time Check: ${now.toString()}`);
 
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'backfillStepHistoryAndPoints.js:start',message:'Timezone check',data:{tzEnv:process.env.TZ,timeString:now.toString(),isoString:now.toISOString(),offset:now.getTimezoneOffset()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-
-
   const participants = await ChallengeParticipant.find({});
   if (participants.length === 0) {
     console.log('ℹ️ No challenge participants found. Nothing to do.');
     return;
   }
 
-  // #region agent log
-  sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:participants', message: 'Participants loaded', data: { participantsLength: participants.length, sampleUserId: participants[0]?.userId, sampleUserIdType: typeof participants[0]?.userId }, hypothesisId: 'A' });
-  // #endregion
   console.log(`📊 Found ${participants.length} challenge participants (all challenges)`);
 
   // Cache users and challenges so we don't query them repeatedly
@@ -587,9 +477,6 @@ async function backfillStepHistoryAndPoints() {
     }
   });
 
-  // #region agent log
-  sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:activeChallenges', message: 'Active challenge filter', data: { activeCount: activeChallengeIds.size, allCount: allChallengeIds.length, sampleChallenge: allChallenges[0] ? { startDate: allChallenges[0].startDate, endDate: allChallenges[0].endDate, todayStart: todayStart.toISOString() } : null }, hypothesisId: 'B' });
-  // #endregion
   if (activeChallengeIds.size === 0) {
     console.log('ℹ️ No active challenges found based on start/end dates. Nothing to do.');
     return;
@@ -615,18 +502,12 @@ async function backfillStepHistoryAndPoints() {
   // Load all users up front
   const users = await User.find({ googleId: { $in: userIds } });
   users.forEach(u => userCache.set(u.googleId, u));
-  // #region agent log
-  sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:userLookup', message: 'User lookup by googleId', data: { userIdsLength: userIds.length, usersFound: users.length, userIdsSample: userIds.slice(0, 3), googleIdsSample: users.slice(0, 3).map(u => u.googleId) }, hypothesisId: 'A' });
-  // #endregion
 
   // Step 1 & 2: For each user (in active challenges), sync last 30 days of history
   // from their configured data source
   for (const userId of userIds) {
     const user = userCache.get(userId);
     if (!user) {
-      // #region agent log
-      sendDebugLog({ location: 'backfillStepHistoryAndPoints.js:userNotFound', message: 'User not in cache', data: { userIdStr: String(userId), userIdType: typeof userId }, hypothesisId: 'E' });
-      // #endregion
       console.log(`⚠️ User ${userId} not found, skipping history sync`);
       continue;
     }

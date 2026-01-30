@@ -633,31 +633,11 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
     const currentTime = new Date(userLocalTime.getTime());
     const endOfToday = new Date(userLocalTime.getFullYear(), userLocalTime.getMonth(), userLocalTime.getDate(), 23, 59, 59, 999);
     
-    console.log(`📊 Current UTC time: ${now.toISOString()}`);
-    console.log(`📊 Current user local time (${APP_TIMEZONE}): ${userLocalTime.toISOString()}`);
-    // Enhanced timezone debugging
-    console.log(`📊 === TIMEZONE DEBUGGING ===`);
-    console.log(`📊 Current UTC time: ${now.toISOString()}`);
-    console.log(`📊 User timezone offset (from APP_TIMEZONE=${APP_TIMEZONE}): ${userTimezoneOffset}ms (${userTimezoneOffset / (60 * 60 * 1000)} hours)`);
-    console.log(`📊 Current user local time (${APP_TIMEZONE}): ${userLocalTime.toISOString()}`);
-    console.log(`📊 User local time string: ${userLocalTime.toString()}`);
-    console.log(`📊 Fetching Google Fit data from ${startOfToday.toISOString()} to ${currentTime.toISOString()}`);
-    console.log(`📊 This covers today only: from 12:01 AM to current time`);
-    console.log(`📊 Today's date in configured timezone (${APP_TIMEZONE}): ${userLocalTime.toDateString()}`);
-    console.log(`📊 Start of today: ${startOfToday.toDateString()} ${startOfToday.toTimeString()}`);
-    console.log(`📊 Current time: ${currentTime.toDateString()} ${currentTime.toTimeString()}`);
-    console.log(`📊 Time range in milliseconds: ${startOfToday.getTime()} to ${currentTime.getTime()}`);
-    console.log(`📊 === END TIMEZONE DEBUGGING ===`);
-    
     let steps = 0;
     let weight = null;
     
     // Get step count using the aggregate API - this is more reliable
     try {
-      console.log(`🔄 Fetching step count using aggregate API...`);
-      console.log(`📊 Time range: ${startOfToday.toISOString()} to ${currentTime.toISOString()}`);
-      console.log(`📊 Time in milliseconds: ${startOfToday.getTime()} to ${currentTime.getTime()}`);
-      
       // Request data for today only (from 12:01 AM to current time)
       
       // Note: We only request 'delta' in aggregateBy, but we'll check for 'summary' in the response
