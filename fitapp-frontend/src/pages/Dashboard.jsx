@@ -721,7 +721,7 @@ const Dashboard = () => {
       // Check user from context (which should be updated by syncGoogleFitData)
       const currentUser = user || JSON.parse(localStorage.getItem('fitapp_user') || '{}')
       if (!currentUser?.weight || currentUser.weight === null) {
-        console.log('⚠️ No weight from Google Fit, fetching most recent weight from history...')
+        console.log('⚠️ No weight from data source, fetching most recent weight from history...')
         
         try {
           const apiUrl = getApiUrl()

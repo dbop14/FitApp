@@ -5,7 +5,7 @@ import { fetchWithAuth, getApiUrl } from '../utils/apiService'
  * WeightInputModal Component
  * 
  * Handles weight confirmation for challenges on weigh-in days:
- * - Automatically fetches most recent weight from Google Fit (synced daily)
+ * - Automatically fetches most recent weight from user's data source (Google Fit or Fitbit)
  * - Shows weight for user confirmation
  * - Allows manual entry if needed
  * - Only available on weigh-in days
@@ -15,7 +15,7 @@ import { fetchWithAuth, getApiUrl } from '../utils/apiService'
  * @param {function} onClose - Function to close the modal
  * @param {object} challenge - The challenge object
  * @param {function} onWeightSubmitted - Callback when weight is successfully submitted
- * @param {object} user - Current user object
+ * @param {object} user - Current user object (includes dataSource: 'google-fit' | 'fitbit')
  */
 const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user }) => {
   const [weight, setWeight] = useState('')
@@ -23,7 +23,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [isWeighInDay, setIsWeighInDay] = useState(false)
-  const [weightSource, setWeightSource] = useState(null) // 'google-fit' or 'manual'
+  const [weightSource, setWeightSource] = useState(null) // 'google-fit' | 'fitbit' | 'manual'
 
   // Check if today is a weigh-in day (including first weigh-in day for future challenges)
   useEffect(() => {
@@ -90,53 +90,65 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
     }
   }, [isOpen, isWeighInDay, user?.sub])
 
-  // Fetch the most recent weight from Google Fit (or use user's current weight)
+  // Fetch the most recent weight from user's data source (Google Fit or Fitbit) or fitness history
   const fetchMostRecentWeight = async () => {
     setLoading(true)
     setError(null)
-    
+    const dataSource = user?.dataSource || 'google-fit'
+    const sourceLabel = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'
+
     try {
       const apiUrl = getApiUrl()
-      
-      // First, try to get the most recent weight from Google Fit sync
-      // This endpoint returns the most recent weight available (even if not from today)
-      const response = await fetch(`${apiUrl}/api/sync-google-fit/${user.sub}`)
-      
-      if (!response.ok) {
-        // If sync fails, fall back to user's stored weight
-        if (user?.weight && user.weight > 0) {
-          setWeight(user.weight.toFixed(1))
-          setWeightSource('google-fit')
-          setLoading(false)
-          return
+      let mostRecentWeight = null
+
+      if (dataSource === 'fitbit') {
+        // Fitbit: GET userdata triggers Fitbit sync and returns steps/weight
+        const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`)
+        if (response.ok) {
+          const data = await response.json()
+          mostRecentWeight = data.weight ?? user?.weight
         }
-        throw new Error('Failed to fetch weight data')
+      } else {
+        // Google Fit: sync endpoint returns most recent weight
+        const response = await fetch(`${apiUrl}/api/sync-google-fit/${user.sub}`)
+        if (response.ok) {
+          const data = await response.json()
+          mostRecentWeight = data.weight ?? user?.weight
+        }
       }
-      
-      const data = await response.json()
-      
-      // Use weight from Google Fit if available, otherwise use user's stored weight
-      const mostRecentWeight = data.weight || user?.weight
-      
+
+      if (!mostRecentWeight && (user?.weight && user.weight > 0)) {
+        mostRecentWeight = user.weight
+      }
+
+      // If still no weight, try fitness history (works for both Fitbit and Google Fit)
+      if ((!mostRecentWeight || mostRecentWeight <= 0) && user?.sub) {
+        const historyResponse = await fetchWithAuth(`${apiUrl}/api/user/fitness-history/${user.sub}?limit=30`)
+        if (historyResponse.ok) {
+          const history = await historyResponse.json()
+          const entry = history.find(e => e.weight != null && e.weight > 0)
+          if (entry) mostRecentWeight = entry.weight
+        }
+      }
+
+      const weightSourceKey = dataSource === 'fitbit' ? 'fitbit' : 'google-fit'
       if (mostRecentWeight && mostRecentWeight > 0) {
         setWeight(mostRecentWeight.toFixed(1))
-        setWeightSource('google-fit')
+        setWeightSource(weightSourceKey)
       } else {
-        // No weight data available - user will need to enter manually
         setWeight('')
         setWeightSource(null)
         setError('No weight data found. Please enter your weight manually.')
       }
     } catch (err) {
       console.error('Error fetching weight:', err)
-      // Fall back to user's stored weight if available
       if (user?.weight && user.weight > 0) {
         setWeight(user.weight.toFixed(1))
-        setWeightSource('google-fit')
+        setWeightSource(dataSource === 'fitbit' ? 'fitbit' : 'google-fit')
       } else {
         setWeight('')
         setWeightSource(null)
-        setError('Unable to fetch weight from Google Fit. Please enter manually.')
+        setError(`Unable to fetch weight from ${sourceLabel}. Please enter manually.`)
       }
     } finally {
       setLoading(false)
@@ -256,10 +268,10 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
           {/* Weight Confirmation Form */}
           {!loading && (
             <div className="space-y-4">
-              {weightSource === 'google-fit' && weight && (
+              {(weightSource === 'google-fit' || weightSource === 'fitbit') && weight && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
                   <p className="text-sm text-green-800 font-medium mb-1">
-                    ✓ Most recent weight from Google Fit
+                    ✓ Most recent weight from {weightSource === 'fitbit' ? 'Fitbit' : 'Google Fit'}
                   </p>
                   <p className="text-xs text-green-600">
                     This is your most recent weight. Please confirm or edit if needed.
@@ -277,7 +289,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
                   value={weight}
                   onChange={(e) => {
                     setWeight(e.target.value)
-                    if (weightSource === 'google-fit') {
+                    if (weightSource === 'google-fit' || weightSource === 'fitbit') {
                       setWeightSource('manual')
                     }
                   }}
@@ -291,8 +303,8 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
                   }}
                 />
                 <p className="text-sm text-gray-600 mt-1">
-                  {weightSource === 'google-fit' 
-                    ? 'Confirm this weight or edit if it\'s not accurate.' 
+                  {(weightSource === 'google-fit' || weightSource === 'fitbit')
+                    ? 'Confirm this weight or edit if it\'s not accurate.'
                     : 'Enter your current weight in pounds.'}
                 </p>
               </div>
