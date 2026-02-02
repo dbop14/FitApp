@@ -93,32 +93,21 @@ async function fetchFitbitWeight(accessToken, userId, date) {
     const data = await response.json();
     
     // Fitbit returns weight in the format: { weight: [{ value: 70.5, date: "2024-01-01", ... }] }
-    // Get the most recent weight entry for the date
+    // Get the most recent weight entry for the date (API can return multiple entries per day)
     if (data.weight && data.weight.length > 0) {
-      // Find weight entry for the specific date
-      const weightEntry = data.weight.find(w => w.date === dateStr);
-      if (weightEntry && weightEntry.value) {
-        // Fitbit returns weight in the unit set by user (lbs or kg)
-        // We need to check the unit and convert if necessary
-        // For now, assume it's in the user's preferred unit (we'll need to handle conversion)
-        // Fitbit API returns weight in the format the user has set (lbs or kg)
-        // We'll store it as-is and let the frontend handle display
-        // But we should normalize to lbs for consistency with Google Fit
-        const weightValue = parseFloat(weightEntry.value);
-        
-        // Check if we need to convert from kg to lbs
-        // Fitbit API doesn't directly tell us the unit, but we can infer from typical ranges
-        // For now, assume values > 200 are likely in lbs, < 200 might be kg
-        // Actually, let's check the unit field if available
-        if (weightEntry.unit) {
+      const entriesForDate = data.weight.filter(w => w.date === dateStr);
+      if (entriesForDate.length > 0) {
+        // Sort by time descending so latest entry of the day wins
+        const sorted = [...entriesForDate].sort((a, b) => (b.time || '00:00:00').localeCompare(a.time || '00:00:00'));
+        const weightEntry = sorted[0];
+        const rawValue = weightEntry?.weight ?? weightEntry?.value;
+        if (weightEntry && (rawValue !== undefined && rawValue !== null)) {
+          const weightValue = parseFloat(rawValue);
           if (weightEntry.unit === 'kg' || weightEntry.unit === 'en_GB') {
-            // Convert kg to lbs
             return Math.round(weightValue * 2.20462 * 100) / 100;
           }
+          return weightValue;
         }
-        
-        // Default: assume lbs (most common in US)
-        return weightValue;
       }
     }
     
@@ -193,10 +182,20 @@ async function fetchFitbitData(user, startDate, endDate) {
         if (weightResponse.ok) {
           const weightData = await weightResponse.json();
           if (weightData.weight && weightData.weight.length > 0) {
-            // Get the most recent weight entry
-            const mostRecent = weightData.weight[weightData.weight.length - 1];
-            if (mostRecent && mostRecent.value) {
-              const weightValue = parseFloat(mostRecent.value);
+            // Fitbit API order is unspecified; sort by date+time descending and take the most recent
+            const sorted = [...weightData.weight].sort((a, b) => {
+              const dateA = a.date || '';
+              const timeA = a.time || '00:00:00';
+              const dateB = b.date || '';
+              const timeB = b.time || '00:00:00';
+              const tsA = `${dateA}T${timeA}`;
+              const tsB = `${dateB}T${timeB}`;
+              return tsB.localeCompare(tsA);
+            });
+            const mostRecent = sorted[0];
+            const rawValue = mostRecent?.weight ?? mostRecent?.value;
+            if (mostRecent && (rawValue !== undefined && rawValue !== null)) {
+              const weightValue = parseFloat(rawValue);
               if (mostRecent.unit === 'kg' || mostRecent.unit === 'en_GB') {
                 weight = Math.round(weightValue * 2.20462 * 100) / 100;
               } else {
@@ -278,8 +277,9 @@ async function syncFitbitHistory(user, startDate, endDate) {
     const weightMap = new Map();
     if (weightData && weightData.weight && Array.isArray(weightData.weight)) {
       weightData.weight.forEach(entry => {
-        if (entry.date && entry.value !== undefined) {
-          const weightValue = parseFloat(entry.value);
+        const rawVal = entry?.weight ?? entry?.value;
+        if (entry.date && rawVal !== undefined && rawVal !== null) {
+          const weightValue = parseFloat(rawVal);
           let weightInLbs = weightValue;
           // Convert kg to lbs if needed
           if (entry.unit === 'kg' || entry.unit === 'en_GB') {
