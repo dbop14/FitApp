@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Install git
-RUN apk add --no-cache git
+# Install git (apk update first so index is fresh; avoids DNS/transient "no such package" errors)
+RUN apk update && apk add --no-cache git
 
 # Set working directory
 WORKDIR /app
