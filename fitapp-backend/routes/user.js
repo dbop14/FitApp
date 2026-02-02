@@ -583,7 +583,25 @@ router.get('/userdata', async (req, res) => {
     }
     
     const data = await response.json();
-    
+    // Instrumentation: log aggregation response shape for weight debugging
+    (function logAggregation() {
+      const bucketCount = data.bucket?.length ?? 0;
+      const perBucket = (data.bucket || []).map((b, i) => {
+        const ds = b.dataset || [];
+        const typeNames = ds.map(d => d.dataTypeName || d.dataSourceId || '?');
+        const weightDs = ds.find(d => d.dataTypeName === 'com.google.weight' || (d.dataSourceId && String(d.dataSourceId).includes('weight')));
+        const pointCount = weightDs?.point?.length ?? 0;
+        let fpVal = null;
+        if (weightDs?.point?.length) {
+          const pt = weightDs.point[weightDs.point.length - 1];
+          const val = pt?.value?.length ? pt.value[pt.value.length - 1] : null;
+          fpVal = val?.fpVal ?? null;
+        }
+        return { i, typeNames, hasWeightDs: !!weightDs, pointCount, fpVal };
+      });
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'user.js:aggregateResponse', message: 'Google Fit aggregate response', data: { bucketCount, perBucket }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'weight-null' }) }).catch(() => {});
+    })();
+
     // Store historical data for each day in the response
     let todaySteps = 0;
     let todayWeight = null;
@@ -652,7 +670,7 @@ router.get('/userdata', async (req, res) => {
         const bucketDate = FitnessHistory.normalizeDate(bucketDateObj);
         
         const stepsData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.step_count.delta');
-        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight');
+        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight' || (d.dataSourceId && String(d.dataSourceId).includes('weight')));
         
         const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
         // Use LAST point and LAST value (most recent weight of the day), same as index.js sync-google-fit
@@ -733,7 +751,7 @@ router.get('/userdata', async (req, res) => {
     // If no data found, use null (not 0) to indicate API returned no data vs actual 0 steps
     const stepsFromGoogleFit = stepsData?.point?.[0]?.value?.[0]?.intVal ?? (data.bucket && data.bucket.length > 0 ? 0 : null);
     
-    // Get the MOST RECENT weight by date (don't assume bucket order — pick the bucket with latest date that has weight)
+    // Get the MOST RECENT weight by date (use same bucket timestamp parsing as the loop above)
     let weight = null;
     let weightBucketDate = null;
     if (data.bucket && data.bucket.length > 0) {
@@ -743,16 +761,22 @@ router.get('/userdata', async (req, res) => {
       let numPointsFromLatest = 0;
       for (let i = 0; i < data.bucket.length; i++) {
         const bucket = data.bucket[i];
-        const rawMillis = bucket.startTimeMillis;
         const rawNanos = bucket.startTimeMillisNanos;
-        let bucketStartMillis = typeof rawMillis === 'string' ? parseInt(rawMillis, 10) : rawMillis;
-        if (bucketStartMillis == null && rawNanos != null) {
+        const rawMillis = bucket.startTimeMillis;
+        let bucketStartMillis;
+        if (rawMillis !== undefined && rawMillis !== null) {
+          bucketStartMillis = typeof rawMillis === 'string' ? parseInt(rawMillis, 10) : rawMillis;
+        } else if (rawNanos !== undefined && rawNanos !== null) {
           const nanos = typeof rawNanos === 'string' ? parseInt(rawNanos, 10) : rawNanos;
-          bucketStartMillis = nanos > 7258118400000 ? nanos / 1000000 : nanos;
+          const year2200InMillis = 7258118400000;
+          bucketStartMillis = nanos > year2200InMillis ? nanos / 1000000 : nanos;
+        } else {
+          continue;
         }
-        if (bucketStartMillis == null || isNaN(bucketStartMillis)) continue;
+        if (bucketStartMillis == null || isNaN(bucketStartMillis) || bucketStartMillis <= 0) continue;
         const bucketDateObj = new Date(bucketStartMillis);
-        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight');
+        if (isNaN(bucketDateObj.getTime())) continue;
+        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight' || (d.dataSourceId && String(d.dataSourceId).includes('weight')));
         if (!weightData?.point?.length) continue;
         const latestWeightPoint = weightData.point[weightData.point.length - 1];
         const weightValue = latestWeightPoint?.value?.length ? latestWeightPoint.value[latestWeightPoint.value.length - 1] : null;
