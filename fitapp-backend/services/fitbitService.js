@@ -1,23 +1,20 @@
 const { ensureValidFitbitTokens } = require('../utils/fitbitAuth');
 const FitnessHistory = require('../models/FitnessHistory');
+const { kgToLbs } = require('../utils/weightConversion');
+
+/** Headers to request weight in lbs from Fitbit (en_US = pounds). Avoids conversion and preserves precision. */
+const FITBIT_WEIGHT_HEADERS = { 'Accept-Language': 'en_US' };
 
 /**
- * Convert Fitbit weight value to lbs. Fitbit API may omit unit or use locale (often kg).
- * @param {number} weightValue - Raw value from API
- * @param {string} [unit] - Optional unit from API: 'kg', 'en_GB', 'lbs', 'en_US', etc.
- * @returns {number} - Weight in lbs
+ * Convert Fitbit weight value to lbs. We send Accept-Language en_US on weight requests,
+ * so Fitbit returns pounds and we use value as-is (no conversion, full precision).
+ * Only convert when unit is explicitly kg/en_GB (e.g. legacy or locale override).
  */
 function fitbitWeightToLbs(weightValue, unit) {
   if (unit === 'kg' || unit === 'en_GB') {
-    return Math.round(weightValue * 2.20462 * 100) / 100;
+    return kgToLbs(weightValue);
   }
-  if (unit === 'lbs' || unit === 'en_US') {
-    return weightValue;
-  }
-  // Fitbit often omits unit; response follows user/locale (often metric). 25-150 is typical adult kg range.
-  if (weightValue >= 25 && weightValue <= 150) {
-    return Math.round(weightValue * 2.20462 * 100) / 100;
-  }
+  // lbs, en_US, or missing (we request en_US so response is in lbs)—return as-is.
   return weightValue;
 }
 
@@ -88,7 +85,8 @@ async function fetchFitbitWeight(accessToken, userId, date) {
       `https://api.fitbit.com/1/user/${userId}/body/log/weight/date/${dateStr}.json`,
       {
         headers: {
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${accessToken}`,
+          ...FITBIT_WEIGHT_HEADERS
         }
       }
     );
@@ -191,7 +189,8 @@ async function fetchFitbitData(user, startDate, endDate) {
           `https://api.fitbit.com/1/user/${fitbitUserId}/body/log/weight/date/${startDateStr}/${endDateStr}.json`,
           {
             headers: {
-              'Authorization': `Bearer ${accessToken}`
+              'Authorization': `Bearer ${accessToken}`,
+              ...FITBIT_WEIGHT_HEADERS
             }
           }
         );
@@ -264,7 +263,8 @@ async function syncFitbitHistory(user, startDate, endDate) {
         `https://api.fitbit.com/1/user/${fitbitUserId}/body/log/weight/date/${startDateStr}/${endDateStr}.json`,
         {
           headers: {
-            'Authorization': `Bearer ${accessToken}`
+            'Authorization': `Bearer ${accessToken}`,
+            ...FITBIT_WEIGHT_HEADERS
           }
         }
       )

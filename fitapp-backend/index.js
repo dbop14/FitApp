@@ -56,6 +56,7 @@ const { router: pushRoutes, sendPushNotification } = require('./routes/push');
 const jwt = require('jsonwebtoken');
 
 const authenticateJWT = require('./middleware/auth');
+const { kgToLbs } = require('./utils/weightConversion');
 
 const DEFAULT_STEP_GOAL = 10000;
 const RECALC_LOOKBACK_DAYS = 7;
@@ -1376,13 +1377,8 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
               if (latestWeightPoint.value && latestWeightPoint.value.length > 0) {
                 const weightValue = latestWeightPoint.value[latestWeightPoint.value.length - 1];
                 if (weightValue.fpVal !== undefined && weightValue.fpVal > 0) {
-                  let dayWeight = weightValue.fpVal;
-                  // Convert from kg to lbs if needed
-                  if (dayWeight < 150) {
-                    dayWeight = dayWeight * 2.20462;
-                  }
-                  
-                  const storedWeight = Math.round(dayWeight * 100) / 100;
+                  const dayWeightKg = weightValue.fpVal;
+                  const storedWeight = kgToLbs(dayWeightKg); // Same conversion as Fitbit
                   await FitnessHistory.findOneAndUpdate(
                     { userId: googleId, date: bucketDate },
                     {
@@ -1443,7 +1439,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
                    console.log(`📊 Weight value object (most recent):`, JSON.stringify(weightValue, null, 2));
                    
                    if (weightValue.fpVal !== undefined && weightValue.fpVal > 0) {
-                     weight = weightValue.fpVal;
+                     weight = kgToLbs(weightValue.fpVal); // Same conversion as Fitbit (kg -> lbs)
                      const bucketStart = new Date(bucket.startTimeMillis);
                      console.log(`📊 Found weight from aggregate API: ${weight} from ${bucketStart.toDateString()}`);
                      break; // Use the most recent weight we found
@@ -1470,7 +1466,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
                   if (latestPoint.value && latestPoint.value.length > 0) {
                     const weightValue = latestPoint.value[0];
                     if (weightValue.fpVal !== undefined && weightValue.fpVal > 0) {
-                      weight = weightValue.fpVal;
+                      weight = kgToLbs(weightValue.fpVal);
                       const bucketStart = new Date(bucket.startTimeMillis);
                       console.log(`📊 Found weight from alternative search: ${weight} from ${bucketStart.toDateString()} in dataset ${dataset.dataSourceId}`);
                       break;
@@ -1520,7 +1516,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
                   const weightValue = latestWeightPoint.value?.[0]?.fpVal;
                   
                   if (weightValue !== undefined && weightValue > 0) {
-                    weight = weightValue;
+                    weight = kgToLbs(weightValue);
                     console.log(`📊 Found weight: ${weight} from ${dataSource.dataSourceId}`);
                     break;
                   }
@@ -1538,11 +1534,10 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
 
     console.log(`📊 Final extracted data - Steps: ${steps}, Weight: ${weight}`);
 
-    // Convert weight from kg to pounds if it's in kg (Google Fit returns kg)
+    // Convert weight from kg to pounds if it's in kg (Google Fit returns kg). Same conversion as Fitbit.
     if (weight && weight < 150) {
-      const weightInPounds = weight * 2.20462;
-      console.log(`📊 Converting weight from ${weight} kg to ${weightInPounds.toFixed(1)} lbs`);
-      weight = weightInPounds;
+      weight = kgToLbs(weight);
+      console.log(`📊 Converted weight to ${weight} lbs (same logic as Fitbit)`);
     }
 
     // Update user in DB

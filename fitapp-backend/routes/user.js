@@ -8,6 +8,7 @@ const { google } = require('googleapis');
 const { broadcastUserUpdate } = require('./realtime');
 const { ensureValidGoogleTokens } = require('../utils/googleAuth');
 const { fetchFitbitData, syncFitbitHistory } = require('../services/fitbitService');
+const { kgToLbs } = require('../utils/weightConversion');
 
 // POST /api/user/userdata - upsert user fitness data
 router.post('/userdata', async (req, res) => {
@@ -655,7 +656,7 @@ router.get('/userdata', async (req, res) => {
         
         const steps = stepsData?.point?.[0]?.value?.[0]?.intVal ?? 0;
         const weightKg = weightData?.point?.[0]?.value?.[0]?.fpVal ?? null;
-        const weight = weightKg ? Math.round(weightKg * 2.20462 * 100) / 100 : null; // Convert kg to lbs
+        const weight = weightKg ? kgToLbs(weightKg) : null; // Convert kg to lbs (same as Fitbit)
         
         // Track today's data
         const today = FitnessHistory.normalizeDate(new Date());
@@ -739,7 +740,7 @@ router.get('/userdata', async (req, res) => {
         if (weightData && weightData.point && weightData.point.length > 0) {
           const weightKg = weightData.point[0]?.value?.[0]?.fpVal;
           if (weightKg && weightKg > 0) {
-            weight = Math.round(weightKg * 2.20462 * 100) / 100; // Convert kg to lbs
+            weight = kgToLbs(weightKg); // Convert kg to lbs (same as Fitbit)
             break; // Use the most recent weight found
           }
         }
