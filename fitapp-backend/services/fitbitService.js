@@ -2,6 +2,26 @@ const { ensureValidFitbitTokens } = require('../utils/fitbitAuth');
 const FitnessHistory = require('../models/FitnessHistory');
 
 /**
+ * Convert Fitbit weight value to lbs. Fitbit API may omit unit or use locale (often kg).
+ * @param {number} weightValue - Raw value from API
+ * @param {string} [unit] - Optional unit from API: 'kg', 'en_GB', 'lbs', 'en_US', etc.
+ * @returns {number} - Weight in lbs
+ */
+function fitbitWeightToLbs(weightValue, unit) {
+  if (unit === 'kg' || unit === 'en_GB') {
+    return Math.round(weightValue * 2.20462 * 100) / 100;
+  }
+  if (unit === 'lbs' || unit === 'en_US') {
+    return weightValue;
+  }
+  // Fitbit often omits unit; response follows user/locale (often metric). 25-150 is typical adult kg range.
+  if (weightValue >= 25 && weightValue <= 150) {
+    return Math.round(weightValue * 2.20462 * 100) / 100;
+  }
+  return weightValue;
+}
+
+/**
  * Fetch steps data from Fitbit API for a specific date
  * Note: For multiple days, use time series endpoint instead (best practice)
  * @param {string} accessToken - Fitbit access token
@@ -103,10 +123,7 @@ async function fetchFitbitWeight(accessToken, userId, date) {
         const rawValue = weightEntry?.weight ?? weightEntry?.value;
         if (weightEntry && (rawValue !== undefined && rawValue !== null)) {
           const weightValue = parseFloat(rawValue);
-          if (weightEntry.unit === 'kg' || weightEntry.unit === 'en_GB') {
-            return Math.round(weightValue * 2.20462 * 100) / 100;
-          }
-          return weightValue;
+          return fitbitWeightToLbs(weightValue, weightEntry.unit);
         }
       }
     }
@@ -196,11 +213,7 @@ async function fetchFitbitData(user, startDate, endDate) {
             const rawValue = mostRecent?.weight ?? mostRecent?.value;
             if (mostRecent && (rawValue !== undefined && rawValue !== null)) {
               const weightValue = parseFloat(rawValue);
-              if (mostRecent.unit === 'kg' || mostRecent.unit === 'en_GB') {
-                weight = Math.round(weightValue * 2.20462 * 100) / 100;
-              } else {
-                weight = weightValue;
-              }
+              weight = fitbitWeightToLbs(weightValue, mostRecent.unit);
             }
           }
         }
@@ -280,11 +293,7 @@ async function syncFitbitHistory(user, startDate, endDate) {
         const rawVal = entry?.weight ?? entry?.value;
         if (entry.date && rawVal !== undefined && rawVal !== null) {
           const weightValue = parseFloat(rawVal);
-          let weightInLbs = weightValue;
-          // Convert kg to lbs if needed
-          if (entry.unit === 'kg' || entry.unit === 'en_GB') {
-            weightInLbs = Math.round(weightValue * 2.20462 * 100) / 100;
-          }
+          const weightInLbs = fitbitWeightToLbs(weightValue, entry.unit);
           weightMap.set(entry.date, weightInLbs);
         }
       });
