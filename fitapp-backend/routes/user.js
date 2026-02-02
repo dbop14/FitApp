@@ -380,7 +380,7 @@ router.get('/userdata', async (req, res) => {
         start.setHours(0, 0, 0, 0);
         
         const fitbitData = await fetchFitbitData(user, start, now);
-        
+        console.log(`📊 [DEBUG] Fitbit userdata fitbitData.weight=${fitbitData?.weight} (type: ${typeof fitbitData?.weight})`);
         // Update user with Fitbit data
         // If API call failed (rate limit, etc.), preserve stored steps instead of overwriting with 0
         const previousSteps = user.steps;

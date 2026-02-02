@@ -27,7 +27,9 @@ export const useUserData = () => {
       }
       
       const data = await response.json()
-      
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useUserData.js:queryFn',message:'userdata response',data:{dataSource:data?.dataSource,steps:data?.steps,weight:data?.weight,lastSync:!!data?.lastSync},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B'})}).catch(()=>{});
+      // #endregion
       // Update user context with name/picture/dataSource if they're provided (from backend)
       if (data.name !== undefined || data.picture !== undefined || data.dataSource !== undefined) {
         setUser(prev => {
