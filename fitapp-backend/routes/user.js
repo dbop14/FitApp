@@ -733,27 +733,45 @@ router.get('/userdata', async (req, res) => {
     // If no data found, use null (not 0) to indicate API returned no data vs actual 0 steps
     const stepsFromGoogleFit = stepsData?.point?.[0]?.value?.[0]?.intVal ?? (data.bucket && data.bucket.length > 0 ? 0 : null);
     
-    // Get the MOST RECENT weight from the last 7 days (not just today's)
+    // Get the MOST RECENT weight by date (don't assume bucket order — pick the bucket with latest date that has weight)
     let weight = null;
+    let weightBucketDate = null;
     if (data.bucket && data.bucket.length > 0) {
-      // Find the most recent bucket with weight data (iterate backwards)
-      for (let i = data.bucket.length - 1; i >= 0; i--) {
+      let latestDateWithWeight = null;
+      let weightFromLatest = null;
+      let weightKgFromLatest = null;
+      let numPointsFromLatest = 0;
+      for (let i = 0; i < data.bucket.length; i++) {
         const bucket = data.bucket[i];
-        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight');
-        if (weightData && weightData.point && weightData.point.length > 0) {
-          // Use LAST point and LAST value (most recent weight of the day), same as index.js sync-google-fit
-          const latestWeightPoint = weightData.point[weightData.point.length - 1];
-          const weightValue = latestWeightPoint?.value?.length ? latestWeightPoint.value[latestWeightPoint.value.length - 1] : null;
-          const weightKg = weightValue?.fpVal;
-          if (weightKg && weightKg > 0) {
-            weight = kgToLbs(weightKg); // Convert kg to lbs (same as Fitbit)
-            // #region agent log
-            const bucketStart = bucket.startTimeMillisNanos ? new Date(parseInt(bucket.startTimeMillisNanos) / 1000000) : (bucket.startTimeMillis ? new Date(bucket.startTimeMillis) : null);
-            fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'user.js:googleFitWeight',message:'Weight from bucket',data:{source:'user.js',bucketIndex:i,bucketDate:bucketStart?.toISOString?.()?.split?.('T')?.[0],numPoints:weightData.point.length,pointIndexUsed:'last',weightKgRaw:weightKg,weightLbs:weight},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3'})}).catch(()=>{});
-            // #endregion
-            break; // Use the most recent weight found
-          }
+        const rawMillis = bucket.startTimeMillis;
+        const rawNanos = bucket.startTimeMillisNanos;
+        let bucketStartMillis = typeof rawMillis === 'string' ? parseInt(rawMillis, 10) : rawMillis;
+        if (bucketStartMillis == null && rawNanos != null) {
+          const nanos = typeof rawNanos === 'string' ? parseInt(rawNanos, 10) : rawNanos;
+          bucketStartMillis = nanos > 7258118400000 ? nanos / 1000000 : nanos;
         }
+        if (bucketStartMillis == null || isNaN(bucketStartMillis)) continue;
+        const bucketDateObj = new Date(bucketStartMillis);
+        const weightData = bucket.dataset?.find(d => d.dataTypeName === 'com.google.weight');
+        if (!weightData?.point?.length) continue;
+        const latestWeightPoint = weightData.point[weightData.point.length - 1];
+        const weightValue = latestWeightPoint?.value?.length ? latestWeightPoint.value[latestWeightPoint.value.length - 1] : null;
+        const weightKg = weightValue?.fpVal;
+        if (weightKg == null || weightKg <= 0) continue;
+        const bucketDateNorm = FitnessHistory.normalizeDate(bucketDateObj);
+        if (latestDateWithWeight == null || bucketDateNorm.getTime() > latestDateWithWeight.getTime()) {
+          latestDateWithWeight = bucketDateNorm;
+          weightFromLatest = kgToLbs(weightKg);
+          weightKgFromLatest = weightKg;
+          numPointsFromLatest = weightData.point.length;
+        }
+      }
+      if (latestDateWithWeight != null && weightFromLatest != null) {
+        weight = weightFromLatest;
+        weightBucketDate = latestDateWithWeight.toISOString().split('T')[0];
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'user.js:googleFitWeight',message:'Weight by latest date',data:{source:'user.js',bucketDate:weightBucketDate,numPoints:numPointsFromLatest,weightKgRaw:weightKgFromLatest,weightLbs:weight},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3'})}).catch(()=>{});
+        // #endregion
       }
     }
 
