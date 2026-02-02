@@ -413,7 +413,6 @@ const Dashboard = () => {
     const fetchMostRecentWeight = async () => {
       // Only fetch if not in a challenge and current weight is null/undefined
       if (activeChallenge || !user?.sub) {
-        fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:fetchMostRecentWeight',message:'Skipped: in challenge or no sub',data:{activeChallenge:!!activeChallenge,sub:user?.sub,dataSource:user?.dataSource},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
         setMostRecentWeight(null)
         setIsLoadingWeight(false)
         // If in a challenge, weight comes from participantData (handled by participant fetch)
@@ -443,7 +442,6 @@ const Dashboard = () => {
         if (historyResponse.ok) {
           const history = await historyResponse.json()
           const mostRecentWeightEntry = history.find(entry => entry.weight !== null && entry.weight !== undefined)
-          fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:fetchMostRecentWeight',message:'History fetch result',data:{dataSource:user?.dataSource,historyLength:history?.length,entriesWithWeight:history?.filter(e=>e?.weight!=null).length,mostRecentWeightFromEntry:mostRecentWeightEntry?.weight},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
           if (mostRecentWeightEntry && mostRecentWeightEntry.weight) {
             setMostRecentWeight(mostRecentWeightEntry.weight)
           } else {
@@ -810,17 +808,6 @@ const Dashboard = () => {
   // Prefer React Query data - only fallback to user if userData is truly null (not just loading)
   // This prevents flickering between userData and user during loading
   const currentUserData = userData !== undefined ? userData : user
-  // #region agent log
-  if (user?.sub && hasInitialDataLoaded) {
-    const weightToShow = (() => {
-      const isWeighInDay = !!(shouldPromptForWeight && activeChallenge);
-      return isWeighInDay
-        ? (participantData?.lastWeight ?? currentUserData?.weight ?? mostRecentWeight)
-        : (currentUserData?.weight ?? mostRecentWeight);
-    })();
-    fetch('http://127.0.0.1:7244/ingest/c7863d5d-8e4d-45b7-84a6-daf3883297fb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.jsx:weightCard',message:'Weight card sources',data:{dataSource:user?.dataSource,userDataDefined:userData!==undefined,userDataWeight:userData?.weight,userWeight:user?.weight,currentUserDataWeight:currentUserData?.weight,mostRecentWeight,participantLastWeight:participantData?.lastWeight,weightToShow,activeChallenge:!!activeChallenge},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
-  }
-  // #endregion
   // Changed condition: only require steps OR weight (not both) to hide the message
   // Steps are more critical, so if we have steps, we have fitness data
   const hasFitnessData = (currentUserData?.steps !== null && currentUserData?.steps !== undefined) || (currentUserData?.weight !== null && currentUserData?.weight !== undefined)
