@@ -63,10 +63,7 @@ services:
       - PGDATABASE=${SYNAPSE_POSTGRES_DB:-synapse}
       - PGPASSWORD=${SYNAPSE_POSTGRES_PASSWORD:?Set SYNAPSE_POSTGRES_PASSWORD in .env}
     volumes:
-      - type: bind
-        source: /DATA/synapse/production_synapse_data
-        target: /data
-    command: ["run", "--config-path=/data/homeserver.yaml"]
+      - synapse_data_prod:/data
     depends_on:
       synapse-postgres:
         condition: service_healthy
