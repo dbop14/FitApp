@@ -57,14 +57,15 @@ services:
     environment:
       - SYNAPSE_SERVER_NAME=fitapp.local
       - SYNAPSE_REPORT_STATS=no
-      # libpq reads these when database.args omits password (see homeserver.yaml)
       - PGHOST=synapse-postgres
       - PGPORT=5432
       - PGUSER=${SYNAPSE_POSTGRES_USER:-synapse}
       - PGDATABASE=${SYNAPSE_POSTGRES_DB:-synapse}
       - PGPASSWORD=${SYNAPSE_POSTGRES_PASSWORD:?Set SYNAPSE_POSTGRES_PASSWORD in .env}
     volumes:
-      - synapse_data_prod:/data
+      - type: bind
+        source: /DATA/synapse/production_synapse_data
+        target: /data
     command: ["run", "--config-path=/data/homeserver.yaml"]
     depends_on:
       synapse-postgres:
