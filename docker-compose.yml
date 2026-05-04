@@ -41,7 +41,6 @@ services:
       - SYNAPSE_REPORT_STATS=no
     volumes:
       - synapse_data:/data
-    command: ["run", "--config-path=/data/homeserver.yaml"]
 
   # Fitness Challenge Bot
   fitness-bot:
