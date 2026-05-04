@@ -1,4 +1,9 @@
-version: '3.8'
+# Portainer: deploy via Git with Compose path production/docker-compose.yml so build context includes Dockerfiles.
+# Web editor paste alone has no build files — use Repository, or build images elsewhere and switch services to image-only.
+# Prerequisites: docker network create fitapp
+# NAS + Docker: set SYNAPSE_POSTGRES_HOST_PATH to a folder ON THE NAS HOST (e.g. Synology /volume1/docker/...), on normal NAS volume/storage — not an SQLite DB path.
+# Keep Postgres data on the appliance's own disks (avoid mounting Postgres onto a flaky remote SMB/NFS *client* share). Synapse /data can stay on a Docker/NAS volume for media + config.
+# Env: Portainer/stack env or .env (see SYNAPSE_POSTGRES_MIGRATION.md). stack.env is optional (required: false).
 
 services:
   mongoosedb:
@@ -12,13 +17,36 @@ services:
     volumes:
       - mongo_data_prod:/data/db
     networks:
-      - synobridge
+      - fitapp
     healthcheck:
-      test: mongo --port 27017 --eval "db.adminCommand('ping')" --quiet || exit 1
+      test: ["CMD", "mongo", "--port", "27017", "--eval", "db.adminCommand('ping')", "--quiet"]
       interval: 5s
       timeout: 10s
       start_period: 10s
       retries: 30
+
+  synapse-postgres:
+    image: postgres:16-alpine
+    container_name: fitapp-prod-synapse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SYNAPSE_POSTGRES_USER:-synapse}
+      POSTGRES_PASSWORD: ${SYNAPSE_POSTGRES_PASSWORD:?Set SYNAPSE_POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${SYNAPSE_POSTGRES_DB:-synapse}
+      # Synapse requires UTF8 + C locale for COLLATE/CTYPE (see Synapse Postgres docs)
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+    volumes:
+      - type: bind
+        source: ${SYNAPSE_POSTGRES_HOST_PATH:?Set SYNAPSE_POSTGRES_HOST_PATH to a local directory on ZimaOS for Postgres data}
+        target: /var/lib/postgresql/data
+    networks:
+      - fitapp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
 
   synapse:
     image: matrixdotorg/synapse:latest
@@ -29,35 +57,52 @@ services:
     environment:
       - SYNAPSE_SERVER_NAME=fitapp.local
       - SYNAPSE_REPORT_STATS=no
+      # libpq reads these when database.args omits password (see homeserver.yaml)
+      - PGHOST=synapse-postgres
+      - PGPORT=5432
+      - PGUSER=${SYNAPSE_POSTGRES_USER:-synapse}
+      - PGDATABASE=${SYNAPSE_POSTGRES_DB:-synapse}
+      - PGPASSWORD=${SYNAPSE_POSTGRES_PASSWORD:?Set SYNAPSE_POSTGRES_PASSWORD in .env}
     volumes:
       - synapse_data_prod:/data
     command: ["run", "--config-path=/data/homeserver.yaml"]
+    depends_on:
+      synapse-postgres:
+        condition: service_healthy
     networks:
-      - synobridge
+      - fitapp
 
   fitness-bot:
+    image: fitapp-prod-bot:latest
     build:
       context: .
       dockerfile: Dockerfile.bot
     container_name: fitapp-prod-bot
     restart: unless-stopped
+    env_file:
+      - path: stack.env
+        required: false
     environment:
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
       - MATRIX_HOMESERVER_URL=http://host.docker.internal:8008
       - MATRIX_SERVER_NAME=fitapp.local
-      - BOT_USERNAME=fitness_motivator
+      - BOT_USERNAME=${BOT_USERNAME:-fitness_motivator}
       - BOT_PASSWORD=${BOT_PASSWORD}
       - BACKEND_API_URL=http://backend:3000
     depends_on:
-      - mongoosedb
-      - synapse
-      - backend
+      mongoosedb:
+        condition: service_healthy
+      synapse:
+        condition: service_started
+      backend:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - synobridge
+      - fitapp
 
   backend:
+    image: fitapp-prod-backend:latest
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -67,6 +112,9 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+    env_file:
+      - path: stack.env
+        required: false
     environment:
       - NODE_ENV=production
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
@@ -85,12 +133,15 @@ services:
     volumes:
       - backend_uploads_prod:/app/uploads
     depends_on:
-      - mongoosedb
-      - synapse
+      mongoosedb:
+        condition: service_healthy
+      synapse:
+        condition: service_started
     networks:
-      - synobridge
+      - fitapp
 
   frontend:
+    image: fitapp-prod-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile.frontend
@@ -103,13 +154,17 @@ services:
     ports:
       - "5173:5173"
     restart: unless-stopped
+    env_file:
+      - path: stack.env
+        required: false
     environment:
       - VITE_API_URL=${VITE_API_URL}
       - VITE_MATRIX_URL=http://synapse:8008
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     networks:
-      - synobridge
+      - fitapp
 
 volumes:
   mongo_data_prod:
@@ -117,5 +172,5 @@ volumes:
   backend_uploads_prod:
 
 networks:
-  synobridge:
+  fitapp:
     external: true

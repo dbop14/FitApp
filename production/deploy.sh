@@ -38,6 +38,20 @@ if [ -z "$GOOGLE_CLIENT_ID" ] || [ "$GOOGLE_CLIENT_ID" = "your_google_client_id"
     exit 1
 fi
 
+if [ -z "$SYNAPSE_POSTGRES_HOST_PATH" ]; then
+    echo "❌ ERROR: SYNAPSE_POSTGRES_HOST_PATH not set in .env (host path on the NAS for Postgres data — see SYNAPSE_POSTGRES_MIGRATION.md)"
+    exit 1
+fi
+if [ ! -d "$SYNAPSE_POSTGRES_HOST_PATH" ]; then
+    echo "❌ ERROR: SYNAPSE_POSTGRES_HOST_PATH is not a directory: $SYNAPSE_POSTGRES_HOST_PATH"
+    echo "   Create it on the Docker host (NAS), chown to Postgres uid 70 (Alpine image), see SYNAPSE_POSTGRES_MIGRATION.md."
+    exit 1
+fi
+if [ -z "$SYNAPSE_POSTGRES_PASSWORD" ] || [ "$SYNAPSE_POSTGRES_PASSWORD" = "generate_a_long_random_secret" ]; then
+    echo "❌ ERROR: Set SYNAPSE_POSTGRES_PASSWORD in .env to a strong secret (must match PGPASSWORD for Synapse)."
+    exit 1
+fi
+
 echo "✅ Environment variables verified"
 echo ""
 
@@ -64,7 +78,7 @@ if [ "$SYNAPSE_VOLUME_EXISTS" = true ]; then
 fi
 
 if [ "$NEEDS_INIT" = true ]; then
-    echo "🔧 Initializing Synapse server..."
+    echo "🔧 Initializing Synapse server (SQLite generate → then merge Postgres per SYNAPSE_POSTGRES_MIGRATION.md)..."
     INIT_RESULT=$(docker run --rm \
         -v "$SYNAPSE_VOLUME_NAME":/data \
         -e SYNAPSE_SERVER_NAME=fitapp.local \
@@ -74,6 +88,8 @@ if [ "$NEEDS_INIT" = true ]; then
     
     if [ $INIT_EXIT -eq 0 ]; then
         echo "✅ Synapse server initialized successfully"
+        echo "📌 Next: replace database section in /data/homeserver.yaml with Postgres config from synapse_data/homeserver.yaml,"
+        echo "   preserve secrets from generated file, remove homeserver.db*, then start stack (see SYNAPSE_POSTGRES_MIGRATION.md)."
     else
         echo "⚠️  Warning: Synapse initialization may have failed"
         echo "$INIT_RESULT"
