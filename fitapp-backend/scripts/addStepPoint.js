@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const ChallengeParticipant = require('./models/ChallengeParticipant');
+const ChallengeParticipant = require('../models/ChallengeParticipant');
 
 // Script to add a step goal point for a user in a challenge
 async function addStepPoint(userId, challengeId) {

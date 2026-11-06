@@ -57,11 +57,11 @@ If you don't have a bot password yet, you'll need to:
 
 ## Quick Setup Script
 
-You can also use the setup script from the root directory:
+You can also use the setup script in the production directory:
 
 ```bash
-# From root directory
-./setup-bot-user.sh
+cd production
+./create-bot-user.sh
 ```
 
 This will create the bot user automatically.

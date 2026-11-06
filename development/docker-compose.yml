@@ -1,8 +1,6 @@
 # Development Environment - Uses local volumes for hot reload
 # This setup allows you to develop and see changes immediately
 
-version: '3.8'
-
 services:
   mongoosedb:
     image: mongo:4.4
@@ -117,6 +115,7 @@ services:
     depends_on:
       - backend
     networks:
+      - fitapp_dev
       - synobridge
 
 volumes:
@@ -128,5 +127,7 @@ volumes:
   backend_uploads_dev:
 
 networks:
+  fitapp_dev:
+    name: fitapp_dev
   synobridge:
     external: true
