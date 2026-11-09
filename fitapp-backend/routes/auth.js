@@ -55,7 +55,7 @@ router.get('/auth/google/callback', async (req, res) => {
   const requestHost = req.get('host') || req.hostname || '';
   
   // First, check request hostname (most reliable - tells us which backend is handling the request)
-  if (requestHost.includes('fitappbackenddev.herringm.com')) {
+  if (requestHost.includes('fitappdevbackend.herringm.com') || requestHost.includes('fitappbackenddev.herringm.com')) {
     frontendUrl = 'https://fitappdev.herringm.com';
   } else if (requestHost.includes('fitappbackend.herringm.com') && !requestHost.includes('fitappbackenddev')) {
     frontendUrl = 'https://fitapp.herringm.com';
@@ -192,7 +192,7 @@ function getFrontendUrl(req) {
   
   const requestHost = req.get('host') || req.hostname || '';
   
-  if (requestHost.includes('fitappbackenddev.herringm.com')) {
+  if (requestHost.includes('fitappdevbackend.herringm.com') || requestHost.includes('fitappbackenddev.herringm.com')) {
     frontendUrl = 'https://fitappdev.herringm.com';
   } else if (requestHost.includes('fitappbackend.herringm.com') && !requestHost.includes('fitappbackenddev')) {
     frontendUrl = 'https://fitapp.herringm.com';

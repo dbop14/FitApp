@@ -20,7 +20,8 @@ const allowedOrigins = [
   'https://fitapp.herringm.com',
   'https://fitappbackend.herringm.com',
   'https://fitappdev.herringm.com',
-  'https://fitappbackenddev.herringm.com'
+  'https://fitappbackenddev.herringm.com',
+  'https://fitappdevbackend.herringm.com' // live dev tunnel hostname
 ];
 
 // Handle preflight OPTIONS requests for CORS
