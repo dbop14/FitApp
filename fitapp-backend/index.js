@@ -3612,3 +3612,5 @@ if (IS_MAIN) app.listen(PORT, '0.0.0.0', () => {
 })
 
 module.exports = app;
+// Exposed for tests only.
+module.exports.internals = { recalculateStepPoints, roundWeightLossPoints };
