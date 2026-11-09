@@ -7,18 +7,18 @@ Run on 2026-11-09 against the dev stack (`fitapp-dev-backend`), read-only. No sy
 | Source | Auth | Steps | Weight | Evidence | Verdict |
 |---|---|---|---|---|---|
 | `fitbit` | **410 Gone** | not reachable (needs a token) | not reachable (needs a token) | `POST https://api.fitbit.com/oauth2/token` with the dev app's real client ID/secret returned `410` and: *"The legacy Fitbit Web API and OAuth 2.0 endpoints were decommissioned on October 30, 2026. Please migrate your integration to the Google Health APIs"*. No user can get or refresh a Fitbit token, so no step or weight call can succeed. | **Broken** |
-| `google-fit` | OAuth client valid | Unknown | Unknown | `POST https://oauth2.googleapis.com/token` with the dev client and a fake refresh token returned `400 invalid_grant` (client accepted, token rejected), so Google sign-in still works. Data calls to `www.googleapis.com/fitness/v1` answered `401` without a token, which only proves the host is up. A real step/weight call needs a connected user (below). | **Unknown** |
+| `google-fit` | **200** refresh | **200** | **200** | Re-run 2026-11-09 after a real sign-in on dev (one user, `dataSource: google-fit`). (a) `POST oauth2.googleapis.com/token` refresh → `200`, scopes `fitness.activity.read`, `fitness.body.read`, `openid`, `userinfo.email`, `userinfo.profile`, `expires_in: 3599`. (b) `POST fitness/v1/users/me/dataset:aggregate` for `com.google.step_count.delta`, today → `200`, 1 bucket, 1 point, `dataTypeName: com.google.step_count.delta`, `value: [{intVal}]`. (c) same endpoint for `com.google.weight` over 90 days → `200`, `dataTypeName: com.google.weight.summary`, `value: [{fpVal: avg}, {fpVal: max}, {fpVal: min}]` in kg. The refreshed token was not saved. | **Working** (until Google Fit shuts down at the end of 2026) |
 
-### Why some results are Unknown
+### Notes
 
-- **The dev database has no users** (`users` and `fitnesshistories` are empty), so there was no stored token to refresh and no account to request today's steps or weight for.
-- **To finish the Google Fit test:** sign in once on dev at https://fitappdev.herringm.com with a Google account that has Google Fit data, then ask me to re-run the test. I will request one day of steps and one weight reading through the existing code path and record the status and response shape.
+- The first run found no dev users. Dev sign-in then failed with `redirect_uri_mismatch` until `https://fitappdevbackend.herringm.com/api/auth/google/callback` was added to the OAuth client; after that, the Google Fit test above passed.
 - **Fitbit needs no further test.** The OAuth endpoint itself is gone.
 - Google says the Google Fit APIs are available "until the end of 2026" with no exact date published, so even if the Google Fit test passes, that path has weeks left.
 
 ## Backend log summary
 
-- **Dev:** no sync errors to count. The dev DB has no users, so nothing syncs, and the container was recreated during Phase 0 (new `JWT_SECRET`), which reset its log.
+- **Dev (30 minutes after sign-in):** 0 sync errors. 21 step-point syncs and history writes for 2026-10-19 → 2026-11-09, all from `google-fit`.
+- **Privacy finding:** the existing sync code logs the user's email on every history write (`Storing fitness history for <email> …`). Phase 3 replaces those log lines with the Google ID suffix.
 - **Production:** not read. Reading production containers is blocked in this session. To get counts by status and source, run this on the NAS and share the output, or allow me to read production logs:
 
 ```bash
