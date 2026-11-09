@@ -537,7 +537,18 @@ async function backfillStepHistoryAndPoints() {
       challengeCache.set(challengeId, challenge);
     }
 
+    if (challenge.scoringMode === 'v2') {
+      continue; // recounted below with the v2 engine
+    }
     await recalcStepPointsForParticipant(participant, challenge);
+  }
+
+  // Points v2 challenges
+  const { recountV2Challenge } = require('../services/scoring/recountV2');
+  for (const challenge of challengeCache.values()) {
+    if (challenge.scoringMode === 'v2') {
+      await recountV2Challenge(challenge);
+    }
   }
 
   console.log('✅ Backfill complete: step history synced and points recalculated for all challenge participants.');

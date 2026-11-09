@@ -138,8 +138,27 @@ const recalculateStepPoints = async () => {
     let challengesProcessed = 0;
     let participantsUpdated = 0;
 
+    // Points v2: lock days older than 48h, then recount v2 challenges with the engine.
+    const activeChallenges = challenges.filter((c) => shouldRecalculateChallenge(c, today));
+    try {
+      const finalized = await finalizeV2Days(activeChallenges);
+      if (finalized) console.log(`🔒 Finalized ${finalized} v2 day(s)`);
+    } catch (err) {
+      console.error('❌ Error finalizing v2 days:', err.message);
+    }
+
     for (const challenge of challenges) {
       if (!shouldRecalculateChallenge(challenge, today)) {
+        continue;
+      }
+      if (challenge.scoringMode === 'v2') {
+        try {
+          const results = await recountV2Challenge(challenge);
+          challengesProcessed++;
+          participantsUpdated += results.length;
+        } catch (err) {
+          console.error(`❌ Error recounting v2 challenge ${challenge._id}:`, err.message);
+        }
         continue;
       }
 
@@ -224,6 +243,7 @@ function isChallengeEnded(challenge) {
 // Import Google Auth utility
 const { ensureValidGoogleTokens } = require('./utils/googleAuth');
 const backfillStepHistoryAndPoints = require('./scripts/backfillStepHistoryAndPoints');
+const { recountV2Challenge, finalizeV2Days } = require('./services/scoring/recountV2');
 
 // Connect to MongoDB
 // Add replicaSet parameter if not already present (for replica set mode)

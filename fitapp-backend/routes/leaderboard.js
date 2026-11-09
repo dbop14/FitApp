@@ -10,6 +10,11 @@ const FitnessHistory = require('../models/FitnessHistory');
 router.get('/:challengeId', async (req, res) => {
   const { challengeId } = req.params;
   try {
+    // Points v2 challenges are scored by the engine; Classic continues below unchanged.
+    const v2Challenge = await Challenge.findById(challengeId).catch(() => null);
+    if (v2Challenge && v2Challenge.scoringMode === 'v2') {
+      return res.json(await buildV2Leaderboard(v2Challenge));
+    }
     // Get all participants for this challenge
     // We'll calculate final points and sort after processing
     const participants = await ChallengeParticipant.find({ challengeId });
@@ -179,6 +184,51 @@ router.get('/:challengeId', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch leaderboard', details: err.message });
   }
 });
+
+async function buildV2Leaderboard(challenge) {
+  const { recountV2Challenge } = require('../services/scoring/recountV2');
+  const scored = await recountV2Challenge(challenge);
+  const users = await User.find({ googleId: { $in: scored.map((s) => s.participant.userId) } });
+  const userMap = Object.fromEntries(users.map((u) => [u.googleId, u]));
+  const todayKey = scored[0]?.result.days.at(-1)?.date;
+  const rows = scored.map(({ participant: p, result: r }) => {
+    const user = userMap[p.userId];
+    const today = r.days.find((d) => d.date === todayKey) || null;
+    return {
+      userId: p.userId,
+      name: user?.name || 'Unknown User',
+      email: user?.email || '',
+      picture: user?.picture || null,
+      scoringMode: 'v2',
+      points: r.total,
+      totalPoints: r.total,
+      breakdown: {
+        steps: r.categories.steps,
+        goalBonus: r.categories.goalBonus,
+        effort: r.categories.effort,
+        strength: r.categories.strength,
+        weekly: r.categories.weekly,
+        weightLoss: r.categories.weightLoss,
+      },
+      today,
+      weeks: r.weeks.map((w) => ({ index: w.index, startDate: w.startDate, activeDays: w.activeDays, points: w.points })),
+      weightLossPoints: r.categories.weightLoss,
+      stepGoalPoints: p.stepGoalPoints || 0,
+      stepGoalDaysAchieved: r.days.filter((d) => d.goalBonusPoints > 0).length,
+      startingWeight: p.startingWeight,
+      lastWeight: r.weight.latestWeight ?? p.lastWeight ?? p.startingWeight,
+      lockedSource: p.lockedSource || null,
+      stepGoal: challenge.stepGoal || 0,
+      stepGoalAchieved: Boolean(today && today.goalBonusPoints > 0),
+      currentSteps: user?.steps || 0,
+    };
+  });
+  rows.sort((a, b) => (b.points !== a.points ? b.points - a.points : a.name.localeCompare(b.name)));
+  rows.forEach((row, i) => {
+    row.rank = i === 0 || row.points !== rows[i - 1].points ? i + 1 : rows[i - 1].rank;
+  });
+  return rows;
+}
 
 // POST to add a participant to a challenge
 router.post('/:challengeId/participants', async (req, res) => {

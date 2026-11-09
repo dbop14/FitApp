@@ -75,7 +75,8 @@ router.post('/', async (req, res) => {
       userGoogleId, // Add this to identify the admin
       picture, // Add profile picture
       userName, // Add user's actual name
-      photo // Add challenge photo URL
+      photo, // Add challenge photo URL
+      scoringMode,
     } = req.body;
 
     // Validate that end date/time is not before start date/time
@@ -105,6 +106,7 @@ router.post('/', async (req, res) => {
       challengeCode: challengeCode || Math.random().toString(36).substring(2, 8).toUpperCase(),
       botName: botName || 'Fitness Motivator',
       botAvatar: botAvatar || '🤖',
+      scoringMode: scoringMode === 'v2' ? 'v2' : 'classic',
       weighInDay: weighInDay || 'monday',
       photo: photo || null // Add challenge photo
     });

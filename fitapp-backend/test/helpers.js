@@ -3,6 +3,8 @@ process.env.JWT_SECRET = 'test-secret-not-a-placeholder';
 process.env.ADMIN_GOOGLE_IDS = 'admin-google-id';
 process.env.BOT_PASSWORD = 'bot-secret-for-tests';
 process.env.NODE_ENV = 'test';
+// Never talk to the real dev Synapse from tests (challenge creation makes rooms).
+process.env.MATRIX_HOMESERVER_URL = 'http://127.0.0.1:9';
 
 // The app logs heavily; keep test output readable (set TEST_LOGS=1 to see it).
 if (!process.env.TEST_LOGS) {
