@@ -56,6 +56,20 @@ const { router: pushRoutes, sendPushNotification } = require('./routes/push');
 const jwt = require('jsonwebtoken');
 
 const authenticateJWT = require('./middleware/auth');
+const requireAdmin = require('./middleware/requireAdmin');
+const requireSelf = require('./middleware/requireSelf');
+const { getJwtSecret, jwtSecretIsPlaceholder, TOKEN_REISSUE_MAX_AGE_DAYS } = require('./config/auth');
+
+// Startup side effects (DB connection, cron jobs, listening) only run when this
+// file is executed directly, so tests can require the app without them.
+const IS_MAIN = require.main === module;
+if (jwtSecretIsPlaceholder()) {
+  if (process.env.NODE_ENV === 'production' && IS_MAIN) {
+    console.error('❌ JWT_SECRET is unset or a placeholder. Refusing to start in production.');
+    process.exit(1);
+  }
+  console.warn('⚠️ JWT_SECRET is unset or a placeholder; tokens can be forged. Set a random JWT_SECRET.');
+}
 const { kgToLbs } = require('./utils/weightConversion');
 
 const DEFAULT_STEP_GOAL = 10000;
@@ -221,7 +235,7 @@ if (!mongoUri.includes('replicaSet=') && !mongoUri.includes('?')) {
 }
 console.log(`🔌 Connecting to MongoDB at ${mongoUri.replace(/\/\/.*@/, '//***:***@')}`);
 
-mongoose.connect(mongoUri, {
+if (IS_MAIN) mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   serverSelectionTimeoutMS: 30000,
@@ -249,7 +263,7 @@ mongoose.connection.on('reconnected', () => {
 
 // Scheduled job to reset all users' steps to 0 at midnight every day
 // Runs at 00:00:00 (midnight) in the server's timezone
-cron.schedule('0 0 * * *', async () => {
+if (IS_MAIN) cron.schedule('0 0 * * *', async () => {
   try {
     console.log('🔄 Starting daily step reset at midnight...');
     
@@ -284,7 +298,7 @@ cron.schedule('0 0 * * *', async () => {
 console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
 
 // Recalculate step points hourly to keep totals consistent with history
-cron.schedule('5 * * * *', async () => {
+if (IS_MAIN) cron.schedule('5 * * * *', async () => {
   await recalculateStepPoints();
 }, {
   timezone: APP_TIMEZONE
@@ -295,7 +309,7 @@ console.log('⏰ Hourly step point recalculation scheduled (runs at :05)');
 // Nightly job to pull today's step data for users in active challenges
 // and ensure their step points are in sync before midnight reset.
 // Runs at 23:55 in the configured APP_TIMEZONE.
-cron.schedule('55 23 * * *', async () => {
+if (IS_MAIN) cron.schedule('55 23 * * *', async () => {
   try {
     console.log('⏰ Starting nightly active-challenge step history backfill at 23:55...');
     await backfillStepHistoryAndPoints();
@@ -327,7 +341,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Debug log ingest: accept frontend/agent logs and append to workspace .cursor/debug.log (NDJSON)
-app.post('/api/debug-log', express.json(), (req, res) => {
+app.post('/api/debug-log', authenticateJWT, requireAdmin, express.json(), (req, res) => {
   try {
     const payload = req.body && typeof req.body === 'object' ? req.body : { message: String(req.body) };
     const logPath = path.join(__dirname, '..', '.cursor', 'debug.log');
@@ -340,7 +354,7 @@ app.post('/api/debug-log', express.json(), (req, res) => {
 });
 
 // Test endpoint to check environment variables
-app.get('/api/test-env', (req, res) => {
+app.get('/api/test-env', authenticateJWT, requireAdmin, (req, res) => {
   res.json({
     hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
     hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
@@ -351,7 +365,7 @@ app.get('/api/test-env', (req, res) => {
 });
 
 // Test endpoint to check Google Fit API access
-app.get('/api/test-google-fit/:googleId', async (req, res) => {
+app.get('/api/test-google-fit/:googleId', authenticateJWT, requireAdmin, async (req, res) => {
   const { googleId } = req.params;
   
   try {
@@ -390,45 +404,51 @@ app.get('/api/test-google-fit/:googleId', async (req, res) => {
   }
 });
 
-// JWT token generation endpoint - must be defined before route mounting
+// JWT re-issue endpoint - must be defined before route mounting.
+// Sign-in happens through the Google OAuth callback in routes/auth.js. This
+// endpoint only swaps a JWT we signed earlier (it may have expired, but must be
+// under TOKEN_REISSUE_MAX_AGE_DAYS old) for a fresh one for the same user.
 app.post('/api/auth/token', async (req, res) => {
-  const { googleId, name, email, picture } = req.body;
-  
+  const { googleId } = req.body || {};
+
   if (!googleId) {
     return res.status(400).json({ error: 'Missing googleId' });
   }
 
+  const authHeader = req.headers.authorization || '';
+  const presented = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!presented) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+
+  let claims;
   try {
-    // Find or create user
-    let user = await User.findOne({ googleId });
-    
+    claims = jwt.verify(presented, getJwtSecret(), { ignoreExpiration: true });
+  } catch (err) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+  const maxAgeSeconds = TOKEN_REISSUE_MAX_AGE_DAYS * 24 * 60 * 60;
+  if (claims.googleId !== googleId || !claims.iat || (Date.now() / 1000 - claims.iat) > maxAgeSeconds) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+
+  try {
+    const user = await User.findOne({ googleId });
     if (!user) {
-      // Create new user if they don't exist
-      user = new User({
-        googleId,
-        name: name || 'Unknown User',
-        email: email || '',
-        picture: picture || '',
-        steps: 0,
-        weight: null,
-        lastSync: new Date()
-      });
-      await user.save();
-      console.log(`✅ Created new user: ${email || googleId}`);
+      return res.status(401).json({ error: 'Sign in again', needsReauth: true });
     }
 
-    // Generate JWT token
     const token = jwt.sign(
-      { 
-        googleId: user.googleId, 
+      {
+        googleId: user.googleId,
         email: user.email,
-        name: user.name 
+        name: user.name
       },
-      process.env.JWT_SECRET || 'your_jwt_secret',
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
-    console.log(`🔑 Generated JWT token for user: ${user.email || googleId}`);
+    console.log(`🔑 Re-issued JWT token for user ${user.googleId}`);
     
     res.json({ 
       token,
@@ -486,7 +506,7 @@ app.use('/api/push', authenticateJWT, pushRoutes)
 // Endpoint to refresh Google Fit access token using backend's refresh token
 // This allows frontend to get a new access token without prompting user to login
 // If backend has no refresh token, it will return the current access token if still valid
-app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
+app.get('/api/auth/refresh-google-fit-token/:googleId', authenticateJWT, requireSelf, async (req, res) => {
   const { googleId } = req.params;
   if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
   
@@ -2221,7 +2241,7 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
 
 
 // Admin endpoint to add yesterday's step point for Dylan
-app.post('/api/admin/add-yesterday-step-point', async (req, res) => {
+app.post('/api/admin/add-yesterday-step-point', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userId = '105044462574652357380'; // Dylan's Google ID
     const challengeId = '6896b45176d78ebc85d22bf7'; // Challenge ID
@@ -2260,7 +2280,11 @@ app.post('/api/admin/add-yesterday-step-point', async (req, res) => {
 });
 
 // Save user data from frontend OAuth flow
-app.post('/api/save-user', async (req, res) => {
+app.post('/api/save-user', authenticateJWT, async (req, res) => {
+  // Writes steps, weight and OAuth tokens, so only for the signed-in user.
+  if (!req.body || req.body.googleId !== req.user.googleId) {
+    return res.status(403).json({ error: 'Not allowed for this user' });
+  }
   const { googleId, name, email, picture, accessToken, refreshToken, tokenExpiry, steps, weight, date } = req.body;
   
   if (!googleId || !email) {
@@ -2501,7 +2525,7 @@ app.post('/api/save-user', async (req, res) => {
 });
 
 // Debug endpoint to check user's challenge participation
-app.get('/api/debug/user/:googleId', async (req, res) => {
+app.get('/api/debug/user/:googleId', authenticateJWT, requireAdmin, async (req, res) => {
   const { googleId } = req.params;
   try {
     const user = await User.findOne({ googleId });
@@ -2540,7 +2564,7 @@ app.get('/api/debug/user/:googleId', async (req, res) => {
 });
 
 // Debug endpoint to check if dbop1414 is properly removed from challenges
-app.get('/api/admin/check-user-status/:email', async (req, res) => {
+app.get('/api/admin/check-user-status/:email', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
@@ -2640,7 +2664,7 @@ app.get('/api/admin/check-user-status/:email', async (req, res) => {
 });
 
 // Debug endpoint to check dbop1414's challenge data
-app.get('/api/admin/debug-stuck-user', async (req, res) => {
+app.get('/api/admin/debug-stuck-user', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
@@ -2725,7 +2749,7 @@ app.get('/api/admin/debug-stuck-user', async (req, res) => {
 });
 
 // Admin endpoint to fix dbop1414's stuck challenge issue
-app.post('/api/admin/fix-stuck-user', async (req, res) => {
+app.post('/api/admin/fix-stuck-user', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
@@ -3007,7 +3031,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
 });
 
 // Admin endpoint to manually add step point for today
-app.post('/api/admin/add-today-step-point', async (req, res) => {
+app.post('/api/admin/add-today-step-point', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { userEmail, challengeId } = req.body;
     
@@ -3097,7 +3121,7 @@ app.post('/api/admin/add-today-step-point', async (req, res) => {
   }
 });
 
-app.post('/api/admin/fix-session-contamination', async (req, res) => {
+app.post('/api/admin/fix-session-contamination', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const dbop1414Email = 'dbop1414@gmail.com';
     
@@ -3192,7 +3216,7 @@ app.post('/api/admin/fix-session-contamination', async (req, res) => {
 });
 
 // Emergency endpoint to force remove dbop1414 from "test Leaderboard" challenge
-app.post('/api/admin/force-remove-from-test-leaderboard', async (req, res) => {
+app.post('/api/admin/force-remove-from-test-leaderboard', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
@@ -3259,7 +3283,7 @@ app.use('/api/challenge', challengeRoutes);
 app.use('/api/realtime', realtimeRoutes.router);
 
 // Admin endpoint to delete ALL challenges (use with caution!)
-app.delete('/api/admin/delete-all-challenges', async (req, res) => {
+app.delete('/api/admin/delete-all-challenges', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     console.log('🗑️ ADMIN: Deleting ALL challenges and related data...');
     
@@ -3308,7 +3332,7 @@ app.delete('/api/admin/delete-all-challenges', async (req, res) => {
 
 // Admin endpoint to fix date of existing manual weight entry
 // Accepts: { userId, oldDate (YYYY-MM-DD), newDate (YYYY-MM-DD) }
-app.post('/api/admin/fix-weight-date', async (req, res) => {
+app.post('/api/admin/fix-weight-date', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userId = req.body.userId || '105044462574652357380';
     const oldDateStr = req.body.oldDate || '2026-01-04';
@@ -3385,7 +3409,7 @@ app.post('/api/admin/fix-weight-date', async (req, res) => {
 
 // Admin endpoint to add historical weight entry
 // Accepts: { userId, weight, date (ISO string) } or uses defaults for dbop14
-app.post('/api/admin/add-historical-weight', async (req, res) => {
+app.post('/api/admin/add-historical-weight', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     // Allow parameters from request body, or use defaults for dbop14
     const userId = req.body.userId || '105044462574652357380'; // dbop14's Google ID (default)
@@ -3482,7 +3506,7 @@ app.post('/api/admin/add-historical-weight', async (req, res) => {
 });
 
 // Admin endpoint to update starting weight for a participant
-app.post('/api/admin/update-starting-weight', async (req, res) => {
+app.post('/api/admin/update-starting-weight', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { userId, challengeId, startingWeight } = req.body;
     
@@ -3577,7 +3601,7 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+if (IS_MAIN) app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server listening at http://0.0.0.0:${PORT}`)
   console.log(`✅ CORS configured for: https://fitapp.herringm.com, https://fitappbackend.herringm.com`)
   console.log(`✅ Health check available at: http://0.0.0.0:${PORT}/api/health`)
@@ -3587,3 +3611,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   - GET /api/health`)
 })
 
+module.exports = app;

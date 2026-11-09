@@ -12,6 +12,10 @@ const { kgToLbs } = require('../utils/weightConversion');
 
 // POST /api/user/userdata - upsert user fitness data
 router.post('/userdata', async (req, res) => {
+  // Writes steps and weight: the signed-in user's own data only (the bot may sync anyone).
+  if (!req.user.isBot && (!req.body || req.body.googleId !== req.user.googleId)) {
+    return res.status(403).json({ error: 'Not allowed for this user' });
+  }
   const { googleId, name, email, picture, steps, weight, challengeIds, date } = req.body;
   if (!googleId) {
     return res.status(400).json({ error: 'Missing googleId' });

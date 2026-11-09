@@ -64,10 +64,13 @@ export const UserProvider = ({ children }) => {
       console.log('🔑 Regenerating JWT token for existing session...');
       
       const apiUrl = import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
+      // The backend only re-issues a token in exchange for the previous one
+      const previousToken = localStorage.getItem('fitapp_jwt_token');
       const response = await fetch(`${apiUrl}/api/auth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(previousToken ? { Authorization: `Bearer ${previousToken}` } : {}),
         },
         body: JSON.stringify({
           googleId: userData.sub,
@@ -154,13 +157,25 @@ export const UserProvider = ({ children }) => {
               console.log('✅ Login session valid and extended - user won\'t need to login again for 30 days')
               
               // Check if JWT token is expired - if so, regenerate it
+              let sessionUsable = true
               if (isJWTTokenExpired()) {
                 console.log('⚠️ JWT token expired, regenerating it silently...')
-                await regenerateJWTToken(userData)
+                const newToken = await regenerateJWTToken(userData)
+                if (!newToken) {
+                  // The backend refused to re-issue (token too old or signed with an
+                  // old secret): send the user back through Google sign-in.
+                  console.log('⚠️ Could not renew session, signing out')
+                  ;['fitapp_user', 'fitapp_access_token', 'fitapp_access_token_expiry',
+                    'fitapp_jwt_token', 'fitapp_jwt_expiry', 'fitapp_last_login'
+                  ].forEach((key) => localStorage.removeItem(key))
+                  setUser(null)
+                  sessionUsable = false
+                }
               } else {
                 console.log('✅ JWT token is still valid')
               }
-              
+
+              if (sessionUsable) {
               // Set user data
               setUser(userData)
               
@@ -169,6 +184,7 @@ export const UserProvider = ({ children }) => {
                 console.log('✅ User has valid Google Fit permissions, no need to request them again')
               } else {
                 console.log('⚠️ User logged in but Google Fit permissions expired or missing')
+              }
               }
             } else if (!lastLoginTime) {
               // First time loading - set login timestamp and user data
@@ -265,7 +281,7 @@ export const UserProvider = ({ children }) => {
           const apiUrl = getApiUrl()
           const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` },
             body: JSON.stringify({
               googleId: userData.sub,
               name: userData.name,
@@ -344,7 +360,9 @@ export const UserProvider = ({ children }) => {
     
     try {
       const apiUrl = getApiUrl()
-      const response = await fetch(`${apiUrl}/api/auth/refresh-google-fit-token/${storedUser.sub}`)
+      const response = await fetch(`${apiUrl}/api/auth/refresh-google-fit-token/${storedUser.sub}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` }
+      })
       
       if (response.ok) {
         const result = await response.json()
@@ -452,7 +470,7 @@ export const UserProvider = ({ children }) => {
                   const apiUrl = getApiUrl()
                   const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` },
                     body: JSON.stringify({
                       googleId: storedUser.sub,
                       name: storedUser.name,

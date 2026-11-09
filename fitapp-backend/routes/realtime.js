@@ -3,6 +3,7 @@ const router = express.Router()
 const User = require('../models/User')
 const ChallengeParticipant = require('../models/ChallengeParticipant')
 const jwt = require('jsonwebtoken')
+const { getJwtSecret } = require('../config/auth')
 
 // Store active SSE connections
 const activeConnections = new Map()
@@ -10,7 +11,7 @@ const activeConnections = new Map()
 // Helper function to verify JWT token
 const verifyToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret')
+    return jwt.verify(token, getJwtSecret())
   } catch (error) {
     return null
   }

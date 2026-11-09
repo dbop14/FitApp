@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../config/auth');
 
 module.exports = function authenticateJWT(req, res, next) {
   // Allow OPTIONS requests (CORS preflight) to pass through
@@ -18,7 +19,7 @@ module.exports = function authenticateJWT(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader) {
     const token = authHeader.split(' ')[1];
-    jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret', (err, user) => {
+    jwt.verify(token, getJwtSecret(), (err, user) => {
       if (err) {
         console.log(`❌ JWT verification failed for ${req.method} ${req.path}:`, err.message);
         return res.sendStatus(403);
