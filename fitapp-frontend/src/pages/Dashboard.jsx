@@ -8,6 +8,7 @@ import UserCard from '../components/ui/UserCard'
 import ProgressCard from '../components/ui/ProgressCard'
 import StatCard from '../components/ui/StatCard'
 import WeightInputModal from '../components/WeightInputModal'
+import ReconnectBanner from '../components/ReconnectBanner'
 import { useUserData } from '../hooks/useUserData'
 import { useChallenges } from '../hooks/useChallenges'
 import { useQueryClient } from '@tanstack/react-query'
@@ -855,7 +856,8 @@ const Dashboard = () => {
       <div className="w-full bg-gray-50 min-h-screen relative">
         {/* Main content with bottom navigation offset and top padding for fixed header */}
         <main className="px-0 py-6 pb-24 safe-area-content">
-        
+        <ReconnectBanner />
+
         {/* Show loading spinner at center if initial data hasn't loaded yet */}
         {!allCardsDataReady && (
           <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">

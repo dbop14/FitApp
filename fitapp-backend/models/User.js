@@ -11,11 +11,21 @@ const UserSchema = new mongoose.Schema({
   accessToken: String,
   refreshToken: String,
   tokenExpiry: Number,
-  dataSource: { type: String, enum: ['google-fit', 'fitbit'], default: 'google-fit' },
+  dataSource: { type: String, enum: ['google-fit', 'fitbit', 'google-health', 'whoop'], default: 'google-fit' },
   fitbitAccessToken: String,
   fitbitRefreshToken: String,
   fitbitTokenExpiry: Number,
-  fitbitUserId: String
+  fitbitUserId: String,
+
+  // Google Health API (additive). oauthType says which health integration the user
+  // is on: unset/'fitbit' = legacy Fitbit or Google Fit, 'google' = Google Health.
+  // These tokens are separate from the sign-in tokens above.
+  oauthType: { type: String, enum: ['fitbit', 'google'] },
+  googleHealthAccessToken: String,
+  googleHealthRefreshToken: String,
+  googleHealthTokenExpiry: Number,
+  googleHealthConnectedAt: Date,
+  googleHealthLastError: String // e.g. 'invalid_grant' when the user must reconnect
 });
 
 module.exports = mongoose.model('User', UserSchema); 

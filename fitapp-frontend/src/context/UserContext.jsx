@@ -557,8 +557,9 @@ export const UserProvider = ({ children }) => {
       let syncedData = false;
       const dataSource = user?.dataSource || 'google-fit';
       
-      // Check user's data source preference
-      if (dataSource === 'fitbit') {
+      // Check user's data source preference. Server-synced sources (Fitbit,
+      // Google Health) are pulled by the backend; only Google Fit syncs in the browser.
+      if (dataSource === 'fitbit' || dataSource === 'google-health') {
         // For Fitbit, use backend API which handles Fitbit sync
         try {
           if (!silent) console.log('🔄 Syncing Fitbit data via backend...');
@@ -629,7 +630,7 @@ export const UserProvider = ({ children }) => {
         if (stepPointResult?.summary?.totalPointsAwarded > 0) {
           console.log(`🎉 Auto-refresh earned ${stepPointResult.summary.totalPointsAwarded} point(s)!`);
         }
-        const dataSourceName = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit';
+        const dataSourceName = dataSource === 'fitbit' ? 'Fitbit' : dataSource === 'google-health' ? 'Google Health' : 'Google Fit';
         console.log(`📊 Auto-refresh complete: ${dataSourceName} ${syncedData ? 'synced' : 'skipped'}, step points checked`);
       }
       
@@ -648,7 +649,7 @@ export const UserProvider = ({ children }) => {
       
       // For Fitbit, always try to sync (backend handles token refresh)
       // For Google Fit, check if user has valid permissions
-      const shouldSync = dataSource === 'fitbit' || hasValidGoogleFitPermissions();
+      const shouldSync = dataSource === 'fitbit' || dataSource === 'google-health' || hasValidGoogleFitPermissions();
       
       if (hasNoFitnessData && shouldSync) {
         // Small delay to let everything initialize, then auto-refresh

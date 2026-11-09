@@ -1,3 +1,4 @@
+const { redactEmail } = require('./utils/redact');
 // Set timezone to New York to ensure consistent date boundaries
 process.env.TZ = 'America/New_York';
 
@@ -539,10 +540,10 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', authenticateJWT, require
       return res.status(404).json({ error: 'User not found' });
     }
     
-    console.log(`📊 User found: ${user.email}, hasAccessToken: ${!!user.accessToken}, hasRefreshToken: ${!!user.refreshToken}, tokenExpiry: ${user.tokenExpiry ? new Date(user.tokenExpiry).toISOString() : 'null'}`);
+    console.log(`📊 User found: ${redactEmail(user.email)}, hasAccessToken: ${!!user.accessToken}, hasRefreshToken: ${!!user.refreshToken}, tokenExpiry: ${user.tokenExpiry ? new Date(user.tokenExpiry).toISOString() : 'null'}`);
     
     if (!user.accessToken) {
-      console.log(`⚠️ User ${user.email} has no access token in database`);
+      console.log(`⚠️ User ${redactEmail(user.email)} has no access token in database`);
       return res.status(401).json({ 
         error: 'No access token available',
         message: 'User needs to authenticate with Google Fit first',
@@ -603,7 +604,7 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', authenticateJWT, require
       } else {
         // No refresh token and token expired - need reauth
         const hoursExpired = user.tokenExpiry ? (Date.now() - user.tokenExpiry) / (1000 * 60 * 60) : 'unknown';
-        console.log(`⚠️ No refresh token and token expired (${hoursExpired.toFixed(1)} hours ago), user ${user.email} needs to re-authenticate`);
+        console.log(`⚠️ No refresh token and token expired (${hoursExpired.toFixed(1)} hours ago), user ${redactEmail(user.email)} needs to re-authenticate`);
         return res.status(401).json({ 
           error: 'Authentication required',
           message: 'Please re-authenticate with Google to continue syncing data',
@@ -643,14 +644,14 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       });
     }
 
-    console.log(`✅ Found user: ${user.email} with access token`);
+    console.log(`✅ Found user: ${redactEmail(user.email)} with access token`);
 
     // Ensure tokens are valid and refresh proactively if needed
     let oauth2Client;
     try {
       const tokenResult = await ensureValidGoogleTokens(user);
       oauth2Client = tokenResult.oauth2Client;
-      console.log(`🔑 OAuth2 client configured for user: ${user.email}${tokenResult.refreshed ? ' (token refreshed proactively)' : ''}`);
+      console.log(`🔑 OAuth2 client configured for user: ${redactEmail(user.email)}${tokenResult.refreshed ? ' (token refreshed proactively)' : ''}`);
     } catch (tokenError) {
       console.error('❌ Token validation/refresh failed:', tokenError);
       if (tokenError.message.includes('re-authenticate') || tokenError.message.includes('Refresh token invalid')) {
@@ -1627,7 +1628,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       }
       
       const participants = await ChallengeParticipant.find({ userId: googleId });
-      console.log(`🔍 Found ${participants.length} challenge participations for user ${user.email}`);
+      console.log(`🔍 Found ${participants.length} challenge participations for user ${redactEmail(user.email)}`);
       
       for (const participant of participants) {
         // Store original startingWeight to ensure it's never overwritten
@@ -1758,7 +1759,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       }
     }
 
-    console.log(`✅ Synced Google Fit data for ${user.email}: steps=${steps}, weight=${weight}`);
+    console.log(`✅ Synced Google Fit data for ${redactEmail(user.email)}: steps=${steps}, weight=${weight}`);
 
     // Broadcast update via SSE
     broadcastUserUpdate(user.googleId, {
@@ -1789,7 +1790,7 @@ app.get('/api/user-data/:googleId', authenticateJWT, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log(`📊 Retrieved user data for ${user.email}: steps=${user.steps}, weight=${user.weight}, lastSync=${user.lastSync}`);
+    console.log(`📊 Retrieved user data for ${redactEmail(user.email)}: steps=${user.steps}, weight=${user.weight}, lastSync=${user.lastSync}`);
     
     res.json({ 
       steps: user.steps, 
@@ -1820,7 +1821,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
     // Also check if user exists and what their email is
     const user = await User.findOne({ googleId: googleId });
     if (user) {
-      console.log(`🔍 User found: ${user.email} (${user.name})`);
+      console.log(`🔍 User found: ${redactEmail(user.email)} (${user.name})`);
       
       // Check if there are challenges where user email is in participants array
       const challengesByEmail = await Challenge.find({ participants: user.email });
@@ -1834,7 +1835,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
         });
         
         if (!existingParticipant) {
-          console.log(`⚠️ User ${user.email} is in challenge "${challenge.name}" participants array but has no ChallengeParticipant record. Creating one...`);
+          console.log(`⚠️ User ${redactEmail(user.email)} is in challenge "${challenge.name}" participants array but has no ChallengeParticipant record. Creating one...`);
           
           // Create participant record with default values
           // For startingWeight: set to null - it will be set on first weigh-in day
@@ -1892,7 +1893,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
             weightLossPoints: 0
           });
           await newParticipant.save();
-          console.log(`✅ Created ChallengeParticipant record for ${user.email} in "${challenge.name}" with startingWeight: ${startingWeightToSet || 'null (will be set on first weigh-in day)'}, lastWeight: ${lastWeightToSet || 'null'}`);
+          console.log(`✅ Created ChallengeParticipant record for ${redactEmail(user.email)} in "${challenge.name}" with startingWeight: ${startingWeightToSet || 'null (will be set on first weigh-in day)'}, lastWeight: ${lastWeightToSet || 'null'}`);
           
           // Add to participants array for this query
           participants.push(newParticipant);
@@ -2142,7 +2143,7 @@ app.post('/api/update-participant/:challengeId/:googleId', async (req, res) => {
 
     await participant.save();
 
-    console.log(`✅ Updated participant data for ${user.email} in challenge ${challengeId}: weight=${participant.lastWeight}, steps=${participant.lastStepCount}`);
+    console.log(`✅ Updated participant data for ${redactEmail(user.email)} in challenge ${challengeId}: weight=${participant.lastWeight}, steps=${participant.lastStepCount}`);
 
     res.json({ 
       message: 'Participant data updated successfully',
@@ -2187,13 +2188,13 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
     // Check if user is admin (creator)
     console.log('🔍 Debug challenge update:', {
       userGoogleId: req.body.userGoogleId,
-      challengeCreatorEmail: challenge.creatorEmail,
+      challengeCreatorEmail: redactEmail(challenge.creatorEmail),
       challengeId: challengeId,
       participants: challenge.participants
     });
     
     const user = await User.findOne({ googleId: req.body.userGoogleId });
-    console.log('🔍 Found user:', user ? { email: user.email, googleId: user.googleId } : 'User not found');
+    console.log('🔍 Found user:', user ? { email: redactEmail(user.email), googleId: user.googleId } : 'User not found');
     
     // Check if user is creator or if creatorEmail is missing, check if user is in participants
     const isCreator = user && challenge.creatorEmail && user.email === challenge.creatorEmail;
@@ -2202,16 +2203,16 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
     console.log('🔍 Authorization check:', {
       isCreator,
       isParticipant,
-      userEmail: user?.email,
-      challengeCreatorEmail: challenge.creatorEmail,
+      userEmail: redactEmail(user?.email),
+      challengeCreatorEmail: redactEmail(challenge.creatorEmail),
       participants: challenge.participants
     });
     
     if (!user || (!isCreator && !isParticipant)) {
       console.log('❌ Authorization failed:', {
         userFound: !!user,
-        userEmail: user?.email,
-        challengeCreatorEmail: challenge.creatorEmail,
+        userEmail: redactEmail(user?.email),
+        challengeCreatorEmail: redactEmail(challenge.creatorEmail),
         emailsMatch: user?.email === challenge.creatorEmail,
         isParticipant: isParticipant
       });
@@ -2356,7 +2357,7 @@ app.post('/api/save-user', authenticateJWT, async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Saved user data for ${email} (${googleId}) with picture: ${picture ? 'yes' : 'no'}, steps: ${steps}, weight: ${weight}`);
+    console.log(`✅ Saved user data for ${redactEmail(email)} (${googleId}) with picture: ${picture ? 'yes' : 'no'}, steps: ${steps}, weight: ${weight}`);
     
     // Store historical data - use provided date or default to today
     if (steps !== undefined || weight !== undefined) {
@@ -2376,17 +2377,17 @@ app.post('/api/save-user', authenticateJWT, async (req, res) => {
         },
         { upsert: true }
       );
-      console.log(`📊 Stored fitness history for ${email} on ${targetDate.toISOString()}: steps=${steps}, weight=${weight}`);
+      console.log(`📊 Stored fitness history for ${redactEmail(email)} on ${targetDate.toISOString()}: steps=${steps}, weight=${weight}`);
     }
     
     // Calculate challenge points if steps and weight are provided
     let pointsUpdates = [];
     if (steps !== undefined || weight !== undefined) {
-      console.log(`🎯 Calculating points for user ${email}...`);
+      console.log(`🎯 Calculating points for user ${redactEmail(email)}...`);
       
       // Find all challenges where this user is a participant
       const userParticipations = await ChallengeParticipant.find({ userId: googleId });
-      console.log(`🔍 Found ${userParticipations.length} challenges for user ${email}`);
+      console.log(`🔍 Found ${userParticipations.length} challenges for user ${redactEmail(email)}`);
       
       for (const participation of userParticipations) {
         const challenge = await Challenge.findById(participation.challengeId);
@@ -2463,7 +2464,7 @@ app.post('/api/save-user', authenticateJWT, async (req, res) => {
           const canEarnPoint = has24HoursPassed(lastStepPointTime);
           const stepGoalNum = getStepGoal(challenge);
           
-          console.log(`🔍 Step goal check for ${email}:`, {
+          console.log(`🔍 Step goal check for ${redactEmail(email)}:`, {
             steps,
             stepGoal: stepGoalNum,
             reachedGoal: steps >= stepGoalNum,
@@ -2522,7 +2523,7 @@ app.post('/api/save-user', authenticateJWT, async (req, res) => {
         });
       }
       
-      console.log(`📊 Points updates for ${email}:`, pointsUpdates);
+      console.log(`📊 Points updates for ${redactEmail(email)}:`, pointsUpdates);
     }
     
     // Broadcast update via SSE if steps or weight changed
@@ -2589,7 +2590,7 @@ app.get('/api/admin/check-user-status/:email', authenticateJWT, requireAdmin, as
   try {
     const { email } = req.params;
     
-    console.log(`🔍 Checking status for user: ${email}`);
+    console.log(`🔍 Checking status for user: ${redactEmail(email)}`);
     
     // Find the user
     const user = await User.findOne({ email: email });
@@ -2674,7 +2675,7 @@ app.get('/api/admin/check-user-status/:email', authenticateJWT, requireAdmin, as
       }
     }
     
-    console.log(`📊 Status for ${email}:`, status);
+    console.log(`📊 Status for ${redactEmail(email)}:`, status);
     
     res.json(status);
     
@@ -2689,7 +2690,7 @@ app.get('/api/admin/debug-stuck-user', authenticateJWT, requireAdmin, async (req
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🔍 Debugging stuck user: ${userEmail}`);
+    console.log(`🔍 Debugging stuck user: ${redactEmail(userEmail)}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -2774,7 +2775,7 @@ app.post('/api/admin/fix-stuck-user', authenticateJWT, requireAdmin, async (req,
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🔧 Fixing stuck user: ${userEmail}`);
+    console.log(`🔧 Fixing stuck user: ${redactEmail(userEmail)}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -2803,7 +2804,7 @@ app.post('/api/admin/fix-stuck-user', authenticateJWT, requireAdmin, async (req,
         
         // Check if user is in participants array
         if (!challenge.participants.includes(user.email)) {
-          console.log(`🔧 Adding ${user.email} to challenge participants array`);
+          console.log(`🔧 Adding ${redactEmail(user.email)} to challenge participants array`);
           challenge.participants.push(user.email);
           await challenge.save();
           actions.push(`Added user to "${challenge.name}" participants array`);
@@ -2846,7 +2847,7 @@ app.post('/api/admin/fix-stuck-user', authenticateJWT, requireAdmin, async (req,
     const finalParticipants = await ChallengeParticipant.find({ userId: user.googleId });
     const finalChallenges = await Challenge.find({ participants: user.email });
     
-    console.log(`✅ Fixed ${userEmail}: ${finalParticipants.length} participant records, ${finalChallenges.length} challenges`);
+    console.log(`✅ Fixed ${redactEmail(userEmail)}: ${finalParticipants.length} participant records, ${finalChallenges.length} challenges`);
     
     res.json({
       message: `Successfully fixed stuck user ${userEmail}`,
@@ -2899,13 +2900,13 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
     
     for (const user of usersToCheck) {
       try {
-        console.log(`🎯 Checking step points for ${user.email} (${user.googleId})`);
+        console.log(`🎯 Checking step points for ${redactEmail(user.email)} (${user.googleId})`);
         
         // Get user's current challenges
         const userParticipations = await ChallengeParticipant.find({ userId: user.googleId });
         
         if (userParticipations.length === 0) {
-          console.log(`⚠️ No active challenges for ${user.email}`);
+          console.log(`⚠️ No active challenges for ${redactEmail(user.email)}`);
           continue;
         }
         
@@ -2926,7 +2927,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
           const challenge = await Challenge.findById(participation.challengeId);
           
           if (!challenge) {
-            console.log(`⚠️ Challenge ${participation.challengeId} not found for ${user.email} - removing orphaned participant record`);
+            console.log(`⚠️ Challenge ${participation.challengeId} not found for ${redactEmail(user.email)} - removing orphaned participant record`);
             // Delete orphaned participant record
             await ChallengeParticipant.findByIdAndDelete(participation._id);
             console.log(`🗑️ Deleted orphaned participant record for challenge ${participation.challengeId}`);
@@ -2999,15 +3000,15 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
             challengeResult.newPoints = participation.points;
             userResult.pointsEarned += 1;
             
-            console.log(`🏆 ${user.email} earned step goal point in "${challenge.name}" (${user.steps} >= ${stepGoalNum})`);
+            console.log(`🏆 ${redactEmail(user.email)} earned step goal point in "${challenge.name}" (${user.steps} >= ${stepGoalNum})`);
           } else if (!canEarnPoint && stepGoalMet) {
-            console.log(`✅ ${user.email} already got step point today for "${challenge.name}"`);
+            console.log(`✅ ${redactEmail(user.email)} already got step point today for "${challenge.name}"`);
             // Still update total points to ensure consistency
             const stepPoints = participation.stepGoalPoints || 0;
             const weightLossPoints = participation.weightLossPoints || 0;
             participation.points = stepPoints + weightLossPoints;
           } else {
-            console.log(`📊 ${user.email} hasn't reached step goal for "${challenge.name}" (${user.steps}/${stepGoalNum}) - Goal NOT met, no point awarded`);
+            console.log(`📊 ${redactEmail(user.email)} hasn't reached step goal for "${challenge.name}" (${user.steps}/${stepGoalNum}) - Goal NOT met, no point awarded`);
           }
           
           // Ensure total points are correct even if no new point was earned
@@ -3024,7 +3025,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
         results.push(userResult);
         
       } catch (error) {
-        console.error(`❌ Error processing ${user.email}:`, error);
+        console.error(`❌ Error processing ${redactEmail(user.email)}:`, error);
         results.push({
           userId: user.googleId,
           email: user.email,
@@ -3060,7 +3061,7 @@ app.post('/api/admin/add-today-step-point', authenticateJWT, requireAdmin, async
       return res.status(400).json({ error: 'userEmail and challengeId are required' });
     }
     
-    console.log(`🎯 Adding today's step point for ${userEmail} in challenge ${challengeId}`);
+    console.log(`🎯 Adding today's step point for ${redactEmail(userEmail)} in challenge ${challengeId}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -3123,7 +3124,7 @@ app.post('/api/admin/add-today-step-point', authenticateJWT, requireAdmin, async
     
     await participant.save();
     
-    console.log(`✅ Added step point for ${userEmail}: ${oldPoints} -> ${participant.points}`);
+    console.log(`✅ Added step point for ${redactEmail(userEmail)}: ${oldPoints} -> ${participant.points}`);
     
     res.json({
       message: 'Step point added successfully',
@@ -3146,7 +3147,7 @@ app.post('/api/admin/fix-session-contamination', authenticateJWT, requireAdmin, 
   try {
     const dbop1414Email = 'dbop1414@gmail.com';
     
-    console.log(`🔧 Comprehensive fix for ${dbop1414Email} challenge memberships`);
+    console.log(`🔧 Comprehensive fix for ${redactEmail(dbop1414Email)} challenge memberships`);
     
     // Find dbop1414
     const dbop1414 = await User.findOne({ email: dbop1414Email });
@@ -3169,7 +3170,7 @@ app.post('/api/admin/fix-session-contamination', authenticateJWT, requireAdmin, 
     for (const challenge of challengesWithUser) {
       console.log(`🔍 Checking challenge "${challenge.name}" (${challenge._id})`);
       console.log(`  - Admin: ${challenge.admin}`);
-      console.log(`  - Created by: ${challenge.creatorEmail || 'Unknown'}`);
+      console.log(`  - Created by: ${redactEmail(challenge.creatorEmail)}`);
       console.log(`  - Participants: ${challenge.participants.join(', ')}`);
       
       // Check if dbop1414 should legitimately be in this challenge
@@ -3241,7 +3242,7 @@ app.post('/api/admin/force-remove-from-test-leaderboard', authenticateJWT, requi
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🚨 Force removing ${userEmail} from "test Leaderboard" challenge`);
+    console.log(`🚨 Force removing ${redactEmail(userEmail)} from "test Leaderboard" challenge`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });

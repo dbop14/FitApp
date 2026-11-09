@@ -1,3 +1,4 @@
+const { redactEmail } = require('./redact');
 const { google } = require('googleapis');
 
 /**
@@ -47,7 +48,7 @@ async function ensureValidGoogleTokens(user) {
 
     try {
       const timeUntilExpiry = user.tokenExpiry ? Math.round((user.tokenExpiry - now) / (60 * 60 * 1000)) : 'unknown';
-      console.log(`🔄 Proactively refreshing token for user: ${user.email} (expires in ${timeUntilExpiry} hours)`);
+      console.log(`🔄 Proactively refreshing token for user: ${redactEmail(user.email)} (expires in ${timeUntilExpiry} hours)`);
       
       const { credentials } = await oauth2Client.refreshAccessToken();
       

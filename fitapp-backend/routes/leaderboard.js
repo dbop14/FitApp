@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const ChallengeParticipant = require('../models/ChallengeParticipant');
@@ -133,7 +134,7 @@ router.get('/:challengeId', async (req, res) => {
       console.log(`🖼️ Backend profile picture for ${user?.name || 'Unknown'}:`, {
         userId: p.userId,
         userName: user?.name,
-        userEmail: user?.email,
+        userEmail: redactEmail(user?.email),
         userPicture: user?.picture,
         hasPicture: !!user?.picture,
         userFound: !!user
@@ -296,7 +297,7 @@ router.post('/:challengeId/participants', async (req, res) => {
           lastSync: new Date()
         });
         await user.save();
-        console.log(`✅ Created new user: ${email} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
+        console.log(`✅ Created new user: ${redactEmail(email)} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
       } else {
         return res.status(400).json({ 
           error: 'Invalid Google ID: cannot create user without valid Google ID' 
@@ -310,7 +311,7 @@ router.post('/:challengeId/participants', async (req, res) => {
         user.picture = picture; // Update picture if provided
       }
       await user.save();
-      console.log(`✅ Updated existing user: ${email} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
+      console.log(`✅ Updated existing user: ${redactEmail(email)} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
     }
 
     // Check if challenge starts in the future (challenge already fetched above on line 214)
@@ -349,16 +350,16 @@ router.post('/:challengeId/participants', async (req, res) => {
     });
 
     await newParticipant.save();
-    console.log(`✅ Created ChallengeParticipant record for ${email} in challenge ${challengeIdStr}`);
+    console.log(`✅ Created ChallengeParticipant record for ${redactEmail(email)} in challenge ${challengeIdStr}`);
 
     // Update the Challenge model's participants array
     if (!challenge.participants.includes(email)) {
       challenge.participants.push(email);
       await challenge.save();
-      console.log(`✅ Updated challenge participants array for: ${email}`);
+      console.log(`✅ Updated challenge participants array for: ${redactEmail(email)}`);
     }
 
-    console.log(`✅ Added participant to challenge: ${email} (${userId})`);
+    console.log(`✅ Added participant to challenge: ${redactEmail(email)} (${userId})`);
 
     // Note: Welcome card messages are now handled by the fitapp-bot service
     // The bot will detect new participants and send a welcomeCard automatically
@@ -430,7 +431,7 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
         console.log(`🔧 Found user in participants array but no ChallengeParticipant record - cleaning up`);
         challenge.participants = challenge.participants.filter(email => email !== userEmail);
         await challenge.save();
-        console.log(`✅ Removed ${userEmail} from challenge participants array`);
+        console.log(`✅ Removed ${redactEmail(userEmail)} from challenge participants array`);
         
         return res.json({ 
           message: 'User removed from challenge (cleaned up inconsistent data)',
@@ -450,7 +451,7 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
     const userName = user?.name || 'Unknown User';
     const userEmail = user?.email || '';
 
-    console.log(`👤 Removing participant: ${userName} (${userEmail}) with ${participant.points} points`);
+    console.log(`👤 Removing participant: ${userName} (${redactEmail(userEmail)}) with ${participant.points} points`);
 
     // Remove participant record
     await ChallengeParticipant.findByIdAndDelete(participant._id);
@@ -460,9 +461,9 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
     if (challenge.participants.includes(userEmail)) {
       challenge.participants = challenge.participants.filter(email => email !== userEmail);
       await challenge.save();
-      console.log(`✅ Updated challenge participants array, removed: ${userEmail}`);
+      console.log(`✅ Updated challenge participants array, removed: ${redactEmail(userEmail)}`);
     } else {
-      console.log(`⚠️ User ${userEmail} was not in challenge participants array`);
+      console.log(`⚠️ User ${redactEmail(userEmail)} was not in challenge participants array`);
     }
 
     // Add leave message to chat (plain text, not a card)

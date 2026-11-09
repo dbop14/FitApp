@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
@@ -19,6 +20,13 @@ router.post('/userdata', async (req, res) => {
   const { googleId, name, email, picture, steps, weight, challengeIds, date } = req.body;
   if (!googleId) {
     return res.status(400).json({ error: 'Missing googleId' });
+  }
+  // Server-synced sources are the authority for steps; ignore browser-pushed Google Fit data.
+  if (steps !== undefined) {
+    const owner = await User.findOne({ googleId }).select('dataSource oauthType').lean();
+    if (owner && owner.dataSource === 'google-health') {
+      return res.status(409).json({ error: 'Steps for this user come from Google Health', ignored: true });
+    }
   }
   
   try {
@@ -56,10 +64,10 @@ router.post('/userdata', async (req, res) => {
       // For today's data, update user's current steps and weight
       updateFields.steps = steps;
       updateFields.weight = weight;
-      console.log(`🔄 Updating user's current data for ${email}: steps=${steps}, weight=${weight}`);
+      console.log(`🔄 Updating user's current data for ${redactEmail(email)}: steps=${steps}, weight=${weight}`);
     } else {
       // For historical data, preserve existing user steps/weight (don't overwrite with historical values)
-      console.log(`📅 Historical data for ${email} on ${dateStr}: steps=${steps}, weight=${weight} - NOT updating user's current state`);
+      console.log(`📅 Historical data for ${redactEmail(email)} on ${dateStr}: steps=${steps}, weight=${weight} - NOT updating user's current state`);
     }
     
     const user = await User.findOneAndUpdate(
@@ -69,10 +77,10 @@ router.post('/userdata', async (req, res) => {
     );
 
     if (isToday) {
-      console.log(`🔄 Updated user data for ${email}: steps=${steps}, weight=${weight}`);
+      console.log(`🔄 Updated user data for ${redactEmail(email)}: steps=${steps}, weight=${weight}`);
     }
     
-    console.log(`📊 Storing fitness history for ${email} on ${dateStr}: steps=${steps}, weight=${weight}`);
+    console.log(`📊 Storing fitness history for ${redactEmail(email)} on ${dateStr}: steps=${steps}, weight=${weight}`);
     
     // Historical dates: backfill/GET are source of truth. Do not overwrite with lower (preserve)
     // or higher (client Sync can inflate); only allow filling missing days.
@@ -109,7 +117,7 @@ router.post('/userdata', async (req, res) => {
       },
       { upsert: true }
     );
-    console.log(`✅ Stored fitness history for ${email} on ${dateStr}: steps=${stepsToSave}, weight=${weightToSave ?? 'null'}`);
+    console.log(`✅ Stored fitness history for ${redactEmail(email)} on ${dateStr}: steps=${stepsToSave}, weight=${weightToSave ?? 'null'}`);
 
     let pointsUpdates = [];
     
@@ -126,7 +134,7 @@ router.post('/userdata', async (req, res) => {
       for (const participation of userParticipations) {
         const challenge = await Challenge.findById(participation.challengeId);
         if (!challenge) {
-          console.log(`⚠️ Challenge ${participation.challengeId} not found for ${email} - removing orphaned participant record`);
+          console.log(`⚠️ Challenge ${participation.challengeId} not found for ${redactEmail(email)} - removing orphaned participant record`);
           // Delete orphaned participant record
           await ChallengeParticipant.findByIdAndDelete(participation._id);
           console.log(`🗑️ Deleted orphaned participant record for challenge ${participation.challengeId}`);
@@ -136,7 +144,7 @@ router.post('/userdata', async (req, res) => {
       }
       
       challengesToProcess = validChallengeIds;
-      console.log(`🔍 Found ${challengesToProcess.length} valid challenges for user ${email}`);
+      console.log(`🔍 Found ${challengesToProcess.length} valid challenges for user ${redactEmail(email)}`);
     }
 
     for (const challengeId of challengesToProcess) {
@@ -149,7 +157,7 @@ router.post('/userdata', async (req, res) => {
       // Find or create ChallengeParticipant using googleId
       let participant = await ChallengeParticipant.findOne({ challengeId, userId: googleId });
       if (!participant) {
-        console.log(`⚠️ No participant record found for user ${email} in challenge ${challengeId}`);
+        console.log(`⚠️ No participant record found for user ${redactEmail(email)} in challenge ${challengeId}`);
         continue;
       }
 
@@ -253,7 +261,7 @@ router.post('/userdata', async (req, res) => {
         const lastKey = lastStepPointDate ? getDayKey(new Date(lastStepPointDate)) : null;
         const stepGoalPointsBefore = participant.stepGoalPoints || 0;
         
-        console.log(`🔍 Step goal check for ${email}:`, {
+        console.log(`🔍 Step goal check for ${redactEmail(email)}:`, {
           steps: stepsNum,
           stepGoal: stepGoalNum,
           reachedGoal: stepsNum >= stepGoalNum,
@@ -309,7 +317,7 @@ router.post('/userdata', async (req, res) => {
       pointsUpdates.push({ challengeId, points: participant.points, pointsEarned });
     }
     
-    console.log(`📊 Points updates for ${email}:`, pointsUpdates);
+    console.log(`📊 Points updates for ${redactEmail(email)}:`, pointsUpdates);
     
     // Broadcast update via SSE - only for today's data to prevent historical values from overwriting current state
     if (isToday) {
@@ -343,11 +351,33 @@ router.get('/userdata', async (req, res) => {
     
     // Determine data source (default to google-fit for backward compatibility)
     const dataSource = user.dataSource || 'google-fit';
+
+    // New-style sources (Google Health) go through the HealthSource layer.
+    const health = require('../services/health');
+    if (health.getHealthSource(user)) {
+      const recent = user.lastSync && (Date.now() - new Date(user.lastSync).getTime()) < 2 * 60 * 1000;
+      if (!recent) {
+        try {
+          await health.syncHealthHistory(user);
+        } catch (err) {
+          console.error(`❌ ${dataSource} sync failed for user ${user.googleId}: ${err.message}`);
+        }
+      }
+      return res.json({
+        steps: user.steps || 0,
+        weight: user.weight || null,
+        lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null,
+        dataSource,
+        needsReconnect: health.needsReconnect(user),
+      });
+    }
     
     // If using Fitbit, check for Fitbit tokens
     if (dataSource === 'fitbit') {
       if (!user.fitbitAccessToken) {
-        console.log(`📊 Returning stored data for ${user.email} (no Fitbit access token available)`);
+        console.log(`📊 Returning stored data for ${redactEmail(user.email)} (no Fitbit access token available)`);
         return res.json({ 
           steps: user.steps || 0, 
           weight: user.weight || null, 
@@ -432,7 +462,7 @@ router.get('/userdata', async (req, res) => {
         
         try {
           await syncFitbitHistory(user, historyStart, now);
-          console.log(`📊 Synced Fitbit history for ${user.email} (last 30 days)`);
+          console.log(`📊 Synced Fitbit history for ${redactEmail(user.email)} (last 30 days)`);
         } catch (historyError) {
           console.error('⚠️ Error syncing Fitbit history:', historyError);
           // Don't fail the request if history sync fails
@@ -506,7 +536,7 @@ router.get('/userdata', async (req, res) => {
     // Default: Google Fit (existing logic)
     // If user has no access token, just return stored data
     if (!user.accessToken) {
-      console.log(`📊 Returning stored data for ${user.email} (no access token available)`);
+      console.log(`📊 Returning stored data for ${redactEmail(user.email)} (no access token available)`);
       return res.json({ 
         steps: user.steps || 0, 
         weight: user.weight || null, 
@@ -523,7 +553,7 @@ router.get('/userdata', async (req, res) => {
       const tokenResult = await ensureValidGoogleTokens(user);
       oauth2Client = tokenResult.oauth2Client;
       if (tokenResult.refreshed) {
-        console.log(`🔑 Token refreshed proactively for ${user.email}`);
+        console.log(`🔑 Token refreshed proactively for ${redactEmail(user.email)}`);
       }
     } catch (tokenError) {
       console.error('❌ Token validation/refresh failed:', tokenError);
@@ -717,7 +747,7 @@ router.get('/userdata', async (req, res) => {
           }
         }
       }
-      console.log(`📊 Stored ${data.bucket.length} days of fitness history for ${user.email}`);
+      console.log(`📊 Stored ${data.bucket.length} days of fitness history for ${redactEmail(user.email)}`);
     }
     
     // Get today's steps for user model update
@@ -823,7 +853,7 @@ router.get('/userdata', async (req, res) => {
       },
       { upsert: true }
     );
-    console.log(`📊 Stored Google Fit history for ${user.email} on ${today.toISOString()}: steps=${stepsFromGoogleFit}, weight=${(weight !== null && weight !== undefined) ? weight : null} (user.steps preserved as ${steps})`);
+    console.log(`📊 Stored Google Fit history for ${redactEmail(user.email)} on ${today.toISOString()}: steps=${stepsFromGoogleFit}, weight=${(weight !== null && weight !== undefined) ? weight : null} (user.steps preserved as ${steps})`);
 
     // Broadcast update via SSE only if something actually changed to avoid UI bouncing
     const didStepsChange = user.steps !== previousSteps;
@@ -836,7 +866,7 @@ router.get('/userdata', async (req, res) => {
       });
     } else {
       // Still log that we skipped broadcast because nothing changed
-      console.log(`📡 No user state change for ${user.email}; skipping SSE broadcast`);
+      console.log(`📡 No user state change for ${redactEmail(user.email)}; skipping SSE broadcast`);
     }
     // Return values: prefer Google Fit value when present, otherwise return stored DB value
     const weightToReturn = (weight !== null && weight !== undefined) ? weight : (user.weight || null);
@@ -865,7 +895,7 @@ router.get('/userdata', async (req, res) => {
       }
     }
     if (userForError) {
-      console.log(`📊 Returning stored data due to Google Fit sync error for ${userForError.email}`);
+      console.log(`📊 Returning stored data due to Google Fit sync error for ${redactEmail(userForError.email)}`);
       res.json({ 
         steps: userForError.steps || 0, 
         weight: userForError.weight || null, 
@@ -933,8 +963,8 @@ router.put('/datasource', async (req, res) => {
     return res.status(400).json({ error: 'Missing googleId' });
   }
   
-  if (!dataSource || !['google-fit', 'fitbit'].includes(dataSource)) {
-    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit" or "fitbit"' });
+  if (!dataSource || !['google-fit', 'fitbit', 'google-health'].includes(dataSource)) {
+    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit", "fitbit" or "google-health"' });
   }
   
   try {
@@ -952,8 +982,16 @@ router.put('/datasource', async (req, res) => {
       });
     }
     
+    if (dataSource === 'google-health' && !user.googleHealthRefreshToken) {
+      return res.status(400).json({
+        error: 'Google Health not connected. Connect it first.',
+        requiresAuth: true
+      });
+    }
+
     // Update data source
     user.dataSource = dataSource;
+    if (dataSource === 'google-health') user.oauthType = 'google';
     await user.save();
     
     console.log(`✅ Updated data source for user ${googleId} to ${dataSource}`);
@@ -983,10 +1021,17 @@ router.get('/datasource', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    const health = require('../services/health');
+    const { isGoogleHealthEnabled } = require('../config/healthSources');
     res.json({
       dataSource: user.dataSource || 'google-fit',
       googleFitConnected: !!user.accessToken,
-      fitbitConnected: !!user.fitbitAccessToken
+      fitbitConnected: !!user.fitbitAccessToken,
+      googleHealthEnabled: isGoogleHealthEnabled(),
+      googleHealthConnected: !!user.googleHealthRefreshToken,
+      googleHealthConnectedAt: user.googleHealthConnectedAt || null,
+      oauthType: user.oauthType || null,
+      needsReconnect: health.needsReconnect(user)
     });
   } catch (err) {
     console.error('❌ Failed to get data source status:', err);

@@ -1,3 +1,5 @@
+// Logs must never contain a user's email.
+const redactEmail = (e) => (e && typeof e === 'string' && e.indexOf('@') > 0 ? `${e[0]}***${e.slice(e.indexOf('@'))}` : '[redacted]');
 const sdk = require('matrix-js-sdk');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
@@ -1460,12 +1462,12 @@ const syncAllUsersData = async () => {
             headers: botSecret ? { 'x-bot-secret': botSecret } : undefined
           });
           if (response.ok) {
-            console.log(`✅ Successfully synced data for user ${user.email}`);
+            console.log(`✅ Successfully synced data for user ${redactEmail(user.email)}`);
           } else {
-            console.error(`❌ Failed to sync data for user ${user.email}: ${response.statusText}`);
+            console.error(`❌ Failed to sync data for user ${redactEmail(user.email)}: ${response.statusText}`);
           }
         } catch (err) {
-          console.error(`❌ Error syncing data for user ${user.email}:`, err.message);
+          console.error(`❌ Error syncing data for user ${redactEmail(user.email)}:`, err.message);
         }
       }
     });

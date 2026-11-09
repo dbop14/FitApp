@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const { google } = require('googleapis');
@@ -104,7 +105,7 @@ router.get('/auth/google/callback', async (req, res) => {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const { data: profile } = await oauth2.userinfo.get();
 
-    console.log(`✅ Got user profile: ${profile.email} (${profile.id})`);
+    console.log(`✅ Got user profile: ${redactEmail(profile.email)} (${profile.id})`);
     console.log(`🔑 Has refresh token: ${!!tokens.refresh_token}`);
 
     // Check if user already exists to preserve custom profile data
@@ -153,7 +154,7 @@ router.get('/auth/google/callback', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`💾 User saved to database: ${user.email}`);
+    console.log(`💾 User saved to database: ${redactEmail(user.email)}`);
 
     // Generate JWT token for frontend
     const jwtToken = jwt.sign(
@@ -314,7 +315,7 @@ router.get('/auth/fitbit/callback', async (req, res) => {
     
     const tokenData = await tokenResponse.json();
     
-    console.log(`✅ Got Fitbit tokens for user ${user.email}`);
+    console.log(`✅ Got Fitbit tokens for user ${redactEmail(user.email)}`);
     console.log(`🔑 Has refresh token: ${!!tokenData.refresh_token}`);
     
     // Get Fitbit user ID from token response or fetch from profile
@@ -348,7 +349,7 @@ router.get('/auth/fitbit/callback', async (req, res) => {
       { new: true }
     );
     
-    console.log(`💾 Fitbit tokens saved for ${user.email}`);
+    console.log(`💾 Fitbit tokens saved for ${redactEmail(user.email)}`);
     
     // Redirect back to data source settings page
     res.redirect(`${frontendUrl}/data-source-settings?success=fitbit_connected`);
@@ -359,4 +360,126 @@ router.get('/auth/fitbit/callback', async (req, res) => {
   }
 });
 
-module.exports = router; 
+
+// ---------------------------------------------------------------------------
+// Google Health API connection (behind GOOGLE_HEALTH_ENABLED)
+// ---------------------------------------------------------------------------
+const authenticateJWT = require('../middleware/auth');
+const { isGoogleHealthEnabled, CONNECT_BACKFILL_DAYS } = require('../config/healthSources');
+const googleHealthAuth = require('../utils/googleHealthAuth');
+
+function frontendBase(req) {
+  const host = req.get('host') || '';
+  if (host.includes('fitappdevbackend.herringm.com') || host.includes('fitappbackenddev.herringm.com')) return 'https://fitappdev.herringm.com';
+  if (host.includes('fitappbackend.herringm.com')) return 'https://fitapp.herringm.com';
+  return process.env.FRONTEND_URL || 'http://localhost:5174';
+}
+
+// Step 1: the signed-in app asks for the consent URL (JWT required), then navigates to it.
+router.get('/auth/google-health/url', authenticateJWT, (req, res) => {
+  if (!isGoogleHealthEnabled()) return res.status(404).json({ error: 'Google Health is not enabled' });
+  if (!req.user.googleId) return res.status(403).json({ error: 'Sign in first' });
+  res.json({ url: googleHealthAuth.buildAuthUrl(req.user.googleId) });
+});
+
+// Step 2: Google redirects back here.
+router.get('/auth/google-health/callback', async (req, res) => {
+  const back = (params) => res.redirect(`${frontendBase(req)}/data-source-settings?${new URLSearchParams(params)}`);
+  if (!isGoogleHealthEnabled()) return back({ googleHealth: 'error', reason: 'disabled' });
+  const { code, state, error } = req.query;
+  if (error) return back({ googleHealth: 'error', reason: String(error) });
+
+  let googleId;
+  try {
+    googleId = googleHealthAuth.verifyState(String(state || ''));
+  } catch {
+    return back({ googleHealth: 'error', reason: 'expired' });
+  }
+
+  try {
+    const user = await User.findOne({ googleId });
+    if (!user) return back({ googleHealth: 'error', reason: 'no_user' });
+
+    const tokens = await googleHealthAuth.exchangeCode(String(code || ''));
+    const missing = require('../config/healthSources').GOOGLE_HEALTH_SCOPES.filter((sc) => !tokens.scope.includes(sc));
+    if (missing.length) return back({ googleHealth: 'error', reason: 'scopes' });
+
+    // Hold the new tokens on the document but do not switch over until a test read works.
+    const previous = {
+      oauthType: user.oauthType,
+      dataSource: user.dataSource,
+      googleHealthAccessToken: user.googleHealthAccessToken,
+      googleHealthRefreshToken: user.googleHealthRefreshToken,
+      googleHealthTokenExpiry: user.googleHealthTokenExpiry,
+    };
+    user.googleHealthAccessToken = tokens.accessToken;
+    user.googleHealthRefreshToken = tokens.refreshToken || user.googleHealthRefreshToken;
+    user.googleHealthTokenExpiry = tokens.expiry;
+
+    const googleHealth = require('../services/health/googleHealth');
+    const { todayYmd } = require('../services/health');
+    try {
+      const today = todayYmd();
+      await googleHealth.getDailySteps(user, today, today);
+    } catch (err) {
+      // e.g. ACCOUNT_NOT_LINKED: a legacy Fitbit login that has not moved to Google.
+      Object.assign(user, previous);
+      await user.save().catch(() => {});
+      console.error(`❌ Google Health test read failed for user ${googleId}: ${err.message}`);
+      return back({ googleHealth: 'error', reason: err.code || `http_${err.status || 'unknown'}` });
+    }
+
+    // Cut over: one active health integration per user.
+    const legacyFitbitToken = user.fitbitAccessToken;
+    user.oauthType = 'google';
+    user.dataSource = 'google-health';
+    user.googleHealthConnectedAt = new Date();
+    user.googleHealthLastError = undefined;
+    user.fitbitAccessToken = undefined;
+    user.fitbitRefreshToken = undefined;
+    user.fitbitTokenExpiry = undefined;
+    await user.save();
+    console.log(`✅ User ${googleId} connected Google Health${legacyFitbitToken ? ' (legacy Fitbit tokens cleared)' : ''}`);
+
+    // Backfill recent history in the background, then recount their v2 challenges.
+    setImmediate(async () => {
+      try {
+        const { syncHealthHistory } = require('../services/health');
+        const result = await syncHealthHistory(user, { days: CONNECT_BACKFILL_DAYS });
+        console.log(`✅ Google Health backfill for ${googleId}: ${result?.rows.length || 0} day(s)`);
+        const ChallengeParticipant = require('../models/ChallengeParticipant');
+        const Challenge = require('../models/Challenge');
+        const { recountV2Challenge } = require('../services/scoring/recountV2');
+        const parts = await ChallengeParticipant.find({ userId: googleId }).select('challengeId').lean();
+        for (const p of parts) {
+          const c = await Challenge.findById(p.challengeId).catch(() => null);
+          if (c && c.scoringMode === 'v2') await recountV2Challenge(c);
+        }
+      } catch (err) {
+        console.error(`❌ Google Health backfill failed for ${googleId}: ${err.message}`);
+      }
+    });
+
+    return back({ googleHealth: 'connected' });
+  } catch (err) {
+    console.error(`❌ Google Health connect failed for user ${googleId}: ${err.message}`);
+    return back({ googleHealth: 'error', reason: err.code || 'exchange' });
+  }
+});
+
+// Disconnect: revoke the Google Health token and go back to Google Fit.
+router.post('/auth/google-health/disconnect', authenticateJWT, async (req, res) => {
+  const user = await User.findOne({ googleId: req.user.googleId });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  await googleHealthAuth.revokeToken(user.googleHealthRefreshToken || user.googleHealthAccessToken);
+  user.googleHealthAccessToken = undefined;
+  user.googleHealthRefreshToken = undefined;
+  user.googleHealthTokenExpiry = undefined;
+  user.googleHealthLastError = undefined;
+  if (user.dataSource === 'google-health') user.dataSource = 'google-fit';
+  user.oauthType = undefined;
+  await user.save();
+  res.json({ dataSource: user.dataSource });
+});
+
+module.exports = router;

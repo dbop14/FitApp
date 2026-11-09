@@ -3,7 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
 import Button from '../components/ui/Button'
-import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth } from '../utils/apiService'
+import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth, startGoogleHealthConnect, disconnectGoogleHealth } from '../utils/apiService'
+
+const GOOGLE_HEALTH_ERRORS = {
+  ACCOUNT_NOT_LINKED: 'Your Fitbit login has not been moved to a Google account yet. Move it in the Fitbit app, then connect again.',
+  scopes: 'Please allow both activity and body measurement access, then try again.',
+  expired: 'The connection took too long. Please try again.',
+  access_denied: 'Google Health access was not granted.',
+  disabled: 'Google Health is not available yet.',
+}
 
 const DataSourceSettings = () => {
   const { user } = useContext(UserContext)
@@ -13,6 +21,8 @@ const DataSourceSettings = () => {
   const [dataSource, setDataSource] = useState('google-fit')
   const [googleFitConnected, setGoogleFitConnected] = useState(false)
   const [fitbitConnected, setFitbitConnected] = useState(false)
+  const [googleHealthEnabled, setGoogleHealthEnabled] = useState(false)
+  const [googleHealthConnected, setGoogleHealthConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
   const [error, setError] = useState('')
@@ -22,8 +32,17 @@ const DataSourceSettings = () => {
   useEffect(() => {
     const successMsg = searchParams.get('success')
     const errorMsg = searchParams.get('error')
-    
-    if (successMsg === 'fitbit_connected') {
+    const googleHealthResult = searchParams.get('googleHealth')
+
+    if (googleHealthResult === 'connected') {
+      setSuccess('Google Health connected. Your last 30 days are being imported.')
+      loadDataSourceStatus()
+      navigate('/data-source-settings', { replace: true })
+    } else if (googleHealthResult === 'error') {
+      const reason = searchParams.get('reason') || ''
+      setError(GOOGLE_HEALTH_ERRORS[reason] || `Could not connect Google Health (${reason || 'unknown error'}).`)
+      navigate('/data-source-settings', { replace: true })
+    } else if (successMsg === 'fitbit_connected') {
       setSuccess('Fitbit connected successfully!')
       // Refresh status
       loadDataSourceStatus()
@@ -54,6 +73,8 @@ const DataSourceSettings = () => {
       setDataSource(status.dataSource || 'google-fit')
       setGoogleFitConnected(status.googleFitConnected || false)
       setFitbitConnected(status.fitbitConnected || false)
+      setGoogleHealthEnabled(status.googleHealthEnabled || false)
+      setGoogleHealthConnected(status.googleHealthConnected || false)
     } catch (err) {
       console.error('Failed to load data source status:', err)
       setError('Failed to load data source status')
@@ -82,7 +103,7 @@ const DataSourceSettings = () => {
       
       await updateDataSource(user.sub, newDataSource)
       setDataSource(newDataSource)
-      setSuccess(`Data source switched to ${newDataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'}`)
+      setSuccess(`Data source switched to ${getDataSourceDisplayName(newDataSource)}`)
       
       // Update user context if available
       if (user) {
@@ -100,6 +121,32 @@ const DataSourceSettings = () => {
     }
   }
 
+  const handleConnectGoogleHealth = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      await startGoogleHealthConnect()
+    } catch (err) {
+      setError(err.message || 'Could not start the Google Health connection')
+      setIsLoading(false)
+    }
+  }
+
+  const handleDisconnectGoogleHealth = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      const result = await disconnectGoogleHealth()
+      setGoogleHealthConnected(false)
+      setDataSource(result.dataSource || 'google-fit')
+      setSuccess('Google Health disconnected')
+    } catch (err) {
+      setError(err.message || 'Could not disconnect Google Health')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleConnectFitbit = () => {
     if (!user?.sub) return
     initiateFitbitOAuth(user.sub)
@@ -110,7 +157,9 @@ const DataSourceSettings = () => {
   }
 
   const getDataSourceDisplayName = (source) => {
-    return source === 'fitbit' ? 'Fitbit' : 'Google Fit'
+    if (source === 'fitbit') return 'Fitbit'
+    if (source === 'google-health') return 'Google Health'
+    return 'Google Fit'
   }
 
   return (
@@ -151,6 +200,69 @@ const DataSourceSettings = () => {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Google Health Option (replaces the Fitbit Web API and, later, Google Fit) */}
+              {googleHealthEnabled && (
+                <div className={`bg-white rounded-2xl shadow-sm border p-6 ${dataSource === 'fitbit' ? 'ring-2 ring-blue-400' : ''}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="text-gray-600">
+                        <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 21s-7.5-4.6-9.6-9.3C1 8.5 3 5 6.4 5c2 0 3.3 1.1 4.1 2.3h3C14.3 6.1 15.6 5 17.6 5 21 5 23 8.5 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#4285F4"/>
+                          <path d="M6 12h3l1.5-3 2 6 1.5-3h4" stroke="#fff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-800">Google Health</h3>
+                        <p className="text-sm text-gray-600">
+                          {googleHealthConnected ? 'Connected' : 'Not connected'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {dataSource === 'google-health' && (
+                        <span className="text-blue-600 font-semibold text-sm">Active</span>
+                      )}
+                      {dataSource !== 'google-health' && googleHealthConnected && (
+                        <button
+                          onClick={() => handleDataSourceChange('google-health')}
+                          disabled={isLoading}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
+                        >
+                          Switch
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    {!googleHealthConnected ? (
+                      <>
+                        <Button onClick={handleConnectGoogleHealth} disabled={isLoading} variant="primary" size="md" className="w-full">
+                          Connect Google Health
+                        </Button>
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                          Syncs steps, workouts and weight from Fitbit devices and the Google Health app. Fitbit users: use this to reconnect.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-500">
+                          {dataSource === 'google-health'
+                            ? 'Your steps, workouts and weight sync from Google Health'
+                            : 'Connected but not in use'}
+                        </p>
+                        <button
+                          onClick={handleDisconnectGoogleHealth}
+                          disabled={isLoading}
+                          className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Google Fit Option */}
               <div className="bg-white rounded-2xl shadow-sm border p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -225,7 +337,15 @@ const DataSourceSettings = () => {
                     )}
                   </div>
                 </div>
-                {!fitbitConnected && (
+                {dataSource === 'fitbit' && (
+                  <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-xs text-amber-800">
+                      Fitbit shut down its old connection on October 30, 2026, so Fitbit data is no longer syncing.
+                      {googleHealthEnabled ? ' Connect Google Health above to start syncing again.' : ' A replacement is coming soon.'}
+                    </p>
+                  </div>
+                )}
+                {!fitbitConnected && !googleHealthEnabled && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <Button
                       onClick={handleConnectFitbit}

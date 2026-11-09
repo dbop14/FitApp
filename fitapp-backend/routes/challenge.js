@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const Challenge = require('../models/Challenge');
@@ -146,7 +147,7 @@ router.post('/', async (req, res) => {
           lastSync: new Date()
         });
         await user.save();
-        console.log(`✅ Created user record for challenge creator: ${creatorEmail} with name: ${user.name}`);
+        console.log(`✅ Created user record for challenge creator: ${redactEmail(creatorEmail)} with name: ${user.name}`);
       } else {
         // Update existing user record with latest info
         user.name = userName || user.name; // Update name if provided
@@ -155,7 +156,7 @@ router.post('/', async (req, res) => {
           user.picture = picture; // Update picture if provided
         }
         await user.save();
-        console.log(`✅ Updated existing user record for challenge creator: ${creatorEmail} with name: ${user.name}`);
+        console.log(`✅ Updated existing user record for challenge creator: ${redactEmail(creatorEmail)} with name: ${user.name}`);
       }
       
       // Check if participant already exists to prevent duplicates
@@ -197,9 +198,9 @@ router.post('/', async (req, res) => {
           lastStepCount: 0
         });
         await participant.save();
-        console.log(`✅ Created participant record for challenge creator: ${creatorEmail}${isFutureChallenge ? ' (future challenge, starting weight will be set on first weigh-in day)' : ''}`);
+        console.log(`✅ Created participant record for challenge creator: ${redactEmail(creatorEmail)}${isFutureChallenge ? ' (future challenge, starting weight will be set on first weigh-in day)' : ''}`);
       } else {
-        console.log(`⚠️ Participant record already exists for: ${creatorEmail}`);
+        console.log(`⚠️ Participant record already exists for: ${redactEmail(creatorEmail)}`);
       }
     } catch (participantError) {
       console.error('Error creating participant record:', participantError);

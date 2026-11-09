@@ -77,3 +77,16 @@ export const initiateFitbitOAuth = (googleId) => {
   // Redirect to backend Fitbit OAuth endpoint
   window.location.href = `${apiUrl}/api/auth/fitbit?googleId=${googleId}`;
 };
+
+// Start the Google Health connection: ask the backend (signed in) for Google's
+// consent URL, then go there. Google sends the user back to Data Source Settings.
+export const startGoogleHealthConnect = async () => {
+  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/google-health/url`);
+  const { url } = await response.json();
+  window.location.href = url;
+};
+
+export const disconnectGoogleHealth = async () => {
+  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/google-health/disconnect`, { method: 'POST' });
+  return response.json();
+};
