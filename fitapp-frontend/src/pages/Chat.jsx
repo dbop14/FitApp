@@ -23,7 +23,7 @@ const MessageAvatar = ({ isBot, src, name }) =>
   );
 
 const DayHeader = ({ label }) => (
-  <div className="my-5 flex items-center justify-center">
+  <div className="my-8 flex items-center justify-center">
     <span className="chip chip-neutral px-3 py-1 text-xs">{label}</span>
   </div>
 );
@@ -808,7 +808,7 @@ const Chat = () => {
           className="flex-1 overflow-y-auto"
           style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
         >
-          <div className="mx-auto w-full max-w-4xl px-3 py-3 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
             {challengeEnded && (
               <div className="callout callout-info mb-4">
                 <Icon name="archive" className="mt-0.5 h-5 w-5 shrink-0" />
@@ -934,7 +934,7 @@ const Chat = () => {
                     <Tag
                       type={onClick ? 'button' : undefined}
                       onClick={onClick}
-                      className={`flex w-full max-w-sm items-center gap-3 rounded-2xl bg-gradient-to-br ${style.bg} p-3.5 text-left text-white shadow-brand ${
+                      className={`flex w-full max-w-sm items-center gap-3 rounded-2xl bg-gradient-to-br ${style.bg} p-3.5 text-left text-white ${
                         onClick ? 'transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300' : ''
                       }`}
                     >
@@ -967,15 +967,16 @@ const Chat = () => {
                 return (
                   <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
                     {showDayHeader && <DayHeader label={formatDayHeader(msg.timestamp)} />}
-                    <div className="mb-2 flex justify-center">{renderCard()}</div>
-                    {/* Text under the card, shown as an incoming message */}
-                    <div className="mb-4 flex items-end justify-start gap-2">
-                      <MessageAvatar isBot={isBotMessage} src={messageAvatar} name={msg.sender} />
-                      <div className="max-w-[80%] rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-2 text-ink shadow-card sm:max-w-md">
-                        <div className="mb-0.5 text-xs font-semibold text-ink-muted">{msg.sender ? msg.sender.split(' ')[0] : 'Bot'}</div>
-                        <div className="whitespace-pre-wrap break-words text-sm">{parseMessageLinks(msg.message)}</div>
-                        {formatTime(msg.timestamp) && <div className="mt-1 text-[11px] text-ink-subtle">{formatTime(msg.timestamp)}</div>}
-                      </div>
+                    <div className="my-7 flex flex-col items-center gap-2">
+                      {renderCard()}
+                      {(msg.message || formatTime(msg.timestamp)) && (
+                        <p className="max-w-sm px-2 text-center text-xs leading-relaxed text-ink-muted">
+                          {msg.message && <span className="whitespace-pre-wrap break-words">{parseMessageLinks(msg.message)}</span>}
+                          {formatTime(msg.timestamp) && (
+                            <span className="text-ink-subtle">{msg.message ? ' · ' : ''}{formatTime(msg.timestamp)}</span>
+                          )}
+                        </p>
+                      )}
                     </div>
                   </Fragment>
                 );
@@ -984,23 +985,23 @@ const Chat = () => {
               return (
                 <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
                   {showDayHeader && <DayHeader label={formatDayHeader(msg.timestamp)} />}
-                  <div className={`mb-3 flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`mb-5 flex items-end gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                     {!isOwnMessage && <MessageAvatar isBot={isBotMessage} src={messageAvatar} name={msg.sender} />}
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3.5 py-2 sm:max-w-md ${
+                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 sm:max-w-md ${
                         isOwnMessage
                           ? 'rounded-br-md bg-blue-600 text-white'
                           : 'rounded-bl-md border border-line bg-surface text-ink shadow-card'
                       }`}
                     >
                       {!isOwnMessage && (
-                        <div className={`mb-0.5 text-xs font-semibold ${isBotMessage ? 'text-brand-ink' : 'text-ink-muted'}`}>
+                        <div className={`mb-1 text-xs font-semibold ${isBotMessage ? 'text-brand-ink' : 'text-ink-muted'}`}>
                           {msg.sender ? msg.sender.split(' ')[0] : 'Unknown'}
                         </div>
                       )}
-                      <div className="whitespace-pre-wrap break-words text-sm">{parseMessageLinks(msg.message)}</div>
+                      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parseMessageLinks(msg.message)}</div>
                       {formatTime(msg.timestamp) && (
-                        <div className={`mt-1 text-[11px] ${isOwnMessage ? 'text-blue-100' : 'text-ink-subtle'}`}>{formatTime(msg.timestamp)}</div>
+                        <div className={`mt-1.5 text-[11px] ${isOwnMessage ? 'text-blue-100' : 'text-ink-subtle'}`}>{formatTime(msg.timestamp)}</div>
                       )}
                     </div>
                   </div>
