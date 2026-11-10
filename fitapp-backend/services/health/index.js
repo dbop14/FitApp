@@ -4,9 +4,10 @@
 // existing code for Classic challenges; this module routes the new ones.
 
 const FitnessHistory = require('../../models/FitnessHistory');
-const { isGoogleHealthEnabled, SYNC_DAYS } = require('../../config/healthSources');
+const { isGoogleHealthEnabled, isWhoopEnabled, SYNC_DAYS } = require('../../config/healthSources');
 const { dayNumber, fromDayNumber } = require('../scoring/scoreChallengeV2');
 const googleHealth = require('./googleHealth');
+const whoop = require('./whoop');
 
 const APP_TIMEZONE = () => process.env.APP_TIMEZONE || 'America/New_York';
 
@@ -45,6 +46,7 @@ function getHealthSourceName(user) {
 function getHealthSource(user) {
   const name = getHealthSourceName(user);
   if (name === 'google-health') return isGoogleHealthEnabled() ? googleHealth : null;
+  if (name === 'whoop') return isWhoopEnabled() && (user.whoopRefreshToken || user.whoopAccessToken) ? whoop : null;
   return null;
 }
 
@@ -57,6 +59,7 @@ function needsReconnect(user) {
   const name = getHealthSourceName(user);
   if (name === 'fitbit') return true;
   if (name === 'google-health' && user.googleHealthLastError === 'invalid_grant') return true;
+  if (name === 'whoop' && user.whoopLastError === 'invalid_grant') return true;
   return false;
 }
 

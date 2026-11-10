@@ -91,6 +91,17 @@ export const disconnectGoogleHealth = async () => {
   return response.json();
 };
 
+export const startWhoopConnect = async () => {
+  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/whoop/url`);
+  const { url } = await response.json();
+  window.location.href = url;
+};
+
+export const disconnectWhoop = async () => {
+  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/whoop/disconnect`, { method: 'POST' });
+  return response.json();
+};
+
 // Max heart rate for Effort Points when a workout has no zone breakdown. null resets to the default.
 export const updateMaxHeartRate = async (maxHeartRate) => {
   const response = await fetch(`${getApiUrl()}/api/user/max-heart-rate`, {

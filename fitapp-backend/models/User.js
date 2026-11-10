@@ -26,7 +26,16 @@ const UserSchema = new mongoose.Schema({
   googleHealthTokenExpiry: Number,
   googleHealthConnectedAt: Date,
   googleHealthLastError: String, // e.g. 'invalid_grant' when the user must reconnect
-  maxHeartRate: Number // Effort Points fallback; unset means config DEFAULT_MAX_HR
+  maxHeartRate: Number, // Effort Points fallback; unset means config DEFAULT_MAX_HR
+  // WHOOP (dataSource 'whoop'). Refresh tokens rotate on every refresh.
+  whoopAccessToken: String,
+  whoopRefreshToken: String,
+  whoopTokenExpiry: Number,
+  whoopUserId: String,
+  whoopConnectedAt: Date,
+  whoopLastError: String, // e.g. 'invalid_grant' when the user must reconnect
+  whoopOAuthState: String, // 8-character nonce for the connect redirect
+  whoopOAuthStateExpiry: Date
 });
 
 module.exports = mongoose.model('User', UserSchema); 

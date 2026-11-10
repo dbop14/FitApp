@@ -24,8 +24,8 @@ router.post('/userdata', async (req, res) => {
   // Server-synced sources are the authority for steps; ignore browser-pushed Google Fit data.
   if (steps !== undefined) {
     const owner = await User.findOne({ googleId }).select('dataSource oauthType').lean();
-    if (owner && owner.dataSource === 'google-health') {
-      return res.status(409).json({ error: 'Steps for this user come from Google Health', ignored: true });
+    if (owner && ['google-health', 'whoop'].includes(owner.dataSource)) {
+      return res.status(409).json({ error: `Steps for this user come from ${owner.dataSource}`, ignored: true });
     }
   }
   
@@ -963,8 +963,8 @@ router.put('/datasource', async (req, res) => {
     return res.status(400).json({ error: 'Missing googleId' });
   }
   
-  if (!dataSource || !['google-fit', 'fitbit', 'google-health'].includes(dataSource)) {
-    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit", "fitbit" or "google-health"' });
+  if (!dataSource || !['google-fit', 'fitbit', 'google-health', 'whoop'].includes(dataSource)) {
+    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit", "fitbit", "google-health" or "whoop"' });
   }
   
   try {
@@ -982,6 +982,13 @@ router.put('/datasource', async (req, res) => {
       });
     }
     
+    if (dataSource === 'whoop' && !user.whoopRefreshToken) {
+      return res.status(400).json({
+        error: 'WHOOP not connected. Connect it first.',
+        requiresAuth: true
+      });
+    }
+
     if (dataSource === 'google-health' && !user.googleHealthRefreshToken) {
       return res.status(400).json({
         error: 'Google Health not connected. Connect it first.',
@@ -1044,7 +1051,7 @@ router.get('/datasource', async (req, res) => {
     }
     
     const health = require('../services/health');
-    const { isGoogleHealthEnabled } = require('../config/healthSources');
+    const { isGoogleHealthEnabled, isWhoopEnabled } = require('../config/healthSources');
     res.json({
       dataSource: user.dataSource || 'google-fit',
       googleFitConnected: !!user.accessToken,
@@ -1052,6 +1059,9 @@ router.get('/datasource', async (req, res) => {
       googleHealthEnabled: isGoogleHealthEnabled(),
       googleHealthConnected: !!user.googleHealthRefreshToken,
       googleHealthConnectedAt: user.googleHealthConnectedAt || null,
+      whoopEnabled: isWhoopEnabled(),
+      whoopConnected: !!user.whoopRefreshToken,
+      whoopConnectedAt: user.whoopConnectedAt || null,
       oauthType: user.oauthType || null,
       needsReconnect: health.needsReconnect(user),
       maxHeartRate: user.maxHeartRate || null,

@@ -375,6 +375,29 @@ function frontendBase(req) {
   return process.env.FRONTEND_URL || 'http://localhost:5174';
 }
 
+// After connecting a new source: pull recent history in the background, then
+// recount the user's v2 challenges.
+function backfillAfterConnect(user, label) {
+  const { googleId } = user;
+  setImmediate(async () => {
+    try {
+      const { syncHealthHistory } = require('../services/health');
+      const result = await syncHealthHistory(user, { days: CONNECT_BACKFILL_DAYS });
+      console.log(`✅ ${label} backfill for ${googleId}: ${result?.rows.length || 0} day(s)`);
+      const ChallengeParticipant = require('../models/ChallengeParticipant');
+      const Challenge = require('../models/Challenge');
+      const { recountV2Challenge } = require('../services/scoring/recountV2');
+      const parts = await ChallengeParticipant.find({ userId: googleId }).select('challengeId').lean();
+      for (const p of parts) {
+        const c = await Challenge.findById(p.challengeId).catch(() => null);
+        if (c && c.scoringMode === 'v2') await recountV2Challenge(c);
+      }
+    } catch (err) {
+      console.error(`❌ ${label} backfill failed for ${googleId}: ${err.message}`);
+    }
+  });
+}
+
 // Step 1: the signed-in app asks for the consent URL (JWT required), then navigates to it.
 router.get('/auth/google-health/url', authenticateJWT, (req, res) => {
   if (!isGoogleHealthEnabled()) return res.status(404).json({ error: 'Google Health is not enabled' });
@@ -441,24 +464,7 @@ router.get('/auth/google-health/callback', async (req, res) => {
     await user.save();
     console.log(`✅ User ${googleId} connected Google Health${legacyFitbitToken ? ' (legacy Fitbit tokens cleared)' : ''}`);
 
-    // Backfill recent history in the background, then recount their v2 challenges.
-    setImmediate(async () => {
-      try {
-        const { syncHealthHistory } = require('../services/health');
-        const result = await syncHealthHistory(user, { days: CONNECT_BACKFILL_DAYS });
-        console.log(`✅ Google Health backfill for ${googleId}: ${result?.rows.length || 0} day(s)`);
-        const ChallengeParticipant = require('../models/ChallengeParticipant');
-        const Challenge = require('../models/Challenge');
-        const { recountV2Challenge } = require('../services/scoring/recountV2');
-        const parts = await ChallengeParticipant.find({ userId: googleId }).select('challengeId').lean();
-        for (const p of parts) {
-          const c = await Challenge.findById(p.challengeId).catch(() => null);
-          if (c && c.scoringMode === 'v2') await recountV2Challenge(c);
-        }
-      } catch (err) {
-        console.error(`❌ Google Health backfill failed for ${googleId}: ${err.message}`);
-      }
-    });
+    backfillAfterConnect(user, 'Google Health');
 
     return back({ googleHealth: 'connected' });
   } catch (err) {
@@ -478,6 +484,95 @@ router.post('/auth/google-health/disconnect', authenticateJWT, async (req, res) 
   user.googleHealthLastError = undefined;
   if (user.dataSource === 'google-health') user.dataSource = 'google-fit';
   user.oauthType = undefined;
+  await user.save();
+  res.json({ dataSource: user.dataSource });
+});
+
+// ---------------------------------------------------------------------------
+// WHOOP connection (behind WHOOP_ENABLED)
+// ---------------------------------------------------------------------------
+const { isWhoopEnabled, WHOOP_DATA_SCOPES } = require('../config/healthSources');
+const whoopAuth = require('../utils/whoopAuth');
+
+router.get('/auth/whoop/url', authenticateJWT, async (req, res) => {
+  if (!isWhoopEnabled()) return res.status(404).json({ error: 'WHOOP is not enabled' });
+  const user = await User.findOne({ googleId: req.user.googleId });
+  if (!user) return res.status(403).json({ error: 'Sign in first' });
+  res.json({ url: await whoopAuth.buildAuthUrl(user) });
+});
+
+router.get('/auth/whoop/callback', async (req, res) => {
+  const back = (params) => res.redirect(`${frontendBase(req)}/data-source-settings?${new URLSearchParams(params)}`);
+  if (!isWhoopEnabled()) return back({ whoop: 'error', reason: 'disabled' });
+  const { code, state, error } = req.query;
+  // Clear the state even when the user declined.
+  const user = await whoopAuth.consumeState(String(state || '')).catch(() => null);
+  if (!user) return back({ whoop: 'error', reason: 'expired' });
+  if (error) {
+    await user.save().catch(() => {});
+    return back({ whoop: 'error', reason: String(error) });
+  }
+  const googleId = user.googleId;
+  try {
+    const tokens = await whoopAuth.exchangeCode(String(code || ''));
+    const granted = tokens.scope.split(/\s+/);
+    if (WHOOP_DATA_SCOPES.some((sc) => !granted.includes(sc)) || !tokens.refreshToken) {
+      await user.save().catch(() => {});
+      return back({ whoop: 'error', reason: 'scopes' });
+    }
+
+    const previous = {
+      whoopAccessToken: user.whoopAccessToken,
+      whoopRefreshToken: user.whoopRefreshToken,
+      whoopTokenExpiry: user.whoopTokenExpiry,
+    };
+    user.whoopAccessToken = tokens.accessToken;
+    user.whoopRefreshToken = tokens.refreshToken;
+    user.whoopTokenExpiry = tokens.expiry;
+
+    const whoop = require('../services/health/whoop');
+    let profile;
+    try {
+      profile = await whoop.getProfile(user);
+    } catch (err) {
+      Object.assign(user, previous);
+      await user.save().catch(() => {});
+      console.error(`❌ WHOOP test read failed for user ${googleId}: ${err.message}`);
+      return back({ whoop: 'error', reason: err.code || `http_${err.status || 'unknown'}` });
+    }
+
+    // Cut over: WHOOP becomes the active source. Other connections stay stored
+    // so the user can switch back; dead Fitbit tokens are cleared.
+    user.dataSource = 'whoop';
+    user.whoopUserId = profile.userId || undefined;
+    user.whoopConnectedAt = new Date();
+    user.whoopLastError = undefined;
+    user.fitbitAccessToken = undefined;
+    user.fitbitRefreshToken = undefined;
+    user.fitbitTokenExpiry = undefined;
+    await user.save();
+    console.log(`✅ User ${googleId} connected WHOOP`);
+    backfillAfterConnect(user, 'WHOOP');
+    return back({ whoop: 'connected' });
+  } catch (err) {
+    await user.save().catch(() => {});
+    console.error(`❌ WHOOP connect failed for user ${googleId}: ${err.message}`);
+    return back({ whoop: 'error', reason: err.code || 'exchange' });
+  }
+});
+
+router.post('/auth/whoop/disconnect', authenticateJWT, async (req, res) => {
+  const user = await User.findOne({ googleId: req.user.googleId });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  await whoopAuth.revokeAccess(user);
+  user.whoopAccessToken = undefined;
+  user.whoopRefreshToken = undefined;
+  user.whoopTokenExpiry = undefined;
+  user.whoopLastError = undefined;
+  user.whoopUserId = undefined;
+  if (user.dataSource === 'whoop') {
+    user.dataSource = user.googleHealthRefreshToken ? 'google-health' : 'google-fit';
+  }
   await user.save();
   res.json({ dataSource: user.dataSource });
 });

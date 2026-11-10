@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
 import Button from '../components/ui/Button'
-import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth, startGoogleHealthConnect, disconnectGoogleHealth, updateMaxHeartRate } from '../utils/apiService'
+import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth, startGoogleHealthConnect, disconnectGoogleHealth, updateMaxHeartRate, startWhoopConnect, disconnectWhoop } from '../utils/apiService'
 
 const GOOGLE_HEALTH_ERRORS = {
   ACCOUNT_NOT_LINKED: 'Your Fitbit login has not been moved to a Google account yet. Move it in the Fitbit app, then connect again.',
@@ -11,6 +11,13 @@ const GOOGLE_HEALTH_ERRORS = {
   expired: 'The connection took too long. Please try again.',
   access_denied: 'Google Health access was not granted.',
   disabled: 'Google Health is not available yet.',
+}
+
+const WHOOP_ERRORS = {
+  scopes: 'Please allow access to cycles, workouts, body measurements and profile, then try again.',
+  expired: 'The connection took too long. Please try again.',
+  access_denied: 'WHOOP access was not granted.',
+  disabled: 'WHOOP is not available yet.',
 }
 
 const DataSourceSettings = () => {
@@ -23,6 +30,8 @@ const DataSourceSettings = () => {
   const [fitbitConnected, setFitbitConnected] = useState(false)
   const [googleHealthEnabled, setGoogleHealthEnabled] = useState(false)
   const [googleHealthConnected, setGoogleHealthConnected] = useState(false)
+  const [whoopEnabled, setWhoopEnabled] = useState(false)
+  const [whoopConnected, setWhoopConnected] = useState(false)
   const [maxHeartRate, setMaxHeartRate] = useState('')
   const [defaultMaxHeartRate, setDefaultMaxHeartRate] = useState(185)
   const [isLoading, setIsLoading] = useState(false)
@@ -35,6 +44,7 @@ const DataSourceSettings = () => {
     const successMsg = searchParams.get('success')
     const errorMsg = searchParams.get('error')
     const googleHealthResult = searchParams.get('googleHealth')
+    const whoopResult = searchParams.get('whoop')
 
     if (googleHealthResult === 'connected') {
       setSuccess('Google Health connected. Your last 30 days are being imported.')
@@ -43,6 +53,14 @@ const DataSourceSettings = () => {
     } else if (googleHealthResult === 'error') {
       const reason = searchParams.get('reason') || ''
       setError(GOOGLE_HEALTH_ERRORS[reason] || `Could not connect Google Health (${reason || 'unknown error'}).`)
+      navigate('/data-source-settings', { replace: true })
+    } else if (whoopResult === 'connected') {
+      setSuccess('WHOOP connected. Your last 30 days are being imported.')
+      loadDataSourceStatus()
+      navigate('/data-source-settings', { replace: true })
+    } else if (whoopResult === 'error') {
+      const reason = searchParams.get('reason') || ''
+      setError(WHOOP_ERRORS[reason] || `Could not connect WHOOP (${reason || 'unknown error'}).`)
       navigate('/data-source-settings', { replace: true })
     } else if (successMsg === 'fitbit_connected') {
       setSuccess('Fitbit connected successfully!')
@@ -77,6 +95,8 @@ const DataSourceSettings = () => {
       setFitbitConnected(status.fitbitConnected || false)
       setGoogleHealthEnabled(status.googleHealthEnabled || false)
       setGoogleHealthConnected(status.googleHealthConnected || false)
+      setWhoopEnabled(status.whoopEnabled || false)
+      setWhoopConnected(status.whoopConnected || false)
       setMaxHeartRate(status.maxHeartRate ? String(status.maxHeartRate) : '')
       if (status.defaultMaxHeartRate) setDefaultMaxHeartRate(status.defaultMaxHeartRate)
     } catch (err) {
@@ -151,6 +171,32 @@ const DataSourceSettings = () => {
     }
   }
 
+  const handleConnectWhoop = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      await startWhoopConnect()
+    } catch (err) {
+      setError(err.message || 'Could not start the WHOOP connection')
+      setIsLoading(false)
+    }
+  }
+
+  const handleDisconnectWhoop = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      const result = await disconnectWhoop()
+      setWhoopConnected(false)
+      setDataSource(result.dataSource || 'google-fit')
+      setSuccess('WHOOP disconnected')
+    } catch (err) {
+      setError(err.message || 'Could not disconnect WHOOP')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSaveMaxHeartRate = async () => {
     setIsLoading(true)
     setError('')
@@ -178,6 +224,7 @@ const DataSourceSettings = () => {
   const getDataSourceDisplayName = (source) => {
     if (source === 'fitbit') return 'Fitbit'
     if (source === 'google-health') return 'Google Health'
+    if (source === 'whoop') return 'WHOOP'
     return 'Google Fit'
   }
 
@@ -219,6 +266,58 @@ const DataSourceSettings = () => {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* WHOOP Option */}
+              {whoopEnabled && (
+                <div className="bg-white rounded-2xl shadow-sm border p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold" aria-hidden="true">W</div>
+                      <div>
+                        <h3 className="font-semibold text-gray-800">WHOOP</h3>
+                        <p className="text-sm text-gray-600">{whoopConnected ? 'Connected' : 'Not connected'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {dataSource === 'whoop' && <span className="text-blue-600 font-semibold text-sm">Active</span>}
+                      {dataSource !== 'whoop' && whoopConnected && (
+                        <button
+                          onClick={() => handleDataSourceChange('whoop')}
+                          disabled={isLoading}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
+                        >
+                          Switch
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    {!whoopConnected ? (
+                      <>
+                        <Button onClick={handleConnectWhoop} disabled={isLoading} variant="primary" size="md" className="w-full">
+                          Connect WHOOP
+                        </Button>
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                          Syncs steps and workouts (with heart-rate zones) from WHOOP. Log weigh-ins in FitApp. Sleep and recovery are not read.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-500">
+                          {dataSource === 'whoop' ? 'Your steps and workouts sync from WHOOP' : 'Connected but not in use'}
+                        </p>
+                        <button
+                          onClick={handleDisconnectWhoop}
+                          disabled={isLoading}
+                          className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Google Health Option (replaces the Fitbit Web API and, later, Google Fit) */}
               {googleHealthEnabled && (
                 <div className={`bg-white rounded-2xl shadow-sm border p-6 ${dataSource === 'fitbit' ? 'ring-2 ring-blue-400' : ''}`}>
