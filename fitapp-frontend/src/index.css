@@ -598,6 +598,16 @@ html.chat-input-focused .bottom-navigation {
   }
 }
 
+/* iOS Home Screen app: keep header text clear of the system scrim that
+   iOS 26.1+ draws below the status bar (the gradient fills that band). */
+.ios-standalone .safe-area-header {
+  padding-top: calc(var(--safe-area-top) + 3.5rem);
+}
+
+.ios-standalone .safe-area-header.safe-area-header--compact {
+  padding-top: calc(var(--safe-area-top) + 3rem);
+}
+
 /* ---------- Avatars ---------- */
 .user-avatar,
 .leaderboard-avatar,

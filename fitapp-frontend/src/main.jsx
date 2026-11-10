@@ -41,6 +41,12 @@ if (typeof navigator !== 'undefined') {
   }
 }
 
+// iOS Home Screen app: iOS 26.1+ paints a blurred scrim over the top of
+// black-translucent web apps. index.css pushes header text below it.
+if (typeof navigator !== 'undefined' && navigator.standalone === true) {
+  document.documentElement.classList.add('ios-standalone')
+}
+
 // Add global error handler to catch unhandled errors
 window.addEventListener('error', (event) => {
   console.error('❌ Global error:', event.error, event.message, event.filename, event.lineno)
