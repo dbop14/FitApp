@@ -57,8 +57,8 @@ const ProtectedRoute = ({ children }) => {
   if (isInitializing) {
     console.log('🔒 ProtectedRoute: Context still initializing, showing loading')
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <span className="spinner" role="status" aria-label="Loading" />
       </div>
     )
   }
@@ -72,8 +72,8 @@ const ProtectedRoute = ({ children }) => {
   } else {
     console.log('🔒 ProtectedRoute: Waiting for initial check to complete')
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <span className="spinner" role="status" aria-label="Loading" />
       </div>
     )
   }

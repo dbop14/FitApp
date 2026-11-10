@@ -2,6 +2,8 @@ import { useState, useEffect, useContext } from 'react'
 import { UserContext } from '../context/UserContext'
 import { API_BASE_URL } from '../utils/constants'
 import { compressImage } from '../utils/imageCompression'
+import Modal from './ui/Modal'
+import Icon from './ui/Icon'
 
 const ChallengeForm = ({ onCreate, onClose }) => {
   const [name, setName] = useState('')
@@ -11,9 +13,11 @@ const ChallengeForm = ({ onCreate, onClose }) => {
   const [endTime, setEndTime] = useState('20:00')
   const [stepGoal, setStepGoal] = useState(8000)
   const [botName, setBotName] = useState('FitBot')
-  const [botAvatar, setBotAvatar] = useState('🤖')
+  // Bot avatar is no longer chosen in the UI (the app shows a bot icon); the backend keeps its default.
+  const botAvatar = undefined
   const [challengeCode, setChallengeCode] = useState('')
   const [weighInDay, setWeighInDay] = useState('monday')
+  const [scoringMode, setScoringMode] = useState('classic')
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
   
@@ -102,7 +106,8 @@ const ChallengeForm = ({ onCreate, onClose }) => {
       picture: user?.picture, // Add creator's profile picture
       userName: user?.name, // Add creator's actual name
       startingWeight: null, // Starting weight will be set on first weigh-in day
-      weighInDay
+      weighInDay,
+      scoringMode
     }
 
     console.log('🌐 Sending to:', API_BASE_URL)
@@ -157,7 +162,7 @@ const ChallengeForm = ({ onCreate, onClose }) => {
       
       onCreate(updatedChallenge)
       // Close the modal after successful creation
-      onClose()
+      onClose?.()
       
     } catch (err) {
       console.error('❌ Backend error details:', err)
@@ -204,196 +209,143 @@ const ChallengeForm = ({ onCreate, onClose }) => {
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center z-[60] p-4" 
-      style={{ alignItems: 'center' }}
-      onClick={onClose}
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Create a challenge"
+      icon="trophy"
+      footer={
+        <>
+          {onClose && (
+            <button type="button" onClick={onClose} className="btn btn-secondary">
+              Cancel
+            </button>
+          )}
+          <button type="submit" form="challenge-form" className="btn btn-primary">
+            <Icon name="flag" className="h-4 w-4" />
+            Start challenge
+          </button>
+        </>
+      }
     >
-      <div 
-        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-y-auto relative scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 focus:outline-none scroll-smooth"
-        style={{ maxHeight: 'calc(75vh - 6rem)', minHeight: '400px' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4 sm:p-6 flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Create a New Challenge</h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              aria-label="Close modal"
-            >
-              <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Challenge Photo Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Photo</label>
-              <div className="space-y-3">
-                {/* File Input */}
-                <input
-                  id="challenge-photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-                
-                {/* Photo Preview */}
-                {photoPreview && (
-                  <div className="relative">
-                    <img
-                      src={photoPreview}
-                      alt="Challenge photo preview"
-                      className="w-full h-32 object-cover rounded-md border border-gray-200"
-                    />
-                    <button
-                      type="button"
-                      onClick={removePhoto}
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
-                      aria-label="Remove photo"
-                    >
-                      <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                
-                <p className="text-xs text-gray-500">
-                  Upload a photo to represent your challenge. Images will be compressed automatically. Max size: 5MB. Supported formats: JPG, PNG, GIF.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Time when challenge starts</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Time when challenge ends</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Daily Step Goal</label>
-              <input
-                type="number"
-                value={stepGoal}
-                onChange={(e) => setStepGoal(parseInt(e.target.value))}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bot Name</label>
-              <input
-                type="text"
-                value={botName}
-                onChange={(e) => setBotName(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bot Avatar (Emoji or URL)</label>
-              <input
-                type="text"
-                value={botAvatar}
-                onChange={(e) => setBotAvatar(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Weigh-in Day</label>
-              <select
-                value={weighInDay}
-                onChange={(e) => setWeighInDay(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="monday">Monday</option>
-                <option value="tuesday">Tuesday</option>
-                <option value="wednesday">Wednesday</option>
-                <option value="thursday">Thursday</option>
-                <option value="friday">Friday</option>
-                <option value="saturday">Saturday</option>
-                <option value="sunday">Sunday</option>
-              </select>
-              <p className="text-sm text-gray-600 mt-1">
-                The bot will remind everyone to weigh in on this day
-              </p>
-            </div>
-
-
-            <div className="bg-gray-100 p-2 text-center rounded text-sm text-gray-600">
-              Challenge Code: <span className="font-mono">{challengeCode}</span>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold shadow"
-            >
-              Start Challenge
-            </button>
-          </form>
+      <form id="challenge-form" onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label className="label" htmlFor="cf-name">Challenge name</label>
+          <input id="cf-name" type="text" value={name} onChange={(e) => setName(e.target.value)} required className="input" />
         </div>
-      </div>
-    </div>
+
+        <div>
+          <label className="label" htmlFor="challenge-photo">Challenge photo</label>
+          <div className="space-y-3">
+            {photoPreview && (
+              <div className="relative">
+                <img src={photoPreview} alt="Challenge photo preview" className="h-32 w-full rounded-xl border border-line object-cover" />
+                <button
+                  type="button"
+                  onClick={removePhoto}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                  aria-label="Remove photo"
+                >
+                  <Icon name="x" className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            <input
+              id="challenge-photo"
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="input file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-ink"
+            />
+            <p className="text-xs text-ink-muted">Optional. Compressed automatically. Max 5MB. JPG, PNG or GIF.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label" htmlFor="cf-start">Start date</label>
+            <input id="cf-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="input" />
+          </div>
+          <div>
+            <label className="label" htmlFor="cf-end">End date</label>
+            <input id="cf-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="input" />
+          </div>
+          <div>
+            <label className="label" htmlFor="cf-start-time">Start time</label>
+            <input id="cf-start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="label" htmlFor="cf-end-time">End time</label>
+            <input id="cf-end-time" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="input" />
+          </div>
+        </div>
+
+        <fieldset>
+          <legend className="label">Scoring</legend>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { value: 'classic', title: 'Classic', icon: 'target', text: 'Points for each day you reach the step goal, plus weight-loss points at the end.' },
+              { value: 'v2', title: 'Points v2', icon: 'sparkles', text: 'Points for steps, a daily goal bonus, workouts (Effort Points), strength sessions, a weekly consistency bonus and weight loss. Each member\'s data source is locked when they join.' },
+            ].map((opt) => {
+              const selected = scoringMode === opt.value
+              return (
+                <label
+                  key={opt.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+                    selected ? 'border-blue-500 bg-brand-soft' : 'border-line hover:bg-surface-2'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="scoringMode"
+                    value={opt.value}
+                    checked={selected}
+                    onChange={() => setScoringMode(opt.value)}
+                    className="sr-only"
+                  />
+                  <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-blue-600 text-white' : 'bg-surface-2 text-ink-muted'}`}>
+                    <Icon name={opt.icon} className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink">{opt.title}</span>
+                    <span className="block text-xs text-ink-muted">{opt.text}</span>
+                  </span>
+                  <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-line-strong'}`}>
+                    {selected && <Icon name="check" className="h-3 w-3" strokeWidth={3} />}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </fieldset>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="cf-goal">Daily step goal</label>
+            <input id="cf-goal" type="number" inputMode="numeric" value={stepGoal} onChange={(e) => setStepGoal(parseInt(e.target.value))} required className="input" />
+          </div>
+          <div>
+            <label className="label" htmlFor="cf-bot">Bot name</label>
+            <input id="cf-bot" type="text" value={botName} onChange={(e) => setBotName(e.target.value)} required className="input" />
+          </div>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="cf-weighin">Weekly weigh-in day</label>
+          <select id="cf-weighin" value={weighInDay} onChange={(e) => setWeighInDay(e.target.value)} className="input">
+            {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((d) => (
+              <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-ink-muted">The bot reminds everyone to weigh in on this day.</p>
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 text-sm">
+          <span className="text-ink-muted">Challenge code</span>
+          <span className="font-mono font-semibold tracking-widest text-ink">{challengeCode}</span>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

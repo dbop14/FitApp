@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const ChallengeParticipant = require('../models/ChallengeParticipant');
@@ -10,6 +11,11 @@ const FitnessHistory = require('../models/FitnessHistory');
 router.get('/:challengeId', async (req, res) => {
   const { challengeId } = req.params;
   try {
+    // Points v2 challenges are scored by the engine; Classic continues below unchanged.
+    const v2Challenge = await Challenge.findById(challengeId).catch(() => null);
+    if (v2Challenge && v2Challenge.scoringMode === 'v2') {
+      return res.json(await buildV2Leaderboard(v2Challenge));
+    }
     // Get all participants for this challenge
     // We'll calculate final points and sort after processing
     const participants = await ChallengeParticipant.find({ challengeId });
@@ -128,7 +134,7 @@ router.get('/:challengeId', async (req, res) => {
       console.log(`🖼️ Backend profile picture for ${user?.name || 'Unknown'}:`, {
         userId: p.userId,
         userName: user?.name,
-        userEmail: user?.email,
+        userEmail: redactEmail(user?.email),
         userPicture: user?.picture,
         hasPicture: !!user?.picture,
         userFound: !!user
@@ -179,6 +185,51 @@ router.get('/:challengeId', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch leaderboard', details: err.message });
   }
 });
+
+async function buildV2Leaderboard(challenge) {
+  const { recountV2Challenge } = require('../services/scoring/recountV2');
+  const scored = await recountV2Challenge(challenge);
+  const users = await User.find({ googleId: { $in: scored.map((s) => s.participant.userId) } });
+  const userMap = Object.fromEntries(users.map((u) => [u.googleId, u]));
+  const todayKey = scored[0]?.result.days.at(-1)?.date;
+  const rows = scored.map(({ participant: p, result: r }) => {
+    const user = userMap[p.userId];
+    const today = r.days.find((d) => d.date === todayKey) || null;
+    return {
+      userId: p.userId,
+      name: user?.name || 'Unknown User',
+      email: user?.email || '',
+      picture: user?.picture || null,
+      scoringMode: 'v2',
+      points: r.total,
+      totalPoints: r.total,
+      breakdown: {
+        steps: r.categories.steps,
+        goalBonus: r.categories.goalBonus,
+        effort: r.categories.effort,
+        strength: r.categories.strength,
+        weekly: r.categories.weekly,
+        weightLoss: r.categories.weightLoss,
+      },
+      today,
+      weeks: r.weeks.map((w) => ({ index: w.index, startDate: w.startDate, activeDays: w.activeDays, points: w.points })),
+      weightLossPoints: r.categories.weightLoss,
+      stepGoalPoints: p.stepGoalPoints || 0,
+      stepGoalDaysAchieved: r.days.filter((d) => d.goalBonusPoints > 0).length,
+      startingWeight: p.startingWeight,
+      lastWeight: r.weight.latestWeight ?? p.lastWeight ?? p.startingWeight,
+      lockedSource: p.lockedSource || null,
+      stepGoal: challenge.stepGoal || 0,
+      stepGoalAchieved: Boolean(today && today.goalBonusPoints > 0),
+      currentSteps: user?.steps || 0,
+    };
+  });
+  rows.sort((a, b) => (b.points !== a.points ? b.points - a.points : a.name.localeCompare(b.name)));
+  rows.forEach((row, i) => {
+    row.rank = i === 0 || row.points !== rows[i - 1].points ? i + 1 : rows[i - 1].rank;
+  });
+  return rows;
+}
 
 // POST to add a participant to a challenge
 router.post('/:challengeId/participants', async (req, res) => {
@@ -246,7 +297,7 @@ router.post('/:challengeId/participants', async (req, res) => {
           lastSync: new Date()
         });
         await user.save();
-        console.log(`✅ Created new user: ${email} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
+        console.log(`✅ Created new user: ${redactEmail(email)} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
       } else {
         return res.status(400).json({ 
           error: 'Invalid Google ID: cannot create user without valid Google ID' 
@@ -260,7 +311,7 @@ router.post('/:challengeId/participants', async (req, res) => {
         user.picture = picture; // Update picture if provided
       }
       await user.save();
-      console.log(`✅ Updated existing user: ${email} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
+      console.log(`✅ Updated existing user: ${redactEmail(email)} (${userId}) with picture: ${picture ? 'yes' : 'no'}`);
     }
 
     // Check if challenge starts in the future (challenge already fetched above on line 214)
@@ -299,16 +350,16 @@ router.post('/:challengeId/participants', async (req, res) => {
     });
 
     await newParticipant.save();
-    console.log(`✅ Created ChallengeParticipant record for ${email} in challenge ${challengeIdStr}`);
+    console.log(`✅ Created ChallengeParticipant record for ${redactEmail(email)} in challenge ${challengeIdStr}`);
 
     // Update the Challenge model's participants array
     if (!challenge.participants.includes(email)) {
       challenge.participants.push(email);
       await challenge.save();
-      console.log(`✅ Updated challenge participants array for: ${email}`);
+      console.log(`✅ Updated challenge participants array for: ${redactEmail(email)}`);
     }
 
-    console.log(`✅ Added participant to challenge: ${email} (${userId})`);
+    console.log(`✅ Added participant to challenge: ${redactEmail(email)} (${userId})`);
 
     // Note: Welcome card messages are now handled by the fitapp-bot service
     // The bot will detect new participants and send a welcomeCard automatically
@@ -380,7 +431,7 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
         console.log(`🔧 Found user in participants array but no ChallengeParticipant record - cleaning up`);
         challenge.participants = challenge.participants.filter(email => email !== userEmail);
         await challenge.save();
-        console.log(`✅ Removed ${userEmail} from challenge participants array`);
+        console.log(`✅ Removed ${redactEmail(userEmail)} from challenge participants array`);
         
         return res.json({ 
           message: 'User removed from challenge (cleaned up inconsistent data)',
@@ -400,7 +451,7 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
     const userName = user?.name || 'Unknown User';
     const userEmail = user?.email || '';
 
-    console.log(`👤 Removing participant: ${userName} (${userEmail}) with ${participant.points} points`);
+    console.log(`👤 Removing participant: ${userName} (${redactEmail(userEmail)}) with ${participant.points} points`);
 
     // Remove participant record
     await ChallengeParticipant.findByIdAndDelete(participant._id);
@@ -410,9 +461,9 @@ router.delete('/:challengeId/participants/:userId', async (req, res) => {
     if (challenge.participants.includes(userEmail)) {
       challenge.participants = challenge.participants.filter(email => email !== userEmail);
       await challenge.save();
-      console.log(`✅ Updated challenge participants array, removed: ${userEmail}`);
+      console.log(`✅ Updated challenge participants array, removed: ${redactEmail(userEmail)}`);
     } else {
-      console.log(`⚠️ User ${userEmail} was not in challenge participants array`);
+      console.log(`⚠️ User ${redactEmail(userEmail)} was not in challenge participants array`);
     }
 
     // Add leave message to chat (plain text, not a card)

@@ -1,5 +1,8 @@
-// Dashboard Design System Configuration
+// Dashboard Design System Configuration (legacy color reference)
 // Extracted from fitness_design_system.json
+//
+// The live UI no longer reads this file. Colors and dark-mode values are in
+// src/index.css and tailwind.config.js; see src/config/unifiedDesignSystem.js.
 
 export const dashboardDesignSystem = {
   colors: {

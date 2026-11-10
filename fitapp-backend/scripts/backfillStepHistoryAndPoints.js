@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const mongoose = require('mongoose');
 
 // Ensure the script runs in New York timezone
@@ -114,7 +115,7 @@ function getChallengeDateRange(challenge) {
  */
 async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
   if (!user.accessToken) {
-    console.log(`⚠️ Skipping Google Fit history sync for ${user.email} - no access token`);
+    console.log(`⚠️ Skipping Google Fit history sync for ${redactEmail(user.email)} - no access token`);
     return;
   }
 
@@ -133,7 +134,7 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
     const credentials = await oauth2Client.getAccessToken();
     const accessToken = credentials.token || user.accessToken;
 
-    console.log(`📡 Syncing Google Fit history for ${user.email} from ${start.toString()} (${start.toISOString()}) to ${end.toString()}`);
+    console.log(`📡 Syncing Google Fit history for ${redactEmail(user.email)} from ${start.toString()} (${start.toISOString()}) to ${end.toString()}`);
 
     const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
       method: 'POST',
@@ -153,13 +154,13 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Google Fit history API error for ${user.email}: ${response.status} - ${errorText}`);
+      console.error(`❌ Google Fit history API error for ${redactEmail(user.email)}: ${response.status} - ${errorText}`);
       return;
     }
 
     const data = await response.json();
     if (!data.bucket || data.bucket.length === 0) {
-      console.log(`ℹ️ No Google Fit buckets returned for ${user.email}`);
+      console.log(`ℹ️ No Google Fit buckets returned for ${redactEmail(user.email)}`);
       return;
     }
 
@@ -183,7 +184,7 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
           bucketStartMillis = nanos;
         }
       } else {
-        console.warn(`⚠️ Google Fit bucket missing timestamp fields for ${user.email}, skipping`, {
+        console.warn(`⚠️ Google Fit bucket missing timestamp fields for ${redactEmail(user.email)}, skipping`, {
           hasNanos: rawNanos !== undefined,
           hasMillis: rawMillis !== undefined
         });
@@ -191,13 +192,13 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
       }
 
       if (!bucketStartMillis || isNaN(bucketStartMillis) || bucketStartMillis <= 0) {
-        console.warn(`⚠️ Invalid Google Fit bucket timestamp for ${user.email}, skipping: ${bucketStartMillis}`);
+        console.warn(`⚠️ Invalid Google Fit bucket timestamp for ${redactEmail(user.email)}, skipping: ${bucketStartMillis}`);
         continue;
       }
 
       const bucketDateObj = new Date(bucketStartMillis);
       if (isNaN(bucketDateObj.getTime())) {
-        console.warn(`⚠️ Invalid Date created from timestamp for ${user.email}, skipping`, {
+        console.warn(`⚠️ Invalid Date created from timestamp for ${redactEmail(user.email)}, skipping`, {
           bucketStartMillis
         });
         continue;
@@ -231,9 +232,9 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
       );
     }
 
-    console.log(`✅ Finished Google Fit history sync for ${user.email}`);
+    console.log(`✅ Finished Google Fit history sync for ${redactEmail(user.email)}`);
   } catch (error) {
-    console.error(`❌ Error syncing Google Fit history for ${user.email}:`, error);
+    console.error(`❌ Error syncing Google Fit history for ${redactEmail(user.email)}:`, error);
   }
 }
 
@@ -244,7 +245,7 @@ async function syncGoogleFitHistoryForUser(user, daysBack = 30) {
  */
 async function syncFitbitHistoryForUser(user, daysBack = 30) {
   if (!user.fitbitAccessToken) {
-    console.log(`⚠️ Skipping Fitbit history sync for ${user.email} - no Fitbit access token`);
+    console.log(`⚠️ Skipping Fitbit history sync for ${redactEmail(user.email)} - no Fitbit access token`);
     return;
   }
 
@@ -261,7 +262,7 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
     const startDateStr = formatDateYMD(start);
     const endDateStr = formatDateYMD(end);
 
-    console.log(`📡 Syncing Fitbit history for ${user.email} from ${startDateStr} to ${endDateStr}`);
+    console.log(`📡 Syncing Fitbit history for ${redactEmail(user.email)} from ${startDateStr} to ${endDateStr}`);
 
     // Cleanup removed to support High Water Mark logic.
     // Timezone alignment is now fixed via process.env.TZ, so duplicates shouldn't occur.
@@ -289,14 +290,14 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
     if (stepsResponse.ok) {
       stepsData = await stepsResponse.json();
     } else if (stepsResponse.status !== 404) {
-      console.warn(`⚠️ Failed to fetch Fitbit steps history for ${user.email}: ${stepsResponse.status}`);
+      console.warn(`⚠️ Failed to fetch Fitbit steps history for ${redactEmail(user.email)}: ${stepsResponse.status}`);
     }
 
     let weightData = null;
     if (weightResponse.ok) {
       weightData = await weightResponse.json();
     } else if (weightResponse.status !== 404) {
-      console.warn(`⚠️ Failed to fetch Fitbit weight history for ${user.email}: ${weightResponse.status}`);
+      console.warn(`⚠️ Failed to fetch Fitbit weight history for ${redactEmail(user.email)}: ${weightResponse.status}`);
     }
 
     const weightMap = new Map();
@@ -314,7 +315,7 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
     }
 
     if (!stepsData || !stepsData['activities-steps']) {
-      console.log(`ℹ️ No Fitbit steps time series for ${user.email}`);
+      console.log(`ℹ️ No Fitbit steps time series for ${redactEmail(user.email)}`);
       return;
     }
 
@@ -336,9 +337,9 @@ async function syncFitbitHistoryForUser(user, daysBack = 30) {
       );
     }
 
-    console.log(`✅ Finished Fitbit history sync for ${user.email}`);
+    console.log(`✅ Finished Fitbit history sync for ${redactEmail(user.email)}`);
   } catch (error) {
-    console.error(`❌ Error syncing Fitbit history for ${user.email}:`, error);
+    console.error(`❌ Error syncing Fitbit history for ${redactEmail(user.email)}:`, error);
   }
 }
 
@@ -513,8 +514,17 @@ async function backfillStepHistoryAndPoints() {
     }
 
     const dataSource = user.dataSource || 'google-fit';
+    const health = require('../services/health');
 
-    if (dataSource === 'fitbit') {
+    if (health.getHealthSource(user)) {
+      try {
+        await health.syncHealthHistory(user, { days: 30 });
+      } catch (err) {
+        console.error(`❌ ${dataSource} backfill failed for user ${user.googleId}: ${err.message}`);
+      }
+    } else if (['google-health', 'whoop', 'none'].includes(dataSource)) {
+      // No source yet, or source switched off / not connected; nothing to pull.
+    } else if (dataSource === 'fitbit') {
       await syncFitbitHistoryForUser(user, 30);
     } else {
       await syncGoogleFitHistoryForUser(user, 30);
@@ -537,7 +547,18 @@ async function backfillStepHistoryAndPoints() {
       challengeCache.set(challengeId, challenge);
     }
 
+    if (challenge.scoringMode === 'v2') {
+      continue; // recounted below with the v2 engine
+    }
     await recalcStepPointsForParticipant(participant, challenge);
+  }
+
+  // Points v2 challenges
+  const { recountV2Challenge } = require('../services/scoring/recountV2');
+  for (const challenge of challengeCache.values()) {
+    if (challenge.scoringMode === 'v2') {
+      await recountV2Challenge(challenge);
+    }
   }
 
   console.log('✅ Backfill complete: step history synced and points recalculated for all challenge participants.');
@@ -566,4 +587,7 @@ if (require.main === module) {
 }
 
 module.exports = backfillStepHistoryAndPoints;
+// Exposed for tests only.
+module.exports.recalcStepPointsForParticipant = recalcStepPointsForParticipant;
+module.exports.syncGoogleFitHistoryForUser = syncGoogleFitHistoryForUser;
 

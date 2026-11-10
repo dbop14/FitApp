@@ -1,7 +1,8 @@
 import { useState, useContext, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import PageHeader from '../components/ui/PageHeader'
+import Icon from '../components/ui/Icon'
 import Button from '../components/ui/Button'
 import { DEFAULT_AVATAR } from '../utils/constants'
 import ImageCropper from '../components/ImageCropper'
@@ -163,154 +164,98 @@ const AccountSettings = () => {
     <>
       {/* Image Cropper Modal */}
       {showCropper && imageToCrop && (
-        <ImageCropper
-          image={imageToCrop}
-          onCropComplete={handleCropComplete}
-          onCancel={handleCancelCrop}
-          aspectRatio={1}
-        />
+        <ImageCropper image={imageToCrop} onCropComplete={handleCropComplete} onCancel={handleCancelCrop} aspectRatio={1} />
       )}
 
-      {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleBack}
-            className="text-white hover:text-blue-200 transition-colors"
-          >
-            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
-          <h1 className="text-2xl font-bold text-center text-white flex-1">
-            Account Settings
-          </h1>
-          <div className="w-6"></div> {/* Spacer for centering */}
-        </div>
-      </header>
+      <PageHeader title="Account" subtitle="Edit your profile" back={handleBack} />
 
-      <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className="p-6 pb-24 safe-area-content">
-          {/* Page header */}
-          <div className="mb-6">
-            <h1 className={unifiedDesignSystem.typography.hierarchy.pageTitle}>
-              Edit Profile
-            </h1>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Profile Picture Section */}
-            <div className="bg-white rounded-2xl shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Profile Picture</h3>
-              
-              <div className="flex flex-col items-center space-y-4">
-                {/* Current/Preview Picture */}
-                <div className="relative">
-                  <img
-                    src={formData.picture || DEFAULT_AVATAR}
-                    alt="Profile"
-                    className="w-24 h-24 rounded-full object-cover border-4 border-gray-200"
-                  />
-                  {formData.picture && (
-                    <button
-                      type="button"
-                      onClick={handleRemovePicture}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                      title="Remove picture"
-                    >
-                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-
-                {/* Upload Button */}
-                <div className="flex flex-col space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePictureChange}
-                    className="hidden"
-                    id="profile-picture"
-                    disabled={isProcessingImage}
-                  />
-                  <label
-                    htmlFor="profile-picture"
-                    className={`bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer transition-colors text-center ${
-                      isProcessingImage ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    {isProcessingImage ? 'Processing...' : 'Choose Photo'}
-                  </label>
-                  <p className="text-xs text-gray-500 text-center">
-                    JPG, PNG or GIF. Images will be compressed and cropped automatically.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Display Name Section */}
-            <div className="bg-white rounded-2xl shadow-sm border p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Display Name</h3>
-              
-              <div className="space-y-3">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your display name"
+      <div className="page-narrow">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Profile picture */}
+          <section className="card card-pad" aria-labelledby="acct-photo">
+            <h2 id="acct-photo" className="card-title mb-4">Profile picture</h2>
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+              <div className="relative">
+                <img
+                  src={formData.picture || DEFAULT_AVATAR}
+                  alt="Profile"
+                  className="h-24 w-24 rounded-full border-4 border-line object-cover"
                 />
-                <p className="text-xs text-gray-500">
-                  This is the name that will be displayed to other users.
+                {formData.picture && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePicture}
+                    className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700"
+                    title="Remove picture"
+                    aria-label="Remove picture"
+                  >
+                    <Icon name="x" className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col items-center gap-2 sm:items-start">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePictureChange}
+                  className="hidden"
+                  id="profile-picture"
+                  disabled={isProcessingImage}
+                />
+                <label
+                  htmlFor="profile-picture"
+                  className={`btn btn-secondary cursor-pointer ${isProcessingImage ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  <Icon name="camera" className="h-4 w-4" />
+                  {isProcessingImage ? 'Processing...' : 'Choose photo'}
+                </label>
+                <p className="text-center text-xs text-ink-muted sm:text-left">
+                  JPG, PNG or GIF. Images are compressed and cropped automatically.
                 </p>
               </div>
             </div>
+          </section>
 
-            {/* Error and Success Messages */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800 text-sm">{error}</p>
-              </div>
-            )}
-            
-            {success && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-green-800 text-sm">{success}</p>
-              </div>
-            )}
+          {/* Display name */}
+          <section className="card card-pad" aria-labelledby="acct-name">
+            <h2 id="acct-name" className="card-title mb-4">Display name</h2>
+            <label htmlFor="name" className="label">Name</label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              required
+              className="input"
+              placeholder="Enter your display name"
+            />
+            <p className="mt-1.5 text-xs text-ink-muted">This is the name other members see.</p>
+          </section>
 
-            {/* Action Buttons */}
-            <div className="flex space-x-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleBack}
-                size="lg"
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                className="flex-1"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Saving...' : 'Save Changes'}
-              </Button>
+          {error && (
+            <div className="callout callout-danger" role="alert">
+              <Icon name="alert-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>{error}</p>
             </div>
-          </form>
-        </main>
+          )}
+          {success && (
+            <div className="callout callout-success" role="status">
+              <Icon name="check-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>{success}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={handleBack} size="lg">
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="lg" disabled={isLoading}>
+              {isLoading ? 'Saving...' : 'Save changes'}
+            </Button>
+          </div>
+        </form>
       </div>
     </>
   )

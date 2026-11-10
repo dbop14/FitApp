@@ -1,74 +1,44 @@
-import React from 'react';
+import React from 'react'
 
 /**
- * Card Component - Now using Tailwind CSS classes
- * 
- * Features:
- * - Gradient variants (primary, light, deep)
- * - Consistent styling with design system
- * - Interactive states with hover effects
- * - Accessible button behavior when onClick is provided
- * 
- * Props:
- * @param {string} variant - Gradient variant: 'primary', 'light', 'deep'
- * @param {React.ReactNode} children - Card content
- * @param {string} className - Additional CSS classes
- * @param {function} onClick - Optional click handler (makes card interactive)
- * @param {string} role - ARIA role (defaults to 'button' if onClick provided)
- * @param {string} ariaLabel - Accessibility label
+ * Card
+ * variant: 'surface' (default, neutral card) | 'brand' (blue gradient highlight).
+ * Legacy variants 'primary' map to brand; 'light' and 'deep' map to surface.
+ * When onClick is given the card is keyboard accessible.
  */
-const Card = ({ 
-  variant = 'primary', 
-  children, 
-  className = '', 
-  onClick, 
-  role = onClick ? 'button' : undefined,
-  ariaLabel,
-  ...props 
-}) => {
-  // Get gradient classes based on variant
-  const getGradientClasses = (variant) => {
-    const gradients = {
-      primary: 'bg-gradient-to-r from-blue-500 to-blue-800',
-      light: 'bg-gradient-to-r from-blue-400 to-blue-600',
-      deep: 'bg-gradient-to-r from-blue-700 to-blue-900'
-    };
-    return gradients[variant] || gradients.primary;
-  };
-  
-  const baseClasses = `${getGradientClasses(variant)} rounded-2xl p-6 text-white shadow-lg mb-4`;
-  const isInteractive = !!onClick;
-  
-  const cardClasses = `${baseClasses} ${className} ${
-    isInteractive 
-      ? 'cursor-pointer transition-transform active:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50' 
-      : ''
-  }`;
+const VARIANT_CLASS = {
+  surface: 'card',
+  brand: 'card-brand',
+  primary: 'card-brand',
+  light: 'card',
+  deep: 'card',
+}
 
+const Card = ({ variant = 'surface', padded = true, children, className = '', onClick, ariaLabel, ...props }) => {
+  const interactive = typeof onClick === 'function'
   const handleKeyDown = (e) => {
-    if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      onClick();
+    if (interactive && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      onClick(e)
     }
-  };
-
-  const cardProps = {
-    className: cardClasses,
-    ...(isInteractive && {
-      onClick,
-      onKeyDown: handleKeyDown,
-      tabIndex: 0,
-      role,
-      'aria-label': ariaLabel,
-    }),
-    ...props
-  };
-
+  }
   return (
-    <div {...cardProps}>
+    <div
+      className={`${VARIANT_CLASS[variant] || 'card'} ${padded ? 'card-pad' : ''} ${
+        interactive ? 'card-interactive cursor-pointer' : ''
+      } ${className}`}
+      {...(interactive && {
+        onClick,
+        onKeyDown: handleKeyDown,
+        tabIndex: 0,
+        role: 'button',
+        'aria-label': ariaLabel,
+      })}
+      {...props}
+    >
       {children}
     </div>
-  );
-};
+  )
+}
 
-export default Card;
+export default Card

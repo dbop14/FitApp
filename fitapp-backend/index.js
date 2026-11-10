@@ -1,3 +1,4 @@
+const { redactEmail } = require('./utils/redact');
 // Set timezone to New York to ensure consistent date boundaries
 process.env.TZ = 'America/New_York';
 
@@ -20,7 +21,8 @@ const allowedOrigins = [
   'https://fitapp.herringm.com',
   'https://fitappbackend.herringm.com',
   'https://fitappdev.herringm.com',
-  'https://fitappbackenddev.herringm.com'
+  'https://fitappbackenddev.herringm.com',
+  'https://fitappdevbackend.herringm.com' // live dev tunnel hostname
 ];
 
 // Handle preflight OPTIONS requests for CORS
@@ -56,6 +58,20 @@ const { router: pushRoutes, sendPushNotification } = require('./routes/push');
 const jwt = require('jsonwebtoken');
 
 const authenticateJWT = require('./middleware/auth');
+const requireAdmin = require('./middleware/requireAdmin');
+const requireSelf = require('./middleware/requireSelf');
+const { getJwtSecret, jwtSecretIsPlaceholder, TOKEN_REISSUE_MAX_AGE_DAYS } = require('./config/auth');
+
+// Startup side effects (DB connection, cron jobs, listening) only run when this
+// file is executed directly, so tests can require the app without them.
+const IS_MAIN = require.main === module;
+if (jwtSecretIsPlaceholder()) {
+  if (process.env.NODE_ENV === 'production' && IS_MAIN) {
+    console.error('❌ JWT_SECRET is unset or a placeholder. Refusing to start in production.');
+    process.exit(1);
+  }
+  console.warn('⚠️ JWT_SECRET is unset or a placeholder; tokens can be forged. Set a random JWT_SECRET.');
+}
 const { kgToLbs } = require('./utils/weightConversion');
 
 const DEFAULT_STEP_GOAL = 10000;
@@ -124,8 +140,27 @@ const recalculateStepPoints = async () => {
     let challengesProcessed = 0;
     let participantsUpdated = 0;
 
+    // Points v2: lock days older than 48h, then recount v2 challenges with the engine.
+    const activeChallenges = challenges.filter((c) => shouldRecalculateChallenge(c, today));
+    try {
+      const finalized = await finalizeV2Days(activeChallenges);
+      if (finalized) console.log(`🔒 Finalized ${finalized} v2 day(s)`);
+    } catch (err) {
+      console.error('❌ Error finalizing v2 days:', err.message);
+    }
+
     for (const challenge of challenges) {
       if (!shouldRecalculateChallenge(challenge, today)) {
+        continue;
+      }
+      if (challenge.scoringMode === 'v2') {
+        try {
+          const results = await recountV2Challenge(challenge);
+          challengesProcessed++;
+          participantsUpdated += results.length;
+        } catch (err) {
+          console.error(`❌ Error recounting v2 challenge ${challenge._id}:`, err.message);
+        }
         continue;
       }
 
@@ -210,6 +245,7 @@ function isChallengeEnded(challenge) {
 // Import Google Auth utility
 const { ensureValidGoogleTokens } = require('./utils/googleAuth');
 const backfillStepHistoryAndPoints = require('./scripts/backfillStepHistoryAndPoints');
+const { recountV2Challenge, finalizeV2Days } = require('./services/scoring/recountV2');
 
 // Connect to MongoDB
 // Add replicaSet parameter if not already present (for replica set mode)
@@ -221,7 +257,7 @@ if (!mongoUri.includes('replicaSet=') && !mongoUri.includes('?')) {
 }
 console.log(`🔌 Connecting to MongoDB at ${mongoUri.replace(/\/\/.*@/, '//***:***@')}`);
 
-mongoose.connect(mongoUri, {
+if (IS_MAIN) mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   serverSelectionTimeoutMS: 30000,
@@ -249,7 +285,7 @@ mongoose.connection.on('reconnected', () => {
 
 // Scheduled job to reset all users' steps to 0 at midnight every day
 // Runs at 00:00:00 (midnight) in the server's timezone
-cron.schedule('0 0 * * *', async () => {
+if (IS_MAIN) cron.schedule('0 0 * * *', async () => {
   try {
     console.log('🔄 Starting daily step reset at midnight...');
     
@@ -284,7 +320,7 @@ cron.schedule('0 0 * * *', async () => {
 console.log('⏰ Daily step reset cron job scheduled (runs at midnight)');
 
 // Recalculate step points hourly to keep totals consistent with history
-cron.schedule('5 * * * *', async () => {
+if (IS_MAIN) cron.schedule('5 * * * *', async () => {
   await recalculateStepPoints();
 }, {
   timezone: APP_TIMEZONE
@@ -295,7 +331,7 @@ console.log('⏰ Hourly step point recalculation scheduled (runs at :05)');
 // Nightly job to pull today's step data for users in active challenges
 // and ensure their step points are in sync before midnight reset.
 // Runs at 23:55 in the configured APP_TIMEZONE.
-cron.schedule('55 23 * * *', async () => {
+if (IS_MAIN) cron.schedule('55 23 * * *', async () => {
   try {
     console.log('⏰ Starting nightly active-challenge step history backfill at 23:55...');
     await backfillStepHistoryAndPoints();
@@ -308,6 +344,26 @@ cron.schedule('55 23 * * *', async () => {
 });
 
 console.log('⏰ Nightly active-challenge step backfill scheduled (runs at 23:55)');
+
+// Points v2: morning backfill of the previous 2 days, and the 48h finalize pass.
+const v2Jobs = require('./services/scoring/v2Jobs');
+if (IS_MAIN) cron.schedule('30 6 * * *', async () => {
+  try {
+    const r = await v2Jobs.morningBackfill();
+    console.log(`✅ v2 morning backfill: ${r.challenges} challenge(s), ${r.synced}/${r.users} user(s) synced, ${r.skipped} skipped, ${r.failed} failed, ${r.finalized} day(s) finalized`);
+  } catch (error) {
+    console.error('❌ Error during v2 morning backfill:', error.message);
+  }
+}, { timezone: APP_TIMEZONE });
+if (IS_MAIN) cron.schedule('30 0 * * *', async () => {
+  try {
+    const r = await v2Jobs.finalizePass();
+    console.log(`🔒 v2 finalize pass: ${r.finalized} day(s) finalized across ${r.challenges} challenge(s)`);
+  } catch (error) {
+    console.error('❌ Error during v2 finalize pass:', error.message);
+  }
+}, { timezone: APP_TIMEZONE });
+console.log('⏰ Points v2 jobs scheduled (morning backfill 06:30, finalize pass 00:30)');
 
 // Increase JSON body size limit to 1MB to accommodate profile photos
 // Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)
@@ -327,7 +383,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Debug log ingest: accept frontend/agent logs and append to workspace .cursor/debug.log (NDJSON)
-app.post('/api/debug-log', express.json(), (req, res) => {
+app.post('/api/debug-log', authenticateJWT, requireAdmin, express.json(), (req, res) => {
   try {
     const payload = req.body && typeof req.body === 'object' ? req.body : { message: String(req.body) };
     const logPath = path.join(__dirname, '..', '.cursor', 'debug.log');
@@ -340,7 +396,7 @@ app.post('/api/debug-log', express.json(), (req, res) => {
 });
 
 // Test endpoint to check environment variables
-app.get('/api/test-env', (req, res) => {
+app.get('/api/test-env', authenticateJWT, requireAdmin, (req, res) => {
   res.json({
     hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
     hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
@@ -351,7 +407,7 @@ app.get('/api/test-env', (req, res) => {
 });
 
 // Test endpoint to check Google Fit API access
-app.get('/api/test-google-fit/:googleId', async (req, res) => {
+app.get('/api/test-google-fit/:googleId', authenticateJWT, requireAdmin, async (req, res) => {
   const { googleId } = req.params;
   
   try {
@@ -390,45 +446,51 @@ app.get('/api/test-google-fit/:googleId', async (req, res) => {
   }
 });
 
-// JWT token generation endpoint - must be defined before route mounting
+// JWT re-issue endpoint - must be defined before route mounting.
+// Sign-in happens through the Google OAuth callback in routes/auth.js. This
+// endpoint only swaps a JWT we signed earlier (it may have expired, but must be
+// under TOKEN_REISSUE_MAX_AGE_DAYS old) for a fresh one for the same user.
 app.post('/api/auth/token', async (req, res) => {
-  const { googleId, name, email, picture } = req.body;
-  
+  const { googleId } = req.body || {};
+
   if (!googleId) {
     return res.status(400).json({ error: 'Missing googleId' });
   }
 
+  const authHeader = req.headers.authorization || '';
+  const presented = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!presented) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+
+  let claims;
   try {
-    // Find or create user
-    let user = await User.findOne({ googleId });
-    
+    claims = jwt.verify(presented, getJwtSecret(), { ignoreExpiration: true });
+  } catch (err) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+  const maxAgeSeconds = TOKEN_REISSUE_MAX_AGE_DAYS * 24 * 60 * 60;
+  if (claims.googleId !== googleId || !claims.iat || (Date.now() / 1000 - claims.iat) > maxAgeSeconds) {
+    return res.status(401).json({ error: 'Sign in again', needsReauth: true });
+  }
+
+  try {
+    const user = await User.findOne({ googleId });
     if (!user) {
-      // Create new user if they don't exist
-      user = new User({
-        googleId,
-        name: name || 'Unknown User',
-        email: email || '',
-        picture: picture || '',
-        steps: 0,
-        weight: null,
-        lastSync: new Date()
-      });
-      await user.save();
-      console.log(`✅ Created new user: ${email || googleId}`);
+      return res.status(401).json({ error: 'Sign in again', needsReauth: true });
     }
 
-    // Generate JWT token
     const token = jwt.sign(
-      { 
-        googleId: user.googleId, 
+      {
+        googleId: user.googleId,
         email: user.email,
-        name: user.name 
+        name: user.name
       },
-      process.env.JWT_SECRET || 'your_jwt_secret',
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
-    console.log(`🔑 Generated JWT token for user: ${user.email || googleId}`);
+    console.log(`🔑 Re-issued JWT token for user ${user.googleId}`);
     
     res.json({ 
       token,
@@ -486,7 +548,7 @@ app.use('/api/push', authenticateJWT, pushRoutes)
 // Endpoint to refresh Google Fit access token using backend's refresh token
 // This allows frontend to get a new access token without prompting user to login
 // If backend has no refresh token, it will return the current access token if still valid
-app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
+app.get('/api/auth/refresh-google-fit-token/:googleId', authenticateJWT, requireSelf, async (req, res) => {
   const { googleId } = req.params;
   if (!googleId) return res.status(400).json({ error: 'Missing googleId' });
   
@@ -498,10 +560,10 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    console.log(`📊 User found: ${user.email}, hasAccessToken: ${!!user.accessToken}, hasRefreshToken: ${!!user.refreshToken}, tokenExpiry: ${user.tokenExpiry ? new Date(user.tokenExpiry).toISOString() : 'null'}`);
+    console.log(`📊 User found: ${redactEmail(user.email)}, hasAccessToken: ${!!user.accessToken}, hasRefreshToken: ${!!user.refreshToken}, tokenExpiry: ${user.tokenExpiry ? new Date(user.tokenExpiry).toISOString() : 'null'}`);
     
     if (!user.accessToken) {
-      console.log(`⚠️ User ${user.email} has no access token in database`);
+      console.log(`⚠️ User ${redactEmail(user.email)} has no access token in database`);
       return res.status(401).json({ 
         error: 'No access token available',
         message: 'User needs to authenticate with Google Fit first',
@@ -562,7 +624,7 @@ app.get('/api/auth/refresh-google-fit-token/:googleId', async (req, res) => {
       } else {
         // No refresh token and token expired - need reauth
         const hoursExpired = user.tokenExpiry ? (Date.now() - user.tokenExpiry) / (1000 * 60 * 60) : 'unknown';
-        console.log(`⚠️ No refresh token and token expired (${hoursExpired.toFixed(1)} hours ago), user ${user.email} needs to re-authenticate`);
+        console.log(`⚠️ No refresh token and token expired (${hoursExpired.toFixed(1)} hours ago), user ${redactEmail(user.email)} needs to re-authenticate`);
         return res.status(401).json({ 
           error: 'Authentication required',
           message: 'Please re-authenticate with Google to continue syncing data',
@@ -602,14 +664,14 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       });
     }
 
-    console.log(`✅ Found user: ${user.email} with access token`);
+    console.log(`✅ Found user: ${redactEmail(user.email)} with access token`);
 
     // Ensure tokens are valid and refresh proactively if needed
     let oauth2Client;
     try {
       const tokenResult = await ensureValidGoogleTokens(user);
       oauth2Client = tokenResult.oauth2Client;
-      console.log(`🔑 OAuth2 client configured for user: ${user.email}${tokenResult.refreshed ? ' (token refreshed proactively)' : ''}`);
+      console.log(`🔑 OAuth2 client configured for user: ${redactEmail(user.email)}${tokenResult.refreshed ? ' (token refreshed proactively)' : ''}`);
     } catch (tokenError) {
       console.error('❌ Token validation/refresh failed:', tokenError);
       if (tokenError.message.includes('re-authenticate') || tokenError.message.includes('Refresh token invalid')) {
@@ -1586,7 +1648,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       }
       
       const participants = await ChallengeParticipant.find({ userId: googleId });
-      console.log(`🔍 Found ${participants.length} challenge participations for user ${user.email}`);
+      console.log(`🔍 Found ${participants.length} challenge participations for user ${redactEmail(user.email)}`);
       
       for (const participant of participants) {
         // Store original startingWeight to ensure it's never overwritten
@@ -1717,7 +1779,7 @@ app.get('/api/sync-google-fit/:googleId', async (req, res) => {
       }
     }
 
-    console.log(`✅ Synced Google Fit data for ${user.email}: steps=${steps}, weight=${weight}`);
+    console.log(`✅ Synced Google Fit data for ${redactEmail(user.email)}: steps=${steps}, weight=${weight}`);
 
     // Broadcast update via SSE
     broadcastUserUpdate(user.googleId, {
@@ -1748,7 +1810,7 @@ app.get('/api/user-data/:googleId', authenticateJWT, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log(`📊 Retrieved user data for ${user.email}: steps=${user.steps}, weight=${user.weight}, lastSync=${user.lastSync}`);
+    console.log(`📊 Retrieved user data for ${redactEmail(user.email)}: steps=${user.steps}, weight=${user.weight}, lastSync=${user.lastSync}`);
     
     res.json({ 
       steps: user.steps, 
@@ -1779,7 +1841,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
     // Also check if user exists and what their email is
     const user = await User.findOne({ googleId: googleId });
     if (user) {
-      console.log(`🔍 User found: ${user.email} (${user.name})`);
+      console.log(`🔍 User found: ${redactEmail(user.email)} (${user.name})`);
       
       // Check if there are challenges where user email is in participants array
       const challengesByEmail = await Challenge.find({ participants: user.email });
@@ -1793,7 +1855,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
         });
         
         if (!existingParticipant) {
-          console.log(`⚠️ User ${user.email} is in challenge "${challenge.name}" participants array but has no ChallengeParticipant record. Creating one...`);
+          console.log(`⚠️ User ${redactEmail(user.email)} is in challenge "${challenge.name}" participants array but has no ChallengeParticipant record. Creating one...`);
           
           // Create participant record with default values
           // For startingWeight: set to null - it will be set on first weigh-in day
@@ -1851,7 +1913,7 @@ app.get('/api/user-challenges/:googleId', authenticateJWT, async (req, res) => {
             weightLossPoints: 0
           });
           await newParticipant.save();
-          console.log(`✅ Created ChallengeParticipant record for ${user.email} in "${challenge.name}" with startingWeight: ${startingWeightToSet || 'null (will be set on first weigh-in day)'}, lastWeight: ${lastWeightToSet || 'null'}`);
+          console.log(`✅ Created ChallengeParticipant record for ${redactEmail(user.email)} in "${challenge.name}" with startingWeight: ${startingWeightToSet || 'null (will be set on first weigh-in day)'}, lastWeight: ${lastWeightToSet || 'null'}`);
           
           // Add to participants array for this query
           participants.push(newParticipant);
@@ -2101,7 +2163,7 @@ app.post('/api/update-participant/:challengeId/:googleId', async (req, res) => {
 
     await participant.save();
 
-    console.log(`✅ Updated participant data for ${user.email} in challenge ${challengeId}: weight=${participant.lastWeight}, steps=${participant.lastStepCount}`);
+    console.log(`✅ Updated participant data for ${redactEmail(user.email)} in challenge ${challengeId}: weight=${participant.lastWeight}, steps=${participant.lastStepCount}`);
 
     res.json({ 
       message: 'Participant data updated successfully',
@@ -2146,13 +2208,13 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
     // Check if user is admin (creator)
     console.log('🔍 Debug challenge update:', {
       userGoogleId: req.body.userGoogleId,
-      challengeCreatorEmail: challenge.creatorEmail,
+      challengeCreatorEmail: redactEmail(challenge.creatorEmail),
       challengeId: challengeId,
       participants: challenge.participants
     });
     
     const user = await User.findOne({ googleId: req.body.userGoogleId });
-    console.log('🔍 Found user:', user ? { email: user.email, googleId: user.googleId } : 'User not found');
+    console.log('🔍 Found user:', user ? { email: redactEmail(user.email), googleId: user.googleId } : 'User not found');
     
     // Check if user is creator or if creatorEmail is missing, check if user is in participants
     const isCreator = user && challenge.creatorEmail && user.email === challenge.creatorEmail;
@@ -2161,16 +2223,16 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
     console.log('🔍 Authorization check:', {
       isCreator,
       isParticipant,
-      userEmail: user?.email,
-      challengeCreatorEmail: challenge.creatorEmail,
+      userEmail: redactEmail(user?.email),
+      challengeCreatorEmail: redactEmail(challenge.creatorEmail),
       participants: challenge.participants
     });
     
     if (!user || (!isCreator && !isParticipant)) {
       console.log('❌ Authorization failed:', {
         userFound: !!user,
-        userEmail: user?.email,
-        challengeCreatorEmail: challenge.creatorEmail,
+        userEmail: redactEmail(user?.email),
+        challengeCreatorEmail: redactEmail(challenge.creatorEmail),
         emailsMatch: user?.email === challenge.creatorEmail,
         isParticipant: isParticipant
       });
@@ -2221,7 +2283,7 @@ app.put('/api/challenge/:challengeId', async (req, res) => {
 
 
 // Admin endpoint to add yesterday's step point for Dylan
-app.post('/api/admin/add-yesterday-step-point', async (req, res) => {
+app.post('/api/admin/add-yesterday-step-point', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userId = '105044462574652357380'; // Dylan's Google ID
     const challengeId = '6896b45176d78ebc85d22bf7'; // Challenge ID
@@ -2260,7 +2322,11 @@ app.post('/api/admin/add-yesterday-step-point', async (req, res) => {
 });
 
 // Save user data from frontend OAuth flow
-app.post('/api/save-user', async (req, res) => {
+app.post('/api/save-user', authenticateJWT, async (req, res) => {
+  // Writes steps, weight and OAuth tokens, so only for the signed-in user.
+  if (!req.body || req.body.googleId !== req.user.googleId) {
+    return res.status(403).json({ error: 'Not allowed for this user' });
+  }
   const { googleId, name, email, picture, accessToken, refreshToken, tokenExpiry, steps, weight, date } = req.body;
   
   if (!googleId || !email) {
@@ -2311,7 +2377,7 @@ app.post('/api/save-user', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Saved user data for ${email} (${googleId}) with picture: ${picture ? 'yes' : 'no'}, steps: ${steps}, weight: ${weight}`);
+    console.log(`✅ Saved user data for ${redactEmail(email)} (${googleId}) with picture: ${picture ? 'yes' : 'no'}, steps: ${steps}, weight: ${weight}`);
     
     // Store historical data - use provided date or default to today
     if (steps !== undefined || weight !== undefined) {
@@ -2331,17 +2397,17 @@ app.post('/api/save-user', async (req, res) => {
         },
         { upsert: true }
       );
-      console.log(`📊 Stored fitness history for ${email} on ${targetDate.toISOString()}: steps=${steps}, weight=${weight}`);
+      console.log(`📊 Stored fitness history for ${redactEmail(email)} on ${targetDate.toISOString()}: steps=${steps}, weight=${weight}`);
     }
     
     // Calculate challenge points if steps and weight are provided
     let pointsUpdates = [];
     if (steps !== undefined || weight !== undefined) {
-      console.log(`🎯 Calculating points for user ${email}...`);
+      console.log(`🎯 Calculating points for user ${redactEmail(email)}...`);
       
       // Find all challenges where this user is a participant
       const userParticipations = await ChallengeParticipant.find({ userId: googleId });
-      console.log(`🔍 Found ${userParticipations.length} challenges for user ${email}`);
+      console.log(`🔍 Found ${userParticipations.length} challenges for user ${redactEmail(email)}`);
       
       for (const participation of userParticipations) {
         const challenge = await Challenge.findById(participation.challengeId);
@@ -2418,7 +2484,7 @@ app.post('/api/save-user', async (req, res) => {
           const canEarnPoint = has24HoursPassed(lastStepPointTime);
           const stepGoalNum = getStepGoal(challenge);
           
-          console.log(`🔍 Step goal check for ${email}:`, {
+          console.log(`🔍 Step goal check for ${redactEmail(email)}:`, {
             steps,
             stepGoal: stepGoalNum,
             reachedGoal: steps >= stepGoalNum,
@@ -2477,7 +2543,7 @@ app.post('/api/save-user', async (req, res) => {
         });
       }
       
-      console.log(`📊 Points updates for ${email}:`, pointsUpdates);
+      console.log(`📊 Points updates for ${redactEmail(email)}:`, pointsUpdates);
     }
     
     // Broadcast update via SSE if steps or weight changed
@@ -2501,7 +2567,7 @@ app.post('/api/save-user', async (req, res) => {
 });
 
 // Debug endpoint to check user's challenge participation
-app.get('/api/debug/user/:googleId', async (req, res) => {
+app.get('/api/debug/user/:googleId', authenticateJWT, requireAdmin, async (req, res) => {
   const { googleId } = req.params;
   try {
     const user = await User.findOne({ googleId });
@@ -2540,11 +2606,11 @@ app.get('/api/debug/user/:googleId', async (req, res) => {
 });
 
 // Debug endpoint to check if dbop1414 is properly removed from challenges
-app.get('/api/admin/check-user-status/:email', async (req, res) => {
+app.get('/api/admin/check-user-status/:email', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
-    console.log(`🔍 Checking status for user: ${email}`);
+    console.log(`🔍 Checking status for user: ${redactEmail(email)}`);
     
     // Find the user
     const user = await User.findOne({ email: email });
@@ -2629,7 +2695,7 @@ app.get('/api/admin/check-user-status/:email', async (req, res) => {
       }
     }
     
-    console.log(`📊 Status for ${email}:`, status);
+    console.log(`📊 Status for ${redactEmail(email)}:`, status);
     
     res.json(status);
     
@@ -2640,11 +2706,11 @@ app.get('/api/admin/check-user-status/:email', async (req, res) => {
 });
 
 // Debug endpoint to check dbop1414's challenge data
-app.get('/api/admin/debug-stuck-user', async (req, res) => {
+app.get('/api/admin/debug-stuck-user', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🔍 Debugging stuck user: ${userEmail}`);
+    console.log(`🔍 Debugging stuck user: ${redactEmail(userEmail)}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -2725,11 +2791,11 @@ app.get('/api/admin/debug-stuck-user', async (req, res) => {
 });
 
 // Admin endpoint to fix dbop1414's stuck challenge issue
-app.post('/api/admin/fix-stuck-user', async (req, res) => {
+app.post('/api/admin/fix-stuck-user', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🔧 Fixing stuck user: ${userEmail}`);
+    console.log(`🔧 Fixing stuck user: ${redactEmail(userEmail)}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -2758,7 +2824,7 @@ app.post('/api/admin/fix-stuck-user', async (req, res) => {
         
         // Check if user is in participants array
         if (!challenge.participants.includes(user.email)) {
-          console.log(`🔧 Adding ${user.email} to challenge participants array`);
+          console.log(`🔧 Adding ${redactEmail(user.email)} to challenge participants array`);
           challenge.participants.push(user.email);
           await challenge.save();
           actions.push(`Added user to "${challenge.name}" participants array`);
@@ -2801,7 +2867,7 @@ app.post('/api/admin/fix-stuck-user', async (req, res) => {
     const finalParticipants = await ChallengeParticipant.find({ userId: user.googleId });
     const finalChallenges = await Challenge.find({ participants: user.email });
     
-    console.log(`✅ Fixed ${userEmail}: ${finalParticipants.length} participant records, ${finalChallenges.length} challenges`);
+    console.log(`✅ Fixed ${redactEmail(userEmail)}: ${finalParticipants.length} participant records, ${finalChallenges.length} challenges`);
     
     res.json({
       message: `Successfully fixed stuck user ${userEmail}`,
@@ -2854,13 +2920,13 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
     
     for (const user of usersToCheck) {
       try {
-        console.log(`🎯 Checking step points for ${user.email} (${user.googleId})`);
+        console.log(`🎯 Checking step points for ${redactEmail(user.email)} (${user.googleId})`);
         
         // Get user's current challenges
         const userParticipations = await ChallengeParticipant.find({ userId: user.googleId });
         
         if (userParticipations.length === 0) {
-          console.log(`⚠️ No active challenges for ${user.email}`);
+          console.log(`⚠️ No active challenges for ${redactEmail(user.email)}`);
           continue;
         }
         
@@ -2881,7 +2947,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
           const challenge = await Challenge.findById(participation.challengeId);
           
           if (!challenge) {
-            console.log(`⚠️ Challenge ${participation.challengeId} not found for ${user.email} - removing orphaned participant record`);
+            console.log(`⚠️ Challenge ${participation.challengeId} not found for ${redactEmail(user.email)} - removing orphaned participant record`);
             // Delete orphaned participant record
             await ChallengeParticipant.findByIdAndDelete(participation._id);
             console.log(`🗑️ Deleted orphaned participant record for challenge ${participation.challengeId}`);
@@ -2954,15 +3020,15 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
             challengeResult.newPoints = participation.points;
             userResult.pointsEarned += 1;
             
-            console.log(`🏆 ${user.email} earned step goal point in "${challenge.name}" (${user.steps} >= ${stepGoalNum})`);
+            console.log(`🏆 ${redactEmail(user.email)} earned step goal point in "${challenge.name}" (${user.steps} >= ${stepGoalNum})`);
           } else if (!canEarnPoint && stepGoalMet) {
-            console.log(`✅ ${user.email} already got step point today for "${challenge.name}"`);
+            console.log(`✅ ${redactEmail(user.email)} already got step point today for "${challenge.name}"`);
             // Still update total points to ensure consistency
             const stepPoints = participation.stepGoalPoints || 0;
             const weightLossPoints = participation.weightLossPoints || 0;
             participation.points = stepPoints + weightLossPoints;
           } else {
-            console.log(`📊 ${user.email} hasn't reached step goal for "${challenge.name}" (${user.steps}/${stepGoalNum}) - Goal NOT met, no point awarded`);
+            console.log(`📊 ${redactEmail(user.email)} hasn't reached step goal for "${challenge.name}" (${user.steps}/${stepGoalNum}) - Goal NOT met, no point awarded`);
           }
           
           // Ensure total points are correct even if no new point was earned
@@ -2979,7 +3045,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
         results.push(userResult);
         
       } catch (error) {
-        console.error(`❌ Error processing ${user.email}:`, error);
+        console.error(`❌ Error processing ${redactEmail(user.email)}:`, error);
         results.push({
           userId: user.googleId,
           email: user.email,
@@ -3007,7 +3073,7 @@ app.post('/api/sync-step-points', authenticateJWT, async (req, res) => {
 });
 
 // Admin endpoint to manually add step point for today
-app.post('/api/admin/add-today-step-point', async (req, res) => {
+app.post('/api/admin/add-today-step-point', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { userEmail, challengeId } = req.body;
     
@@ -3015,7 +3081,7 @@ app.post('/api/admin/add-today-step-point', async (req, res) => {
       return res.status(400).json({ error: 'userEmail and challengeId are required' });
     }
     
-    console.log(`🎯 Adding today's step point for ${userEmail} in challenge ${challengeId}`);
+    console.log(`🎯 Adding today's step point for ${redactEmail(userEmail)} in challenge ${challengeId}`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -3078,7 +3144,7 @@ app.post('/api/admin/add-today-step-point', async (req, res) => {
     
     await participant.save();
     
-    console.log(`✅ Added step point for ${userEmail}: ${oldPoints} -> ${participant.points}`);
+    console.log(`✅ Added step point for ${redactEmail(userEmail)}: ${oldPoints} -> ${participant.points}`);
     
     res.json({
       message: 'Step point added successfully',
@@ -3097,11 +3163,11 @@ app.post('/api/admin/add-today-step-point', async (req, res) => {
   }
 });
 
-app.post('/api/admin/fix-session-contamination', async (req, res) => {
+app.post('/api/admin/fix-session-contamination', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const dbop1414Email = 'dbop1414@gmail.com';
     
-    console.log(`🔧 Comprehensive fix for ${dbop1414Email} challenge memberships`);
+    console.log(`🔧 Comprehensive fix for ${redactEmail(dbop1414Email)} challenge memberships`);
     
     // Find dbop1414
     const dbop1414 = await User.findOne({ email: dbop1414Email });
@@ -3124,7 +3190,7 @@ app.post('/api/admin/fix-session-contamination', async (req, res) => {
     for (const challenge of challengesWithUser) {
       console.log(`🔍 Checking challenge "${challenge.name}" (${challenge._id})`);
       console.log(`  - Admin: ${challenge.admin}`);
-      console.log(`  - Created by: ${challenge.creatorEmail || 'Unknown'}`);
+      console.log(`  - Created by: ${redactEmail(challenge.creatorEmail)}`);
       console.log(`  - Participants: ${challenge.participants.join(', ')}`);
       
       // Check if dbop1414 should legitimately be in this challenge
@@ -3192,11 +3258,11 @@ app.post('/api/admin/fix-session-contamination', async (req, res) => {
 });
 
 // Emergency endpoint to force remove dbop1414 from "test Leaderboard" challenge
-app.post('/api/admin/force-remove-from-test-leaderboard', async (req, res) => {
+app.post('/api/admin/force-remove-from-test-leaderboard', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userEmail = 'dbop1414@gmail.com';
     
-    console.log(`🚨 Force removing ${userEmail} from "test Leaderboard" challenge`);
+    console.log(`🚨 Force removing ${redactEmail(userEmail)} from "test Leaderboard" challenge`);
     
     // Find the user
     const user = await User.findOne({ email: userEmail });
@@ -3259,7 +3325,7 @@ app.use('/api/challenge', challengeRoutes);
 app.use('/api/realtime', realtimeRoutes.router);
 
 // Admin endpoint to delete ALL challenges (use with caution!)
-app.delete('/api/admin/delete-all-challenges', async (req, res) => {
+app.delete('/api/admin/delete-all-challenges', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     console.log('🗑️ ADMIN: Deleting ALL challenges and related data...');
     
@@ -3308,7 +3374,7 @@ app.delete('/api/admin/delete-all-challenges', async (req, res) => {
 
 // Admin endpoint to fix date of existing manual weight entry
 // Accepts: { userId, oldDate (YYYY-MM-DD), newDate (YYYY-MM-DD) }
-app.post('/api/admin/fix-weight-date', async (req, res) => {
+app.post('/api/admin/fix-weight-date', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const userId = req.body.userId || '105044462574652357380';
     const oldDateStr = req.body.oldDate || '2026-01-04';
@@ -3385,7 +3451,7 @@ app.post('/api/admin/fix-weight-date', async (req, res) => {
 
 // Admin endpoint to add historical weight entry
 // Accepts: { userId, weight, date (ISO string) } or uses defaults for dbop14
-app.post('/api/admin/add-historical-weight', async (req, res) => {
+app.post('/api/admin/add-historical-weight', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     // Allow parameters from request body, or use defaults for dbop14
     const userId = req.body.userId || '105044462574652357380'; // dbop14's Google ID (default)
@@ -3482,7 +3548,7 @@ app.post('/api/admin/add-historical-weight', async (req, res) => {
 });
 
 // Admin endpoint to update starting weight for a participant
-app.post('/api/admin/update-starting-weight', async (req, res) => {
+app.post('/api/admin/update-starting-weight', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const { userId, challengeId, startingWeight } = req.body;
     
@@ -3577,7 +3643,7 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+if (IS_MAIN) app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server listening at http://0.0.0.0:${PORT}`)
   console.log(`✅ CORS configured for: https://fitapp.herringm.com, https://fitappbackend.herringm.com`)
   console.log(`✅ Health check available at: http://0.0.0.0:${PORT}/api/health`)
@@ -3587,3 +3653,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   - GET /api/health`)
 })
 
+module.exports = app;
+// Exposed for tests only.
+module.exports.internals = { recalculateStepPoints, roundWeightLossPoints };

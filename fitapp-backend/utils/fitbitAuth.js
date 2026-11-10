@@ -1,3 +1,4 @@
+const { redactEmail } = require('./redact');
 /**
  * Helper function to ensure Fitbit OAuth tokens are valid and refresh proactively
  * Fitbit access tokens expire after 8 hours, refresh tokens last indefinitely
@@ -31,7 +32,7 @@ async function ensureValidFitbitTokens(user) {
   if (shouldRefresh) {
     try {
       const timeUntilExpiry = user.fitbitTokenExpiry ? Math.round((user.fitbitTokenExpiry - now) / (60 * 60 * 1000)) : 'unknown';
-      console.log(`🔄 Proactively refreshing Fitbit token for user: ${user.email} (expires in ${timeUntilExpiry} hours)`);
+      console.log(`🔄 Proactively refreshing Fitbit token for user: ${redactEmail(user.email)} (expires in ${timeUntilExpiry} hours)`);
       
       // Fitbit token refresh endpoint
       const credentials = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');

@@ -3,6 +3,8 @@ import { useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import { useChatNotifications } from '../context/ChatNotificationContext';
+import Modal from './ui/Modal';
+import Icon from './ui/Icon';
 
 /**
  * NotificationPermissionDialog - Prompts users to enable notifications after login
@@ -85,67 +87,40 @@ const NotificationPermissionDialog = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-        {/* Header */}
-        <div className="flex items-center space-x-3">
-          <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-            <svg
-              className="w-6 h-6 text-blue-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Enable Notifications
-            </h3>
-            <p className="text-sm text-gray-500">
-              Stay updated on challenge activity
-            </p>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="space-y-2">
-          <p className="text-gray-700">
-            Get notified when:
-          </p>
-          <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 ml-2">
-            <li>Members earn step points</li>
-            <li>Daily step progress updates are posted</li>
-            <li>Weight loss achievements are celebrated</li>
-            <li>New members join your challenges</li>
-          </ul>
-        </div>
-
-        {/* Actions */}
-        <div className="flex space-x-3 pt-2">
-          <button
-            onClick={handleDismiss}
-            className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Not Now
+    <Modal
+      isOpen
+      onClose={handleDismiss}
+      title="Enable notifications"
+      icon="bell"
+      size="sm"
+      footer={
+        <>
+          <button onClick={handleDismiss} className="btn btn-secondary">
+            Not now
           </button>
-          <button
-            onClick={handleEnableNotifications}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Enable Notifications
+          <button onClick={handleEnableNotifications} className="btn btn-primary">
+            <Icon name="bell" className="h-4 w-4" />
+            Enable
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="text-sm text-ink-muted">Stay updated on challenge activity. Get notified when:</p>
+      <ul className="mt-3 space-y-2 text-sm text-ink">
+        {[
+          { icon: 'target', text: 'Members earn step points' },
+          { icon: 'steps', text: 'Daily step progress updates are posted' },
+          { icon: 'trending-down', text: 'Weight loss achievements are celebrated' },
+          { icon: 'users', text: 'New members join your challenges' },
+        ].map((i) => (
+          <li key={i.text} className="flex items-center gap-3">
+            <Icon name={i.icon} className="h-4 w-4 shrink-0 text-brand-ink" />
+            {i.text}
+          </li>
+        ))}
+      </ul>
+    </Modal>
   );
 };
 
 export default NotificationPermissionDialog;
-

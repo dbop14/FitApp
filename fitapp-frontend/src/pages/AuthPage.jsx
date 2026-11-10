@@ -3,8 +3,7 @@ import { useContext, useEffect, useState } from 'react'
 import { UserContext } from '../context/UserContext'
 import GoogleLoginButton from '../components/GoogleLoginButton'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import InfoBox from '../components/ui/InfoBox'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import Icon from '../components/ui/Icon'
 import fitappLogo from '../assets/fitapp-logo.svg'
 
 /**
@@ -119,70 +118,72 @@ const AuthPage = () => {
     }
   }
 
+  const FEATURES = [
+    { icon: 'steps', text: 'Steps and workouts sync from Google Health or WHOOP' },
+    { icon: 'trophy', text: 'Compete on a live leaderboard with friends' },
+    { icon: 'chat', text: 'Group chat with a bot that cheers on your wins' },
+  ]
+
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-6" style={{ 
-      paddingTop: 'env(safe-area-inset-top)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
-      paddingLeft: 'env(safe-area-inset-left)',
-      paddingRight: 'env(safe-area-inset-right)'
-    }}>
-      <div className="max-w-md w-full">
-        {/* Auth Container */}
-        <div className="bg-blue-50 rounded-3xl shadow-2xl p-8 text-center">
-          
-          {/* Header */}
-          <div className="mb-8">
-            <div className="mx-auto mb-6" style={{ width: '81.2px', height: '81.2px' }}>
-              <img 
-                src={fitappLogo} 
-                alt="FitApp Logo" 
-                className="w-full h-full object-contain"
-              />
-            </div>
-            
-            <h1 className={unifiedDesignSystem.typography.hierarchy.appTitle + " text-blue-600 mb-3"}>
-              FitApp
-            </h1>
-            
-            <p className="text-gray-600 text-lg">
-              Join fitness challenges and track your progress with friends
-            </p>
+    <div className="flex min-h-screen flex-col bg-canvas lg:flex-row">
+      {/* Brand panel */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-blue-500 to-blue-800 px-6 pb-16 pt-[calc(2.5rem+var(--safe-area-top))] text-white lg:flex lg:w-1/2 lg:flex-col lg:justify-center lg:px-16 lg:py-16">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[rgb(255_255_255/0.08)]" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-[rgb(255_255_255/0.06)]" />
+        <div className="relative mx-auto max-w-md text-center lg:mx-0 lg:text-left">
+          <div className="mx-auto mb-5 h-20 w-20 rounded-3xl bg-[#fff] p-3 shadow-brand lg:mx-0">
+            <img src={fitappLogo} alt="FitApp logo" className="h-full w-full object-contain" />
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">FitApp</h1>
+          <p className="mt-2 text-base text-blue-100 sm:text-lg">Join fitness challenges and track your progress with friends.</p>
+          <ul className="mt-8 hidden space-y-4 lg:block">
+            {FEATURES.map((f) => (
+              <li key={f.icon} className="flex items-center gap-3 text-blue-50">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgb(255_255_255/0.14)]">
+                  <Icon name={f.icon} className="h-5 w-5" />
+                </span>
+                {f.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Sign-in card */}
+      <div className="relative z-10 -mt-10 flex flex-1 items-start justify-center px-4 pb-[calc(2rem+var(--safe-area-bottom))] lg:mt-0 lg:items-center lg:px-12">
+        <div className="card w-full max-w-md p-6 text-center sm:p-8">
+          <h2 className="text-xl font-bold text-ink">Welcome</h2>
+          <p className="mt-1 text-sm text-ink-muted">Sign in with your Google account to continue.</p>
+
+          <div className="mt-6 flex justify-center">
+            {isAuthenticating ? <LoadingSpinner /> : <GoogleLoginButton onComplete={handleCompleteLogin} />}
           </div>
 
-          {/* Authentication Section */}
-          <div className="flex justify-center">
-            {isAuthenticating ? (
-              <div className="text-center">
-                <LoadingSpinner />
-              </div>
-            ) : (
-              <GoogleLoginButton onComplete={handleCompleteLogin} />
-            )}
-          </div>
+          <ul className="mt-6 space-y-2 border-t border-line pt-5 text-left lg:hidden">
+            {FEATURES.map((f) => (
+              <li key={f.icon} className="flex items-center gap-3 text-sm text-ink-muted">
+                <Icon name={f.icon} className="h-4 w-4 shrink-0 text-brand-ink" />
+                {f.text}
+              </li>
+            ))}
+          </ul>
 
-          {/* Terms and Privacy Notice */}
-          <div className="mt-6 text-xs text-gray-600 text-center">
-            <p>
-              By signing in, you agree to our{' '}
-              <a 
-                href="/terms-of-service" 
-                className="text-blue-600 hover:text-blue-800 underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Terms of Service
-              </a>
-              {' '}and{' '}
-              <a 
-                href="/privacy-policy" 
-                className="text-blue-600 hover:text-blue-800 underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Privacy Policy
-              </a>.
-            </p>
-          </div>
+          <p className="mt-6 text-xs text-ink-muted">
+            By signing in, you agree to our{' '}
+            <a href="/terms-of-service" className="underline" target="_blank" rel="noopener noreferrer">
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a href="/privacy-policy" className="underline" target="_blank" rel="noopener noreferrer">
+              Privacy Policy
+            </a>
+            .
+          </p>
+          <p className="mt-3 text-xs text-ink-muted">
+            <a href="/home" className="underline">About FitApp</a>
+            {' · '}
+            <a href="/privacy-policy" className="underline">Privacy Policy</a>
+          </p>
         </div>
       </div>
     </div>

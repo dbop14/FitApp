@@ -1,3 +1,4 @@
+const { redactEmail } = require('../utils/redact');
 const express = require('express');
 const router = express.Router();
 const Challenge = require('../models/Challenge');
@@ -75,7 +76,8 @@ router.post('/', async (req, res) => {
       userGoogleId, // Add this to identify the admin
       picture, // Add profile picture
       userName, // Add user's actual name
-      photo // Add challenge photo URL
+      photo, // Add challenge photo URL
+      scoringMode,
     } = req.body;
 
     // Validate that end date/time is not before start date/time
@@ -104,7 +106,8 @@ router.post('/', async (req, res) => {
       participants: [creatorEmail],
       challengeCode: challengeCode || Math.random().toString(36).substring(2, 8).toUpperCase(),
       botName: botName || 'Fitness Motivator',
-      botAvatar: botAvatar || '🤖',
+      botAvatar: botAvatar || '', // the app shows a bot icon when no image URL is set
+      scoringMode: scoringMode === 'v2' ? 'v2' : 'classic',
       weighInDay: weighInDay || 'monday',
       photo: photo || null // Add challenge photo
     });
@@ -144,7 +147,7 @@ router.post('/', async (req, res) => {
           lastSync: new Date()
         });
         await user.save();
-        console.log(`✅ Created user record for challenge creator: ${creatorEmail} with name: ${user.name}`);
+        console.log(`✅ Created user record for challenge creator: ${redactEmail(creatorEmail)} with name: ${user.name}`);
       } else {
         // Update existing user record with latest info
         user.name = userName || user.name; // Update name if provided
@@ -153,7 +156,7 @@ router.post('/', async (req, res) => {
           user.picture = picture; // Update picture if provided
         }
         await user.save();
-        console.log(`✅ Updated existing user record for challenge creator: ${creatorEmail} with name: ${user.name}`);
+        console.log(`✅ Updated existing user record for challenge creator: ${redactEmail(creatorEmail)} with name: ${user.name}`);
       }
       
       // Check if participant already exists to prevent duplicates
@@ -195,9 +198,9 @@ router.post('/', async (req, res) => {
           lastStepCount: 0
         });
         await participant.save();
-        console.log(`✅ Created participant record for challenge creator: ${creatorEmail}${isFutureChallenge ? ' (future challenge, starting weight will be set on first weigh-in day)' : ''}`);
+        console.log(`✅ Created participant record for challenge creator: ${redactEmail(creatorEmail)}${isFutureChallenge ? ' (future challenge, starting weight will be set on first weigh-in day)' : ''}`);
       } else {
-        console.log(`⚠️ Participant record already exists for: ${creatorEmail}`);
+        console.log(`⚠️ Participant record already exists for: ${redactEmail(creatorEmail)}`);
       }
     } catch (participantError) {
       console.error('Error creating participant record:', participantError);

@@ -1,25 +1,26 @@
 import React from 'react'
+import LoadingSpinner from './LoadingSpinner'
+import Icon from './Icon'
 
 const DashboardStates = ({ loading, error, onRetry }) => {
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <LoadingSpinner />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="text-center py-8">
-        <p className="text-red-600 text-lg mb-2">
-          {error}
-        </p>
+      <div className="card card-pad flex flex-col items-center py-10 text-center">
+        <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+          <Icon name="alert-circle" className="h-6 w-6" />
+        </span>
+        <p className="text-sm font-medium text-red-700">{error}</p>
         {error.includes('maximum retries reached') && onRetry && (
-          <button
-            onClick={onRetry}
-            className="mt-4 px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
-          >
+          <button onClick={onRetry} className="btn btn-primary mt-4">
+            <Icon name="refresh" className="h-4 w-4" />
             Retry
           </button>
         )}

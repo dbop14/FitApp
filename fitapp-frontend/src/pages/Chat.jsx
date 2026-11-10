@@ -3,10 +3,64 @@ import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import { ChallengeContext } from '../context/ChallengeContext';
 import { useChatNotifications } from '../context/ChatNotificationContext';
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem';
 import Button from '../components/ui/Button';
 import { chatService } from '../utils/chatService';
-import MainLayout from '../layout/MainLayout';
+import PageHeader from '../components/ui/PageHeader';
+import Icon from '../components/ui/Icon';
+import Avatar from '../components/ui/Avatar';
+import EmptyState from '../components/ui/EmptyState';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import ThemeToggle from '../components/ui/ThemeToggle';
+
+// Bot / user avatar beside a message
+const MessageAvatar = ({ isBot, src, name }) =>
+  isBot && !src ? (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink" aria-hidden="true">
+      <Icon name="bot" className="h-4 w-4" />
+    </span>
+  ) : (
+    <Avatar src={src} name={name} size="sm" />
+  );
+
+const DayHeader = ({ label }) => (
+  <div className="my-8 flex items-center justify-center">
+    <span className="chip chip-neutral px-3 py-1 text-xs">{label}</span>
+  </div>
+);
+
+const ChallengeRow = ({ challenge, ended, onSelect, apiBase }) => (
+  <button
+    type="button"
+    onClick={() => onSelect(challenge)}
+    className={`list-row w-full text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2 ${ended ? 'opacity-80' : ''}`}
+  >
+    <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-blue-800">
+      {challenge.photo ? (
+        <img
+          src={`${apiBase}${challenge.photo}`}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center text-white">
+          <Icon name="trophy" className="h-6 w-6" />
+        </span>
+      )}
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate font-semibold text-ink">{challenge.name}</span>
+      <span className="block text-sm text-ink-muted">
+        {new Date(challenge.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(challenge.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      </span>
+    </span>
+    <span className={`h-2.5 w-2.5 rounded-full ${ended ? 'bg-[rgb(var(--line-strong))]' : 'bg-teal-500'}`} aria-label={ended ? 'Ended' : 'Active'} />
+    <Icon name="chevron-right" className="h-5 w-5 text-ink-subtle" />
+  </button>
+);
+
 
 const Chat = () => {
   const { user, logout } = useContext(UserContext);
@@ -654,662 +708,326 @@ const Chat = () => {
 
   if (!user) {
     return (
-      <MainLayout>
-        <div className="text-center py-12">
-          <p>Please log in to access chat.</p>
+      <>
+        <PageHeader title="Chat" />
+        <div className="page">
+          <EmptyState icon="lock" title="Please log in to access chat." />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   // Loading state while fetching challenges
   if (fetchingChallenges && !hasEverBeenReadyRef.current) {
     return (
-      <div className={unifiedDesignSystem.components.layout.appContainer.className}>
-        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <>
+        <PageHeader title="Chats" />
+        <div className="page-narrow space-y-3" aria-busy="true">
+          <div className="skeleton h-20" />
+          <div className="skeleton h-20" />
         </div>
-      </div>
+      </>
     );
   }
 
   // No challenges state
   if (userChallenges.length === 0 && completedChallenges.length === 0) {
     return (
-      <div className={unifiedDesignSystem.components.layout.appContainer.className}>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="text-blue-500 mb-4">
-              <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20" className="mx-auto">
-                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">No Active Challenges</h2>
-            <p className="text-gray-600 mb-4">You need to join or create a challenge to access the chat.</p>
-            <div className="space-x-3">
+      <>
+        <PageHeader title="Chats" />
+        <div className="page-narrow">
+          <EmptyState
+            icon="chat"
+            title="No active challenges"
+            action={
               <Button variant="primary" onClick={() => navigate('/challenges')}>
-                Join Challenge
+                <Icon name="trophy" className="h-4 w-4" />
+                Join a challenge
               </Button>
-            </div>
-          </div>
+            }
+          >
+            Join or create a challenge to chat with your group.
+          </EmptyState>
         </div>
-      </div>
+      </>
     );
   }
 
   // Chat view - when a challenge is selected
   if (viewingChat && activeChallenge) {
+    const challengeEnded = new Date(activeChallenge.endDate) < new Date();
+
     return (
-      <div className="fixed inset-0 flex flex-col bg-gray-50 overflow-hidden">
-        {/* Fixed Header - Always at top, edge-to-edge */}
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header safe-area-header--compact">
-          <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-4">
-            {/* Back Arrow Button - Top Left */}
+      <div className="fixed inset-0 flex flex-col overflow-hidden bg-canvas md:left-sidebar-rail lg:left-sidebar">
+        {/* Header */}
+        <header className="z-20 shrink-0 bg-gradient-to-r from-blue-500 to-blue-800 text-white shadow-brand safe-area-header">
+          <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-3 pb-3 sm:px-6">
             <button
               onClick={() => {
                 userManuallyClosedChatRef.current = true;
                 setViewingChat(false);
               }}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200 text-gray-600 hover:text-gray-900 flex-shrink-0 z-10"
-              aria-label="Back to Challenge List"
+              className="icon-btn-on-brand -ml-1"
+              aria-label="Back to chats"
             >
-              <svg 
-                width="24" 
-                height="24" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-                className="w-5 h-5 sm:w-6 sm:h-6"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M15 19l-7-7 7-7" 
-                />
-              </svg>
+              <Icon name="chevron-left" className="h-6 w-6" />
             </button>
-            
-            {/* Centered Header Content - Absolutely positioned for true centering */}
-            <div className="absolute left-0 right-0 flex flex-col items-center justify-center pointer-events-none">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900">
-                {activeChallenge.name}
-              </h1>
-              {new Date(activeChallenge.endDate) < new Date() && (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium flex items-center">
-                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20" className="mr-1">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    Ended {new Date(activeChallenge.endDate).toLocaleDateString()}
-                  </div>
-                  <span className="text-xs text-gray-500">(View Only)</span>
-                </div>
+            <span className="h-9 w-9 shrink-0 overflow-hidden rounded-xl bg-[rgb(255_255_255/0.16)]">
+              {activeChallenge.photo ? (
+                <img
+                  src={`${import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com'}${activeChallenge.photo}`}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center">
+                  <Icon name="trophy" className="h-5 w-5" />
+                </span>
               )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-bold text-white sm:text-lg">{activeChallenge.name}</h1>
+              <p className="truncate text-xs text-blue-100">
+                {challengeEnded
+                  ? `Ended ${new Date(activeChallenge.endDate).toLocaleDateString()} · View only`
+                  : isConnected
+                    ? 'Group chat'
+                    : 'Connecting...'}
+              </p>
             </div>
+            <ThemeToggle variant="brand" className="md:hidden" />
           </div>
-        </div>
+        </header>
 
-        {/* Messages Container - Scrollable area with padding for fixed header and input */}
-        <div 
+        {/* Messages */}
+        <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto safe-area-chat-content"
-          style={{ 
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-y',
-            overscrollBehavior: 'contain',
-            paddingBottom: new Date(activeChallenge.endDate) < new Date() 
-              ? '200px' // More space for ended challenges
-              : (isInputFocused ? '120px' : '160px')
-          }}
+          className="flex-1 overflow-y-auto"
+          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
         >
-          <div className="px-4 sm:px-6 py-2 max-w-4xl mx-auto w-full">
-            {/* Completed Challenge Notice */}
-            {new Date(activeChallenge.endDate) < new Date() && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center space-x-2 text-blue-800">
-                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm font-medium">
-                    Viewing chat history from completed challenge. This challenge ended on {new Date(activeChallenge.endDate).toLocaleDateString()}.
-                  </span>
-                </div>
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            {challengeEnded && (
+              <div className="callout callout-info mb-4">
+                <Icon name="archive" className="mt-0.5 h-5 w-5 shrink-0" />
+                <p>Chat history from a completed challenge. It ended on {new Date(activeChallenge.endDate).toLocaleDateString()}.</p>
               </div>
             )}
-            
-            <div className="space-y-4">
-              {/* No messages state */}
-              {messages.length === 0 && !loading && hasLoadedMessages && (
-                <div key="no-messages" className="text-center py-8 text-gray-500">
-                  <svg width="48" height="48" fill="currentColor" viewBox="0 0 20 20" className="mx-auto mb-3 opacity-50">
-                    <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                  </svg>
-                  <p className="text-sm">No messages yet</p>
-                  <p className="text-xs">Start the conversation!</p>
-                </div>
-              )}
-              
-              {/* Loading indicator for initial load */}
-              {loading && messages.length === 0 && !hasEverBeenReadyRef.current && (
-                <div key="loading-indicator" className="text-center py-8">
-                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                </div>
-              )}
-              
-              {/* Message count for performance */}
-              {messages.length > 50 && (
-                <div key="message-count" className="text-center text-xs text-gray-400 py-2">
-                  Showing {messages.length} messages
-                </div>
-              )}
-              
-              {/* Messages list */}
-              {messages.map((msg, index) => {
-                // Check if this is a bot message first - bot messages are never "own" messages
-                const isBotMessage = msg.isBot || false;
-                
-                // Use userId for comparison if available, fallback to sender name/email
-                // Bot messages should never be considered "own" messages, even if userId matches
-                const isOwnMessage = isBotMessage ? false : (msg.userId ? msg.userId === user.sub : (msg.sender === user.name || msg.sender === user.email));
-                
-                // Get bot avatar from challenge if it's a bot message
-                const botAvatar = activeChallenge?.botAvatar || '🤖';
-                const isBotAvatarEmoji = botAvatar && !botAvatar.startsWith('http') && !botAvatar.startsWith('/');
-                
-                // Determine the avatar to use
-                const messageAvatar = isBotMessage 
-                  ? (isBotAvatarEmoji ? null : botAvatar) // Use botAvatar URL if it's an image, otherwise null to show emoji
-                  : msg.userPicture;
-                
-                // Check if this is the first message or if it's a new day
-                const prevMessage = index > 0 ? messages[index - 1] : null;
-                const showDayHeader = !prevMessage || isDifferentDay(prevMessage.timestamp, msg.timestamp);
-                
-                // Check if message is a card type
-                const isCardMessage = msg.messageType && msg.messageType !== 'text';
-                
-                if (isCardMessage) {
-                  // Get gradient based on card type
-                  const getCardGradient = (cardType) => {
-                    const gradients = {
-                      stepGoalCard: 'bg-gradient-to-r from-green-500 to-emerald-600',
-                      dailyStepUpdateCard: 'bg-gradient-to-r from-blue-500 to-blue-600',
-                      weighInReminderCard: 'bg-gradient-to-r from-blue-500 to-blue-800', // Match dashboard card gradient
-                      weightLossCard: 'bg-gradient-to-r from-pink-500 to-rose-600',
-                      welcomeCard: 'bg-gradient-to-r from-blue-500 to-cyan-600',
-                      startReminderCard: 'bg-gradient-to-r from-orange-500 to-amber-600',
-                      winnerCard: 'bg-gradient-to-r from-yellow-500 to-orange-600',
-                      leaveCard: 'bg-gradient-to-r from-gray-500 to-gray-600'
-                    };
-                    return gradients[cardType] || 'bg-gradient-to-r from-blue-500 to-blue-600';
-                  };
 
-                  // Handle card click - navigate to leaderboard or dashboard
-                  const handleCardClick = () => {
-                    if (activeChallenge) {
-                      // Save challenge to context before navigating
-                      saveChallenge(activeChallenge);
-                      navigate('/leaderboard');
-                    }
-                  };
-                  
-                  // Handle weigh-in reminder card click - navigate to dashboard and open weight modal
-                  const handleWeighInCardClick = () => {
-                    if (activeChallenge) {
-                      // Save challenge to context before navigating
-                      saveChallenge(activeChallenge);
-                      // Navigate to dashboard with query parameter to open weight modal
-                      navigate('/dashboard?openWeightModal=true');
-                    }
-                  };
-                  
-                  // Render card based on type
-                  const renderCard = () => {
-                    const gradient = getCardGradient(msg.messageType);
-                    // For cards, always use the user's profile picture (the user mentioned in the card)
-                    const cardAvatar = msg.userPicture;
-                    const hasProfilePhoto = cardAvatar && (msg.messageType === 'stepGoalCard' || msg.messageType === 'weightLossCard' || msg.messageType === 'welcomeCard' || msg.messageType === 'winnerCard');
-                    
-                    // Check if this is a milestone card that should be clickable
-                    const isMilestoneCard = msg.messageType === 'stepGoalCard' || 
-                                           msg.messageType === 'weightLossCard' || 
-                                           msg.messageType === 'welcomeCard' || 
-                                           msg.messageType === 'winnerCard';
-                    
-                    // Check if this is a weigh-in reminder card (clickable to navigate to dashboard)
-                    const isWeighInReminderCard = msg.messageType === 'weighInReminderCard';
-                    
-                    const baseCardClasses = `w-full max-w-[80%] sm:max-w-xs lg:max-w-md aspect-[3/1] ${gradient} rounded-2xl p-3 shadow-lg flex items-center space-x-3`;
-                    const clickableClasses = (isMilestoneCard || isWeighInReminderCard) ? 'cursor-pointer hover:scale-105 transition-transform duration-200' : '';
-                    const cardClasses = `${baseCardClasses} ${clickableClasses}`;
-                    
-                    const cardProps = isMilestoneCard ? {
-                      onClick: handleCardClick
-                    } : isWeighInReminderCard ? {
-                      onClick: handleWeighInCardClick
-                    } : {};
-                    
-                    if (msg.messageType === 'stepGoalCard') {
-                      return (
-                        <div {...cardProps} className={cardClasses}>
-                          {/* Profile Photo */}
-                          <div className="flex-shrink-0">
-                            {cardAvatar ? (
-                              <img
-                                src={cardAvatar}
-                                alt={msg.cardData?.userName || 'User'}
-                                className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 border-3 border-white flex items-center justify-center">
-                                <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Card Content */}
-                          <div className="flex-1 text-white min-w-0">
-                            <div className="text-[10px] font-medium opacity-90 mb-0.5">
-                              {msg.cardData?.achievement || 'Achievement Unlocked!'}
-                            </div>
-                            <div className="text-sm font-bold truncate">
-                              {msg.cardData?.userName || 'Someone'}
-                            </div>
-                            <div className="text-xs opacity-90">
-                              {msg.cardData?.stepCount?.toLocaleString()} steps
-                            </div>
-                          </div>
-                          
-                          {/* +1 Point Badge */}
-                          <div className="flex-shrink-0">
-                            <div className="bg-white bg-opacity-25 rounded-full w-10 h-10 flex items-center justify-center border-2 border-white">
-                              <span className="text-white font-bold text-sm">+1</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Weight Loss Card
-                    if (msg.messageType === 'weightLossCard') {
-                      return (
-                        <div {...cardProps} className={cardClasses}>
-                          {hasProfilePhoto && (
-                            <div className="flex-shrink-0">
-                              {cardAvatar ? (
-                                <img
-                                  src={cardAvatar}
-                                  alt={msg.cardData?.userName || 'User'}
-                                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 border-2 border-white flex items-center justify-center">
-                                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="flex-1 text-white min-w-0">
-                            <div className="text-[10px] font-medium opacity-90 mb-0.5">
-                              Weight Loss Achievement
-                            </div>
-                            <div className="text-sm font-bold truncate">
-                              {msg.cardData?.userName || 'Someone'}
-                            </div>
-                            <div className="text-xs opacity-90">
-                              Lost {msg.cardData?.weightLost} lbs
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <div className="bg-white bg-opacity-25 rounded-full w-10 h-10 flex items-center justify-center border-2 border-white">
-                              <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Welcome Card
-                    if (msg.messageType === 'welcomeCard') {
-                      return (
-                        <div {...cardProps} className={cardClasses}>
-                          {hasProfilePhoto && (
-                            <div className="flex-shrink-0">
-                              {cardAvatar ? (
-                                <img
-                                  src={cardAvatar}
-                                  alt={msg.cardData?.userName || 'User'}
-                                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 border-2 border-white flex items-center justify-center">
-                                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="flex-1 text-white min-w-0">
-                            <div className="text-[10px] font-medium opacity-90 mb-0.5">
-                              Welcome to the Challenge
-                            </div>
-                            <div className="text-sm font-bold truncate">
-                              {msg.cardData?.userName || 'New Member'}
-                            </div>
-                            <div className="text-xs opacity-90 truncate">
-                              {msg.cardData?.challengeName || 'Challenge'}
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white opacity-75">
-                              <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                            </svg>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Winner Card
-                    if (msg.messageType === 'winnerCard') {
-                      return (
-                        <div {...cardProps} className={cardClasses}>
-                          {hasProfilePhoto && (
-                            <div className="flex-shrink-0">
-                              {cardAvatar ? (
-                                <img
-                                  src={cardAvatar}
-                                  alt={msg.cardData?.userName || 'User'}
-                                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 border-2 border-white flex items-center justify-center">
-                                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="flex-1 text-white min-w-0">
-                            <div className="text-[10px] font-medium opacity-90 mb-0.5">
-                              Challenge Winner
-                            </div>
-                            <div className="text-sm font-bold truncate">
-                              {msg.cardData?.userName || 'Winner'}
-                            </div>
-                            <div className="text-xs opacity-90">
-                              {msg.cardData?.totalPoints} points
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <div className="bg-white bg-opacity-25 rounded-full w-10 h-10 flex items-center justify-center border-2 border-white">
-                              <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Leave Card
-                    if (msg.messageType === 'leaveCard') {
-                      return (
-                        <div className={`w-full max-w-[80%] sm:max-w-xs lg:max-w-md aspect-[3/1] ${gradient} rounded-2xl p-3 shadow-lg flex items-center space-x-3`}>
-                          {hasProfilePhoto && (
-                            <div className="flex-shrink-0">
-                              {cardAvatar ? (
-                                <img
-                                  src={cardAvatar}
-                                  alt={msg.cardData?.userName || 'User'}
-                                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 border-2 border-white flex items-center justify-center">
-                                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div className="flex-1 text-white min-w-0">
-                            <div className="text-[10px] font-medium opacity-90 mb-0.5">
-                              Left the Challenge
-                            </div>
-                            <div className="text-sm font-bold truncate">
-                              {msg.cardData?.userName || 'Member'}
-                            </div>
-                            <div className="text-xs opacity-90 truncate">
-                              {msg.cardData?.challengeName || 'Challenge'}
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-white opacity-75">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Weigh-in reminder card (clickable)
-                    if (msg.messageType === 'weighInReminderCard') {
-                      return (
-                        <div {...cardProps} className={cardClasses}>
-                          <div className="text-white text-center flex-1">
-                            <div className="text-sm font-bold mb-0.5">
-                              {msg.cardData?.title || 'Weigh-In Day!'}
-                            </div>
-                            <div className="text-xs opacity-90">
-                              {msg.cardData?.subtitle || 'Log your current weight'}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Generic card for other types (dailyStepUpdateCard, startReminderCard)
-                    return (
-                      <div className={`w-full max-w-[80%] sm:max-w-xs lg:max-w-md aspect-[3/1] ${gradient} rounded-2xl p-3 shadow-lg flex items-center justify-center`}>
-                        <div className="text-white text-center">
-                          <div className="text-sm font-bold mb-0.5">
-                            {msg.cardData?.title || msg.cardData?.challengeName || 'Notification'}
-                          </div>
-                          <div className="text-xs opacity-90">
-                            {msg.cardData?.subtitle || msg.cardData?.message || ''}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  };
+            {messages.length === 0 && !loading && hasLoadedMessages && (
+              <div key="no-messages" className="flex flex-col items-center py-12 text-center text-ink-muted">
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-ink">
+                  <Icon name="chat" className="h-6 w-6" />
+                </span>
+                <p className="text-sm font-medium text-ink">No messages yet</p>
+                <p className="text-xs">Start the conversation.</p>
+              </div>
+            )}
 
+            {loading && messages.length === 0 && !hasEverBeenReadyRef.current && (
+              <div key="loading-indicator" className="flex justify-center py-10">
+                <LoadingSpinner />
+              </div>
+            )}
+
+            {messages.length > 50 && (
+              <div key="message-count" className="py-2 text-center text-xs text-ink-subtle">
+                Showing {messages.length} messages
+              </div>
+            )}
+
+            {messages.map((msg, index) => {
+              // Bot messages are never "own" messages
+              const isBotMessage = msg.isBot || false;
+              const isOwnMessage = isBotMessage ? false : (msg.userId ? msg.userId === user.sub : (msg.sender === user.name || msg.sender === user.email));
+
+              // Bot avatar: only an image URL is shown; emoji avatars render as the bot icon
+              const botAvatar = activeChallenge?.botAvatar || '';
+              const botAvatarIsImage = botAvatar.startsWith('http') || botAvatar.startsWith('/');
+              const messageAvatar = isBotMessage ? (botAvatarIsImage ? botAvatar : null) : msg.userPicture;
+
+              const prevMessage = index > 0 ? messages[index - 1] : null;
+              const showDayHeader = !prevMessage || isDifferentDay(prevMessage.timestamp, msg.timestamp);
+              const isCardMessage = msg.messageType && msg.messageType !== 'text';
+
+              if (isCardMessage) {
+                // Card styles: brand blues for points and reminders, teal accent for weight loss
+                // Each achievement has its own color. `badge` tints the small icon on the
+                // avatar (a fixed hex, so it stays readable on the white badge in dark mode).
+                const CARD_STYLE = {
+                  stepGoalCard: { bg: 'from-emerald-500 to-green-700', badge: '#047857', icon: 'target', label: 'Step goal reached' },
+                  goalBonusCard: { bg: 'from-teal-500 to-cyan-700', badge: '#0e7490', icon: 'target', label: 'Daily goal bonus' },
+                  weeklyBonusCard: { bg: 'from-violet-500 to-indigo-700', badge: '#4338ca', icon: 'calendar-check', label: 'Weekly bonus' },
+                  weightLossCard: { bg: 'from-pink-500 to-rose-700', badge: '#be123c', icon: 'trending-down', label: 'Weight loss achievement' },
+                  winnerCard: { bg: 'from-amber-500 to-orange-700', badge: '#c2410c', icon: 'crown', label: 'Challenge winner' },
+                  welcomeCard: { bg: 'from-sky-500 to-blue-700', badge: '#1d4ed8', icon: 'users', label: 'Welcome to the challenge' },
+                  weighInReminderCard: { bg: 'from-blue-500 to-blue-800', badge: '#1e40af', icon: 'scale' },
+                  dailyStepUpdateCard: { bg: 'from-cyan-500 to-blue-700', badge: '#0e7490', icon: 'steps' },
+                  startReminderCard: { bg: 'from-indigo-500 to-blue-700', badge: '#3730a3', icon: 'flag' },
+                  leaveCard: { bg: 'from-slate-500 to-slate-700', badge: '#334155', icon: 'log-out', label: 'Left the challenge' },
+                };
+                const style = CARD_STYLE[msg.messageType] || { bg: 'from-blue-500 to-blue-700', badge: '#1d4ed8', icon: 'bell' };
+
+                // Milestone cards open the leaderboard
+                const handleCardClick = () => {
+                  if (activeChallenge) {
+                    saveChallenge(activeChallenge);
+                    navigate('/leaderboard');
+                  }
+                };
+                // Weigh-in reminder opens the dashboard weight modal
+                const handleWeighInCardClick = () => {
+                  if (activeChallenge) {
+                    saveChallenge(activeChallenge);
+                    navigate('/dashboard?openWeightModal=true');
+                  }
+                };
+
+                const renderCard = () => {
+                  const cardAvatar = msg.userPicture;
+                  const isPointsCard = ['stepGoalCard', 'goalBonusCard', 'weeklyBonusCard'].includes(msg.messageType);
+                  const isMilestoneCard = isPointsCard || ['weightLossCard', 'welcomeCard', 'winnerCard'].includes(msg.messageType);
+                  const isWeighInReminderCard = msg.messageType === 'weighInReminderCard';
+                  const onClick = isMilestoneCard ? handleCardClick : isWeighInReminderCard ? handleWeighInCardClick : undefined;
+                  const showPerson = isMilestoneCard || msg.messageType === 'leaveCard';
+
+                  let eyebrow = style.label;
+                  let title = msg.cardData?.userName || 'Someone';
+                  let detail = '';
+                  let badge = null;
+
+                  if (isPointsCard) {
+                    eyebrow = msg.cardData?.achievement || style.label;
+                    detail = msg.messageType === 'weeklyBonusCard'
+                      ? `${msg.cardData?.activeDays ?? ''} active days in week ${msg.cardData?.weekNumber ?? ''}`
+                      : `${msg.cardData?.stepCount?.toLocaleString() ?? ''} steps`;
+                    // Points come from the backend; Classic step-goal cards carry none, so show a check
+                    badge = msg.cardData?.points !== undefined && msg.cardData?.points !== null
+                      ? <span className="text-sm font-bold">+{msg.cardData.points}</span>
+                      : <Icon name="check" className="h-5 w-5" strokeWidth={2.5} />;
+                  } else if (msg.messageType === 'weightLossCard') {
+                    detail = `Lost ${msg.cardData?.weightLost} lbs`;
+                    badge = <Icon name="trending-down" className="h-5 w-5" />;
+                  } else if (msg.messageType === 'welcomeCard') {
+                    title = msg.cardData?.userName || 'New member';
+                    detail = msg.cardData?.challengeName || 'Challenge';
+                  } else if (msg.messageType === 'winnerCard') {
+                    title = msg.cardData?.userName || 'Winner';
+                    detail = `${msg.cardData?.totalPoints} points`;
+                    badge = <Icon name="crown" className="h-5 w-5" />;
+                  } else if (msg.messageType === 'leaveCard') {
+                    title = msg.cardData?.userName || 'Member';
+                    detail = msg.cardData?.challengeName || 'Challenge';
+                  } else if (isWeighInReminderCard) {
+                    eyebrow = null;
+                    title = msg.cardData?.title || 'Weigh-in day';
+                    detail = msg.cardData?.subtitle || 'Log your current weight';
+                  } else {
+                    // dailyStepUpdateCard, startReminderCard and anything new
+                    eyebrow = null;
+                    title = msg.cardData?.title || msg.cardData?.challengeName || 'Notification';
+                    detail = msg.cardData?.subtitle || msg.cardData?.message || '';
+                  }
+
+                  const Tag = onClick ? 'button' : 'div';
                   return (
-                    <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
-                      {/* Day Header if needed */}
-                      {showDayHeader && (
-                        <div className="flex items-center justify-center my-6">
-                          <div className="bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-medium">
-                            {formatDayHeader(msg.timestamp)}
-                          </div>
-                        </div>
+                    <Tag
+                      type={onClick ? 'button' : undefined}
+                      onClick={onClick}
+                      className={`flex w-full max-w-sm items-center gap-3 rounded-2xl bg-gradient-to-br ${style.bg} p-3.5 text-left text-white ${
+                        onClick ? 'transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300' : ''
+                      }`}
+                    >
+                      {showPerson ? (
+                        <span className="relative shrink-0">
+                          <Avatar src={cardAvatar} name={msg.cardData?.userName} size="lg" className="ring-2 ring-[rgb(255_255_255/0.6)]" />
+                          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#fff] shadow" style={{ color: style.badge }}>
+                            <Icon name={style.icon} className="h-3.5 w-3.5" strokeWidth={2.25} />
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgb(255_255_255/0.18)]">
+                          <Icon name={style.icon} className="h-6 w-6" />
+                        </span>
                       )}
-                      
-                      {/* Card */}
-                      <div className="flex justify-center mb-2">
-                        {renderCard()}
-                      </div>
-                      
-                      {/* Text Message Below Card - Always shown as other user (gray bubble) */}
-                      <div
-                        className="flex justify-start items-end space-x-2 mb-4"
-                      >
-                        {/* Profile Photo - Always show on left */}
-                        <div className="flex-shrink-0">
-                          {messageAvatar ? (
-                            <img
-                              src={messageAvatar}
-                              alt={msg.sender}
-                              className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
-                              onError={(e) => {
-                                e.target.style.display = 'none'
-                                e.target.nextSibling.style.display = 'flex'
-                              }}
-                            />
-                          ) : null}
-                          {!messageAvatar && (
-                            <div className="w-8 h-8 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full border-2 border-gray-200 flex items-center justify-center">
-                              {isBotMessage && isBotAvatarEmoji ? (
-                                <span className="text-lg">{botAvatar}</span>
-                              ) : (
-                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="text-gray-600">
-                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Message Bubble - Always gray */}
-                        <div
-                          className="max-w-[80%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl bg-gray-100 text-gray-800"
-                        >
-                          <div className="text-xs font-medium mb-1 text-gray-500">
-                            {msg.sender ? msg.sender.split(' ')[0] : 'Bot'}
-                          </div>
-                          <div className="text-sm break-words whitespace-pre-wrap">{parseMessageLinks(msg.message)}</div>
-                          {formatTime(msg.timestamp) && (
-                            <div className="text-xs mt-1 text-gray-500">
-                              {formatTime(msg.timestamp)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </Fragment>
+                      <span className="min-w-0 flex-1">
+                        {eyebrow && <span className="block text-[11px] font-semibold uppercase tracking-wide text-[rgb(255_255_255/0.8)]">{eyebrow}</span>}
+                        <span className="block truncate text-sm font-bold">{title}</span>
+                        {detail && <span className="block truncate text-xs text-[rgb(255_255_255/0.85)]">{detail}</span>}
+                      </span>
+                      {badge && (
+                        <span className="flex h-10 min-w-[2.5rem] shrink-0 items-center justify-center rounded-full bg-[rgb(255_255_255/0.2)] px-2 ring-1 ring-[rgb(255_255_255/0.5)]">
+                          {badge}
+                        </span>
+                      )}
+                    </Tag>
                   );
-                }
-                
+                };
+
                 return (
-                <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
-                  {/* Day Header */}
-                  {showDayHeader && (
-                    <div className="flex items-center justify-center my-6">
-                      <div className="bg-gray-100 text-gray-600 px-4 py-1.5 rounded-full text-xs font-medium">
-                        {formatDayHeader(msg.timestamp)}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div
-                    className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-end space-x-2 mb-4`}
-                  >
-                  {/* Profile Photo - Only show for non-own messages */}
-                  {!isOwnMessage && (
-                    <div className="flex-shrink-0">
-                      {messageAvatar ? (
-                        <img
-                          src={messageAvatar}
-                          alt={msg.sender}
-                          className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                            e.target.nextSibling.style.display = 'flex'
-                          }}
-                        />
-                      ) : null}
-                      {!messageAvatar && (
-                        <div className="w-8 h-8 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full border-2 border-gray-200 flex items-center justify-center">
-                          {isBotMessage && isBotAvatarEmoji ? (
-                            <span className="text-lg">{botAvatar}</span>
-                          ) : (
-                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="text-gray-600">
-                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                            </svg>
+                  <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
+                    {showDayHeader && <DayHeader label={formatDayHeader(msg.timestamp)} />}
+                    <div className="my-7 flex flex-col items-center gap-2">
+                      {renderCard()}
+                      {(msg.message || formatTime(msg.timestamp)) && (
+                        <p className="max-w-sm px-2 text-center text-xs leading-relaxed text-ink-muted">
+                          {msg.message && <span className="whitespace-pre-wrap break-words">{parseMessageLinks(msg.message)}</span>}
+                          {formatTime(msg.timestamp) && (
+                            <span className="text-ink-subtle">{msg.message ? ' · ' : ''}{formatTime(msg.timestamp)}</span>
                           )}
-                        </div>
+                        </p>
                       )}
                     </div>
-                  )}
-                  
-                  {/* Message Bubble */}
-                  <div
-                    className={`max-w-[80%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
-                      isOwnMessage
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    <div className={`text-xs font-medium mb-1 ${
-                      isOwnMessage ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
-                      {msg.sender ? msg.sender.split(' ')[0] : 'Unknown'}
+                  </Fragment>
+                );
+              }
+
+              return (
+                <Fragment key={msg.id || `${msg.timestamp}-${index}`}>
+                  {showDayHeader && <DayHeader label={formatDayHeader(msg.timestamp)} />}
+                  <div className={`mb-5 flex items-end gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    {!isOwnMessage && <MessageAvatar isBot={isBotMessage} src={messageAvatar} name={msg.sender} />}
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 sm:max-w-md ${
+                        isOwnMessage
+                          ? 'rounded-br-md bg-blue-600 text-white'
+                          : 'rounded-bl-md border border-line bg-surface text-ink shadow-card'
+                      }`}
+                    >
+                      {!isOwnMessage && (
+                        <div className={`mb-1 text-xs font-semibold ${isBotMessage ? 'text-brand-ink' : 'text-ink-muted'}`}>
+                          {msg.sender ? msg.sender.split(' ')[0] : 'Unknown'}
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parseMessageLinks(msg.message)}</div>
+                      {formatTime(msg.timestamp) && (
+                        <div className={`mt-1.5 text-[11px] ${isOwnMessage ? 'text-blue-100' : 'text-ink-subtle'}`}>{formatTime(msg.timestamp)}</div>
+                      )}
                     </div>
-                    <div className="text-sm break-words whitespace-pre-wrap">{parseMessageLinks(msg.message)}</div>
-                    {formatTime(msg.timestamp) && (
-                      <div className={`text-xs mt-1 ${
-                        isOwnMessage ? 'text-blue-100' : 'text-gray-500'
-                      }`}>
-                        {formatTime(msg.timestamp)}
-                      </div>
-                    )}
                   </div>
-                  
-                  {/* Profile Photo for own messages - Right side */}
-                  {isOwnMessage && (
-                    <div className="flex-shrink-0">
-                      {user.picture ? (
-                        <img
-                          src={user.picture}
-                          alt={user.name}
-                          className="w-8 h-8 rounded-full object-cover border-2 border-blue-300"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                            e.target.nextSibling.style.display = 'flex'
-                          }}
-                        />
-                      ) : null}
-                      {!user.picture && (
-                        <div className="w-8 h-8 bg-gradient-to-br from-blue-300 to-blue-400 rounded-full border-2 border-blue-300 flex items-center justify-center">
-                          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="text-white">
-                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
                 </Fragment>
-              )})}
-              <div ref={messagesEndRef} style={{ minHeight: '1px', paddingBottom: '20px' }} />
-            </div>
+              );
+            })}
+            <div ref={messagesEndRef} style={{ minHeight: '1px', paddingBottom: '8px' }} />
           </div>
         </div>
 
-        {/* Message Input - Fixed above navigation bar, moves to bottom when focused */}
-        <div className={`fixed ${isInputFocused ? 'bottom-0' : 'bottom-24'} left-0 right-0 z-[1001] bg-white border-t border-gray-200 px-4 sm:px-4 ${new Date(activeChallenge.endDate) < new Date() ? 'py-3 sm:py-2' : 'py-6 sm:py-4'} shadow-lg transition-all duration-200`}>
-          <div className="max-w-4xl mx-auto">
-            {new Date(activeChallenge.endDate) < new Date() ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-center">
-                <div className="flex items-center justify-center space-x-2 text-gray-600">
-                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-xs sm:text-sm font-medium">
-                    This challenge ended on {new Date(activeChallenge.endDate).toLocaleDateString()}. 
-                    You can view the chat history but cannot send new messages.
-                  </span>
-                </div>
+        {/* Composer. On phones it sits above the tab bar, which hides while typing. */}
+        <div
+          className={`z-20 shrink-0 border-t border-line bg-surface px-3 py-3 sm:px-6 md:mb-0 md:pb-3 ${
+            isInputFocused ? 'mb-0 pb-[calc(0.75rem+var(--safe-area-bottom))]' : 'mb-[calc(4rem+var(--safe-area-bottom))]'
+          }`}
+        >
+          <div className="mx-auto max-w-4xl">
+            {challengeEnded ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl bg-surface-2 px-4 py-2.5 text-center text-xs font-medium text-ink-muted sm:text-sm">
+                <Icon name="lock" className="h-4 w-4 shrink-0" />
+                <span>This challenge ended on {new Date(activeChallenge.endDate).toLocaleDateString()}. You can read the history but not send new messages.</span>
               </div>
             ) : (
-              <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex space-x-2">
+              <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex items-center gap-2">
                 <input
                   ref={inputRef}
                   type="text"
@@ -1317,24 +1035,20 @@ const Chat = () => {
                   onChange={(e) => setNewMessage(e.target.value)}
                   onFocus={() => setIsInputFocused(true)}
                   onBlur={() => setIsInputFocused(false)}
-                  placeholder="Type your message..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                  placeholder="Message"
+                  className="input flex-1 rounded-full px-4 text-base"
                   style={{ fontSize: '16px' }}
                   disabled={!isConnected || saving}
+                  aria-label="Message"
                 />
-                <Button
+                <button
                   type="submit"
                   disabled={!newMessage.trim() || !isConnected || saving}
-                  size="md"
-                  className="flex-shrink-0"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Send message"
                 >
-                  <span className="hidden sm:inline">Send</span>
-                  <span className="sm:hidden">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                    </svg>
-                  </span>
-                </Button>
+                  <Icon name="send" className="h-5 w-5" />
+                </button>
               </form>
             )}
           </div>
@@ -1343,177 +1057,44 @@ const Chat = () => {
     );
   }
 
-  // Challenge list view - main screen with navigation
+  // Challenge list view
+  const apiBase = import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Fixed Header - Always at top, edge-to-edge */}
-      <div className="fixed top-0 left-0 right-0 z-[100] bg-white border-b border-gray-200 shadow-sm safe-area-header">
-        <div className="relative flex items-center max-w-4xl mx-auto px-4 sm:px-6 py-4">
+    <>
+      <PageHeader title="Chats" subtitle="Pick a challenge to open its group chat" />
 
-          
-          {/* Centered Header Content - Absolutely positioned for true centering */}
-          <div className="absolute left-0 right-0 flex flex-col items-center justify-center pointer-events-none">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">
-              Challenge Chats
-            </h1>
-            <p className="text-sm text-gray-500">Select a challenge to start chatting</p>
-          </div>
-        </div>
+      <div className="page-narrow space-y-6">
+        {userChallenges.length > 0 && (
+          <section aria-labelledby="chats-active">
+            <h2 id="chats-active" className="section-title mb-2 px-1">Active</h2>
+            <div className="card list-divided overflow-hidden">
+              {userChallenges.map((challenge) => (
+                <ChallengeRow key={challenge._id} challenge={challenge} onSelect={handleChallengeSelect} apiBase={apiBase} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {completedChallenges.length > 0 && (
+          <section aria-labelledby="chats-completed">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <h2 id="chats-completed" className="section-title">Completed</h2>
+              <button onClick={toggleCompletedChallenges} className="btn btn-sm btn-ghost" aria-expanded={showCompletedChallenges}>
+                {showCompletedChallenges ? 'Hide' : 'Show'} ({completedChallenges.length})
+                <Icon name="chevron-down" className={`h-4 w-4 transition-transform ${showCompletedChallenges ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            {showCompletedChallenges && (
+              <div className="card list-divided overflow-hidden">
+                {completedChallenges.map((challenge) => (
+                  <ChallengeRow key={challenge._id} challenge={challenge} ended onSelect={handleChallengeSelect} apiBase={apiBase} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
-
-      {/* Navigation Bar */}
-      <MainLayout>
-        <div className="min-h-screen safe-area-content">
-          {/* Challenge List - Takes remaining space */}
-          <div className="flex-1 overflow-y-auto px-1 sm:px-6 py-4">
-            {/* Active Challenges Section */}
-            {userChallenges.length > 0 && (
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                  Active Challenges
-                </h2>
-                <div className="space-y-3">
-                  {userChallenges.map((challenge) => (
-                    <div
-                      key={challenge._id}
-                      onClick={() => handleChallengeSelect(challenge)}
-                      className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200 cursor-pointer"
-                    >
-                      <div className="flex items-center space-x-4">
-                        {/* Challenge Photo */}
-                        <div className="flex-shrink-0">
-                          {challenge.photo ? (
-                            <img
-                              src={`${import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com'}${challenge.photo}`}
-                              alt={challenge.name}
-                              className="w-16 h-16 rounded-lg object-cover border border-gray-200"
-                              onError={(e) => {
-                                e.target.style.display = 'none'
-                                e.target.nextSibling.style.display = 'flex'
-                              }}
-                            />
-                          ) : null}
-                          {!challenge.photo && (
-                            <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg border border-gray-200 flex items-center justify-center">
-                              <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-blue-600">
-                                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Challenge Info */}
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-800 mb-1">{challenge.name}</h3>
-                          <div className="text-sm text-gray-500">
-                            <span>{new Date(challenge.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(challenge.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Status Indicator */}
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="text-gray-400">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Completed Challenges Section */}
-            {completedChallenges.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
-                    Completed Challenges
-                  </h2>
-                  <button
-                    onClick={toggleCompletedChallenges}
-                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200"
-                  >
-                    {showCompletedChallenges ? 'Hide' : 'Show'} ({completedChallenges.length})
-                  </button>
-                </div>
-                
-                {showCompletedChallenges && (
-                  <div className="space-y-3">
-                    {completedChallenges.map((challenge) => (
-                      <div
-                        key={challenge._id}
-                        onClick={() => handleChallengeSelect(challenge)}
-                        className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200 cursor-pointer opacity-75 hover:opacity-100"
-                      >
-                        <div className="flex items-center space-x-4">
-                          {/* Challenge Photo */}
-                          <div className="flex-shrink-0">
-                            {challenge.photo ? (
-                              <img
-                                src={`${import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com'}${challenge.photo}`}
-                                alt={challenge.name}
-                                className="w-16 h-16 rounded-lg object-cover border border-gray-200"
-                                onError={(e) => {
-                                  e.target.style.display = 'none'
-                                  e.target.nextSibling.style.display = 'flex'
-                                }}
-                              />
-                            ) : null}
-                            {!challenge.photo && (
-                              <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border border-gray-200 flex items-center justify-center">
-                                <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="text-gray-600">
-                                  <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Challenge Info */}
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-800 mb-1">{challenge.name}</h3>
-                            <div className="text-sm text-gray-500">
-                              <span>{new Date(challenge.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(challenge.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Status Indicator */}
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="text-gray-400">
-                              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Empty State */}
-            {userChallenges.length === 0 && completedChallenges.length === 0 && !fetchingChallenges && (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">
-                  <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20" className="mx-auto">
-                    <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-600 mb-2">No Challenges Found</h3>
-                <p className="text-gray-500 mb-4">You haven't joined any challenges yet.</p>
-                <Button variant="primary" onClick={() => navigate('/challenges')}>
-                  Join a Challenge
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </MainLayout>
-    </div>
+    </>
   );
 };
 

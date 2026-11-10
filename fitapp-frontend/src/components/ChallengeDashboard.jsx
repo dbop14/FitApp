@@ -6,9 +6,8 @@ import ChallengeInfoModal from './ChallengeInfoModal'
 import LeaderboardList from './ui/LeaderboardList'
 import DashboardStates from './ui/DashboardStates'
 import { DEFAULT_AVATAR, API_BASE_URL } from '../utils/constants'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import Icon from './ui/Icon'
 import { useLeaderboard } from '../hooks/useLeaderboard'
-import './ui/LeaderboardStyles.css'
 
 const ChallengeDashboard = () => {
   const { challenge, clearChallenge } = useChallenge()
@@ -60,7 +59,12 @@ const ChallengeDashboard = () => {
         startWeight: startWeight,
         currentWeight: currentWeight,
         weightLossPercentage: weightLossPercentage,
-        isCurrentUser: participant.userId === user?.sub
+        isCurrentUser: participant.userId === user?.sub,
+        // Points v2 (absent for Classic)
+        scoringMode: participant.scoringMode || 'classic',
+        breakdown: participant.breakdown || null,
+        today: participant.today || null,
+        weeks: participant.weeks || []
       }
     })
   })()
@@ -76,9 +80,6 @@ const ChallengeDashboard = () => {
       setError(null)
     }
   }, [leaderboardError])
-
-  // Design system tokens
-  const { components, spacing, layout } = unifiedDesignSystem
 
   // Handle challenge updates - integrated with Leaderboard.jsx challenge management
   const handleChallengeUpdate = async (updatedData) => {
@@ -155,54 +156,28 @@ const ChallengeDashboard = () => {
   // Sort participants by total points (descending) - matching Leaderboard.jsx data flow
   const leaderboard = [...participantsData].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
 
-  // Show warning for local challenges (matching Leaderboard.jsx pattern)
-  const isLocalChallenge = !challenge?._id
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Loading and Error States */}
       <DashboardStates loading={loading} error={error} onRetry={handleRetry} />
-
-      {/* Local Challenge Warning */}
-      {isLocalChallenge && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
-          <p className="text-yellow-800 text-sm">
-            ⚠️ This is a local challenge. To see live leaderboard data, create a new challenge in the backend.
-          </p>
-          <button
-            onClick={() => {
-              clearChallenge()
-            }}
-            className="mt-3 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          >
-            Create New Backend Challenge
-          </button>
-        </div>
-      )}
 
       {/* Leaderboard - Only show when not loading and no error */}
       {!loading && !error && (
         <>
           {leaderboard.length > 0 ? (
-            <LeaderboardList
-              participants={leaderboard}
-              currentUserId={user?.sub}
-              onCardTap={handleCardTap}
-            />
+            <LeaderboardList participants={leaderboard} currentUserId={user?.sub} onCardTap={handleCardTap} />
           ) : (
-            <div className="text-center py-12">
-              <div className="bg-white rounded-2xl p-8 shadow-lg">
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                  No Participants Yet
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  This challenge doesn't have any participants yet. Be the first to join!
+            <div className="card card-pad flex flex-col items-center py-10 text-center">
+              <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand-ink">
+                <Icon name="users" className="h-7 w-7" />
+              </span>
+              <h3 className="text-lg font-semibold text-ink">No participants yet</h3>
+              <p className="mt-1 text-sm text-ink-muted">This challenge doesn't have any participants yet. Share the code to invite friends.</p>
+              {challenge?.challengeCode && (
+                <p className="mt-4 rounded-xl bg-surface-2 px-4 py-2 font-mono text-lg font-semibold tracking-widest text-ink">
+                  {challenge.challengeCode}
                 </p>
-                <div className="text-sm text-gray-500">
-                  <p>• Challenge Code: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{challenge?.challengeCode}</span></p>
-                  <p>• Share this code with friends to invite them</p>
-                </div>
-              </div>
+              )}
             </div>
           )}
         </>

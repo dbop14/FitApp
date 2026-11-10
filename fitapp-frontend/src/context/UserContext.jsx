@@ -64,10 +64,13 @@ export const UserProvider = ({ children }) => {
       console.log('🔑 Regenerating JWT token for existing session...');
       
       const apiUrl = import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
+      // The backend only re-issues a token in exchange for the previous one
+      const previousToken = localStorage.getItem('fitapp_jwt_token');
       const response = await fetch(`${apiUrl}/api/auth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(previousToken ? { Authorization: `Bearer ${previousToken}` } : {}),
         },
         body: JSON.stringify({
           googleId: userData.sub,
@@ -154,13 +157,25 @@ export const UserProvider = ({ children }) => {
               console.log('✅ Login session valid and extended - user won\'t need to login again for 30 days')
               
               // Check if JWT token is expired - if so, regenerate it
+              let sessionUsable = true
               if (isJWTTokenExpired()) {
                 console.log('⚠️ JWT token expired, regenerating it silently...')
-                await regenerateJWTToken(userData)
+                const newToken = await regenerateJWTToken(userData)
+                if (!newToken) {
+                  // The backend refused to re-issue (token too old or signed with an
+                  // old secret): send the user back through Google sign-in.
+                  console.log('⚠️ Could not renew session, signing out')
+                  ;['fitapp_user', 'fitapp_access_token', 'fitapp_access_token_expiry',
+                    'fitapp_jwt_token', 'fitapp_jwt_expiry', 'fitapp_last_login'
+                  ].forEach((key) => localStorage.removeItem(key))
+                  setUser(null)
+                  sessionUsable = false
+                }
               } else {
                 console.log('✅ JWT token is still valid')
               }
-              
+
+              if (sessionUsable) {
               // Set user data
               setUser(userData)
               
@@ -169,6 +184,7 @@ export const UserProvider = ({ children }) => {
                 console.log('✅ User has valid Google Fit permissions, no need to request them again')
               } else {
                 console.log('⚠️ User logged in but Google Fit permissions expired or missing')
+              }
               }
             } else if (!lastLoginTime) {
               // First time loading - set login timestamp and user data
@@ -265,7 +281,7 @@ export const UserProvider = ({ children }) => {
           const apiUrl = getApiUrl()
           const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` },
             body: JSON.stringify({
               googleId: userData.sub,
               name: userData.name,
@@ -344,7 +360,9 @@ export const UserProvider = ({ children }) => {
     
     try {
       const apiUrl = getApiUrl()
-      const response = await fetch(`${apiUrl}/api/auth/refresh-google-fit-token/${storedUser.sub}`)
+      const response = await fetch(`${apiUrl}/api/auth/refresh-google-fit-token/${storedUser.sub}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` }
+      })
       
       if (response.ok) {
         const result = await response.json()
@@ -378,6 +396,12 @@ export const UserProvider = ({ children }) => {
   // Request Google Fit permissions when needed
   const requestGoogleFitPermissions = () => {
     return new Promise((resolve, reject) => {
+      // Google Fit is legacy: only users already on it may be asked for it.
+      const currentSource = user?.dataSource || JSON.parse(localStorage.getItem('fitapp_user') || '{}')?.dataSource
+      if (currentSource && currentSource !== 'google-fit') {
+        reject(new Error('Google Fit is not this user\'s data source'))
+        return
+      }
       // Check if user already has valid permissions
       if (hasValidGoogleFitPermissions()) {
         const token = localStorage.getItem('fitapp_access_token')
@@ -452,7 +476,7 @@ export const UserProvider = ({ children }) => {
                   const apiUrl = getApiUrl()
                   const saveResponse = await fetch(`${apiUrl}/api/save-user`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token') || ''}` },
                     body: JSON.stringify({
                       googleId: storedUser.sub,
                       name: storedUser.name,
@@ -539,8 +563,9 @@ export const UserProvider = ({ children }) => {
       let syncedData = false;
       const dataSource = user?.dataSource || 'google-fit';
       
-      // Check user's data source preference
-      if (dataSource === 'fitbit') {
+      // Check user's data source preference. Server-synced sources (Fitbit,
+      // Google Health) are pulled by the backend; only Google Fit syncs in the browser.
+      if (dataSource === 'fitbit' || dataSource === 'google-health' || dataSource === 'whoop') {
         // For Fitbit, use backend API which handles Fitbit sync
         try {
           if (!silent) console.log('🔄 Syncing Fitbit data via backend...');
@@ -611,7 +636,7 @@ export const UserProvider = ({ children }) => {
         if (stepPointResult?.summary?.totalPointsAwarded > 0) {
           console.log(`🎉 Auto-refresh earned ${stepPointResult.summary.totalPointsAwarded} point(s)!`);
         }
-        const dataSourceName = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit';
+        const dataSourceName = dataSource === 'fitbit' ? 'Fitbit' : dataSource === 'google-health' ? 'Google Health' : dataSource === 'whoop' ? 'WHOOP' : 'Google Fit';
         console.log(`📊 Auto-refresh complete: ${dataSourceName} ${syncedData ? 'synced' : 'skipped'}, step points checked`);
       }
       
@@ -630,7 +655,7 @@ export const UserProvider = ({ children }) => {
       
       // For Fitbit, always try to sync (backend handles token refresh)
       // For Google Fit, check if user has valid permissions
-      const shouldSync = dataSource === 'fitbit' || hasValidGoogleFitPermissions();
+      const shouldSync = dataSource === 'fitbit' || dataSource === 'google-health' || dataSource === 'whoop' || hasValidGoogleFitPermissions();
       
       if (hasNoFitnessData && shouldSync) {
         // Small delay to let everything initialize, then auto-refresh

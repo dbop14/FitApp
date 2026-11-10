@@ -6,6 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1D4ED8" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Apply the saved theme before first paint (see src/context/ThemeContext.jsx)
+      (function () {
+        try {
+          var pref = localStorage.getItem('fitapp-theme') || 'system';
+          var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0A0F1C');
+          }
+        } catch (e) {}
+      })();
+    </script>
     
     <!-- iOS PWA meta tags - REQUIRED for push notifications -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -43,7 +56,7 @@
     <!-- Fallback for other devices -->
     <link rel="apple-touch-startup-image" href="/Android Splash.png" />
     <title>FitApp - Fitness Challenge Application</title>
-    <meta name="description" content="FitApp is a fitness challenge application that helps users track their fitness progress, participate in fitness competitions with friends, and stay motivated through social fitness challenges. The application automatically syncs with Google Fit to track daily steps and weight measurements." />
+    <meta name="description" content="FitApp is a fitness challenge application that helps users track their fitness progress, participate in fitness competitions with friends, and stay motivated through social fitness challenges. The application syncs with Google Health or WHOOP to track daily steps, activity and weight." />
     
     <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>

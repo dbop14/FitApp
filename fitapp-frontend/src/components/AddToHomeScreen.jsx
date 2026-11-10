@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './ui/Icon';
 
 const isIos = () => {
   if (typeof navigator === 'undefined') return false;
@@ -79,85 +80,41 @@ const AddToHomeScreen = () => {
   if (!shouldShow) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 16,
-      left: 16,
-      right: 16,
-      background: 'rgba(15,23,42,0.95)',
-      color: 'white',
-      padding: '12px 14px',
-      borderRadius: 12,
-      boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-      zIndex: 9999,
-      backdropFilter: 'blur(6px)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '8px'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Install FitApp</div>
-          <div style={{ fontSize: 14, lineHeight: 1.4 }}>
+    <div
+      className="fixed inset-x-3 bottom-[calc(4.5rem+var(--safe-area-bottom))] z-[1050] mx-auto max-w-md rounded-2xl border border-line bg-surface p-4 shadow-lift md:bottom-4 md:left-auto md:right-4"
+      role="dialog"
+      aria-label="Install FitApp"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+          <Icon name="smartphone" className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-ink">Install FitApp</p>
+          <p className="mt-0.5 text-sm text-ink-muted">
             {platform === 'ios' ? (
               <>
                 Open the Share menu
-                <span style={{ padding: '0 4px' }}>⬆️</span>
-                and tap <strong>Add to Home Screen</strong>.
+                <Icon name="share" className="mx-1 inline h-4 w-4 align-text-bottom" label="Share" />
+                and tap <strong className="text-ink">Add to Home Screen</strong>.
               </>
             ) : (
-              <>
-                Add FitApp to your home screen for a better experience.
-              </>
+              'Add FitApp to your home screen for a better experience.'
             )}
-          </div>
+          </p>
+          {platform === 'android' && promptEvent && (
+            <button onClick={handleInstall} className="btn btn-sm btn-primary mt-3">
+              <Icon name="download" className="h-4 w-4" />
+              Install now
+            </button>
+          )}
         </div>
-        <button
-          onClick={handleDismiss}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            marginLeft: '8px',
-            fontSize: '18px',
-            lineHeight: 1,
-            opacity: 0.7,
-            transition: 'opacity 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.opacity = '1'}
-          onMouseLeave={(e) => e.target.style.opacity = '0.7'}
-          aria-label="Dismiss"
-        >
-          ×
+        <button onClick={handleDismiss} className="icon-btn -mr-2 -mt-2" aria-label="Dismiss">
+          <Icon name="x" className="h-5 w-5" />
         </button>
       </div>
-      {platform === 'android' && promptEvent && (
-        <button
-          onClick={handleInstall}
-          style={{
-            background: 'rgba(14, 165, 233, 0.9)',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: 8,
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: 14,
-            marginTop: '4px',
-            transition: 'background 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.background = 'rgba(14, 165, 233, 1)'}
-          onMouseLeave={(e) => e.target.style.background = 'rgba(14, 165, 233, 0.9)'}
-        >
-          Install Now
-        </button>
-      )}
     </div>
   );
 };
 
 export default AddToHomeScreen;
-
-

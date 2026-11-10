@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { fetchWithAuth, getApiUrl } from '../utils/apiService'
+import Modal from './ui/Modal'
+import Icon from './ui/Icon'
+import LoadingSpinner from './ui/LoadingSpinner'
 
 /**
  * WeightInputModal Component
@@ -17,13 +20,18 @@ import { fetchWithAuth, getApiUrl } from '../utils/apiService'
  * @param {function} onWeightSubmitted - Callback when weight is successfully submitted
  * @param {object} user - Current user object (includes dataSource: 'google-fit' | 'fitbit')
  */
+// Where a pre-filled weight came from. WHOOP weight is not used, so WHOOP users
+// see their last logged weight ('history').
+const WEIGHT_SOURCE_LABELS = { 'google-fit': 'Google Fit', fitbit: 'Fitbit', 'google-health': 'Google Health', history: 'your last weigh-in' }
+
 const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user }) => {
   const [weight, setWeight] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [isWeighInDay, setIsWeighInDay] = useState(false)
-  const [weightSource, setWeightSource] = useState(null) // 'google-fit' | 'fitbit' | 'manual'
+  const [weightSource, setWeightSource] = useState(null) // a WEIGHT_SOURCE_LABELS key, or 'manual'
+  const isPrefilled = Boolean(weightSource && weightSource !== 'manual')
 
   // Check if today is a weigh-in day (including first weigh-in day for future challenges)
   useEffect(() => {
@@ -95,14 +103,16 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
     setLoading(true)
     setError(null)
     const dataSource = user?.dataSource || 'google-fit'
-    const sourceLabel = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'
+    // Weight comes from Google Fit (legacy) or Google Health; WHOOP weight is not
+    // used, so WHOOP and no-source users get their last logged weight.
+    const sourceLabel = WEIGHT_SOURCE_LABELS[dataSource] || 'your last weigh-in'
 
     try {
       const apiUrl = getApiUrl()
       let mostRecentWeight = null
 
-      if (dataSource === 'fitbit') {
-        // Fitbit: GET userdata triggers Fitbit sync and returns steps/weight
+      if (dataSource !== 'google-fit') {
+        // Server-synced sources: GET userdata syncs (when possible) and returns the stored weight
         const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`)
         if (response.ok) {
           const data = await response.json()
@@ -131,7 +141,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
         }
       }
 
-      const weightSourceKey = dataSource === 'fitbit' ? 'fitbit' : 'google-fit'
+      const weightSourceKey = WEIGHT_SOURCE_LABELS[dataSource] ? dataSource : 'history'
       if (mostRecentWeight && mostRecentWeight > 0) {
         setWeight(mostRecentWeight.toFixed(1))
         setWeightSource(weightSourceKey)
@@ -144,7 +154,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
       console.error('Error fetching weight:', err)
       if (user?.weight && user.weight > 0) {
         setWeight(user.weight.toFixed(1))
-        setWeightSource(dataSource === 'fitbit' ? 'fitbit' : 'google-fit')
+        setWeightSource(WEIGHT_SOURCE_LABELS[dataSource] ? dataSource : 'history')
       } else {
         setWeight('')
         setWeightSource(null)
@@ -217,131 +227,96 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
   // Only show modal on weigh-in days
   if (!isOpen || !isWeighInDay) return null
 
+  const weightValid = weight.trim() && !isNaN(parseFloat(weight)) && parseFloat(weight) > 0
+
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center z-[60] p-4" 
-      style={{ alignItems: 'center' }}
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-y-auto relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">
-              Confirm Your Weight
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              aria-label="Close modal"
-            >
-              <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
+    <Modal
+      isOpen
+      onClose={submitting ? undefined : onClose}
+      title="Confirm your weight"
+      icon="scale"
+      footer={
+        !loading && (
+          <>
+            <button onClick={onClose} className="btn btn-secondary" disabled={submitting}>
+              Cancel
             </button>
+            <button onClick={handleSubmit} disabled={!weightValid || submitting} className="btn btn-primary">
+              <Icon name="check" className="h-4 w-4" />
+              {submitting ? 'Confirming...' : 'Confirm weight'}
+            </button>
+          </>
+        )
+      }
+    >
+      {challenge && (
+        <div className="callout callout-info mb-4">
+          <Icon name="trophy" className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-semibold">{challenge.name}</p>
+            {challenge.weighInDay && (
+              <p className="opacity-90">
+                Weekly weigh-in day: {challenge.weighInDay.charAt(0).toUpperCase() + challenge.weighInDay.slice(1)}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <LoadingSpinner />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {isPrefilled && weight && (
+            <div className="callout callout-success">
+              <Icon name="check-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Most recent weight from {WEIGHT_SOURCE_LABELS[weightSource] || 'your last weigh-in'}</p>
+                <p className="opacity-90">Confirm it, or edit it if it's not right.</p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="label" htmlFor="weigh-in-weight">
+              Your weight (lbs)
+            </label>
+            <input
+              id="weigh-in-weight"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={weight}
+              onChange={(e) => {
+                setWeight(e.target.value)
+                if (isPrefilled) {
+                  setWeightSource('manual')
+                }
+              }}
+              placeholder="e.g. 154.5"
+              className="input text-lg"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSubmit()
+              }}
+            />
+            <p className="mt-1.5 text-sm text-ink-muted">
+              {isPrefilled ? "Confirm this weight or edit it if it's not accurate." : 'Enter your current weight in pounds.'}
+            </p>
           </div>
 
-          {/* Challenge Info */}
-          {challenge && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-800 font-medium mb-1">
-                Challenge: {challenge.name}
-              </p>
-              {challenge.weighInDay && (
-                <p className="text-xs text-blue-600">
-                  Weekly weigh-in day: {challenge.weighInDay.charAt(0).toUpperCase() + challenge.weighInDay.slice(1)}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Loading State */}
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          )}
-
-          {/* Weight Confirmation Form */}
-          {!loading && (
-            <div className="space-y-4">
-              {(weightSource === 'google-fit' || weightSource === 'fitbit') && weight && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-green-800 font-medium mb-1">
-                    ✓ Most recent weight from {weightSource === 'fitbit' ? 'Fitbit' : 'Google Fit'}
-                  </p>
-                  <p className="text-xs text-green-600">
-                    This is your most recent weight. Please confirm or edit if needed.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Your Weight (lbs)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={weight}
-                  onChange={(e) => {
-                    setWeight(e.target.value)
-                    if (weightSource === 'google-fit' || weightSource === 'fitbit') {
-                      setWeightSource('manual')
-                    }
-                  }}
-                  placeholder="e.g., 154.5"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoFocus
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSubmit()
-                    }
-                  }}
-                />
-                <p className="text-sm text-gray-600 mt-1">
-                  {(weightSource === 'google-fit' || weightSource === 'fitbit')
-                    ? 'Confirm this weight or edit if it\'s not accurate.'
-                    : 'Enter your current weight in pounds.'}
-                </p>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              )}
-
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={onClose}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-md font-semibold transition-colors"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={!weight.trim() || isNaN(parseFloat(weight)) || parseFloat(weight) <= 0 || submitting}
-                  className={`flex-1 py-3 px-4 rounded-md font-semibold transition-colors ${
-                    weight.trim() && !isNaN(parseFloat(weight)) && parseFloat(weight) > 0 && !submitting
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  {submitting ? 'Confirming...' : 'Confirm Weight'}
-                </button>
-              </div>
+          {error && (
+            <div className="callout callout-danger" role="alert">
+              <Icon name="alert-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>{error}</p>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   )
 }
 
 export default WeightInputModal
-

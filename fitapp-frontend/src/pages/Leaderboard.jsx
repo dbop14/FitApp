@@ -7,7 +7,11 @@ import ChallengeForm from '../components/ChallengeForm'
 import ChallengeDashboard from '../components/ChallengeDashboard'
 import ChallengeInfoModal from '../components/ChallengeInfoModal'
 import Button from '../components/ui/Button'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import PageHeader from '../components/ui/PageHeader'
+import Icon from '../components/ui/Icon'
+import Modal from '../components/ui/Modal'
+import EmptyState from '../components/ui/EmptyState'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { API_BASE_URL } from '../utils/constants'
 import { getApiUrl, fetchWithAuth } from '../utils/apiService'
 
@@ -369,323 +373,198 @@ const Leaderboard = () => {
     setShowManagerModal(false);
   };
 
+  const startingWeightValid =
+    startingWeight.trim() && !isNaN(parseFloat(startingWeight)) && parseFloat(startingWeight) > 0
+
   return (
     <>
-      {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleBackToChallenges}
-            className="p-2 rounded-full hover:bg-blue-600 transition-colors duration-200"
-            aria-label="Back to Challenges"
-          >
-            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-white">
-            FitApp
-          </h1>
-          {activeChallenge ? (
+      <PageHeader
+        title={activeChallenge ? activeChallenge.name : 'Leaderboard'}
+        subtitle={activeChallenge ? 'Leaderboard' : undefined}
+        back={handleBackToChallenges}
+        actions={
+          activeChallenge && (
             <button
               onClick={() => setShowManagerModal(true)}
-              className="p-2 rounded-full hover:bg-blue-600 transition-colors duration-200"
-              aria-label="Challenge settings"
+              className="icon-btn-on-brand"
+              aria-label="Challenge info and settings"
+              title="Challenge info"
             >
-              <svg 
-                width="24" 
-                height="24" 
-                fill="currentColor" 
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              >
-                <path 
-                  fillRule="evenodd" 
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" 
-                  clipRule="evenodd" 
-                />
-              </svg>
+              <Icon name="info" className="h-5 w-5" />
             </button>
-          ) : (
-            <div className="w-10"></div>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
 
-      {/* Edge-to-edge challenge photo banner (4:1 ratio) - Mobile only */}
-      {activeChallenge && (
-        <div
-          className="md:hidden w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]"
-          style={{ marginTop: 'calc(48px + var(--safe-area-top))' }}
-        >
-          <div className="relative w-full" style={{ paddingBottom: '25%' }}> {/* 4:1 aspect ratio */}
-            {/* Background image */}
-            {activeChallenge.photo ? (
-              <img
-                src={`${getApiUrl()}${activeChallenge.photo}`}
-                alt={activeChallenge.name}
-                className="absolute inset-0 w-full h-full object-cover"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                }}
-              />
-            ) : (
-              <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-blue-500 to-blue-800"></div>
+      <div className="page-narrow">
+        {/* Challenge banner */}
+        {activeChallenge && (
+          <div className="relative mb-4 overflow-hidden rounded-2xl shadow-card">
+            <div className="relative w-full pb-[30%] sm:pb-[22%]">
+              {activeChallenge.photo ? (
+                <img
+                  src={`${getApiUrl()}${activeChallenge.photo}`}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                  }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-blue-800" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-100">Leaderboard</p>
+                  <h2 className="truncate text-xl font-bold text-white drop-shadow sm:text-2xl">{activeChallenge.name}</h2>
+                </div>
+                {activeChallenge.scoringMode === 'v2' && (
+                  <span className="chip shrink-0 bg-[rgb(255_255_255/0.2)] text-white backdrop-blur">Points v2</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!activeChallenge && !showForm && (
+          checkingChallenges ? (
+            <div className="flex min-h-[50vh] items-center justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <EmptyState
+              icon="trophy"
+              title="You're not in a challenge yet"
+              action={
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button variant="primary" onClick={() => setShowForm(true)}>
+                    <Icon name="plus" className="h-4 w-4" />
+                    Create challenge
+                  </Button>
+                  <Button variant="secondary" onClick={handleJoinWithCode}>
+                    <Icon name="users" className="h-4 w-4" />
+                    Join with code
+                  </Button>
+                </div>
+              }
+            >
+              Create a new challenge or join one with a code from a friend.
+            </EmptyState>
+          )
+        )}
+
+        {showForm && !activeChallenge && <ChallengeForm onCreate={handleCreateChallenge} />}
+
+        {activeChallenge && (
+          <div className="space-y-4">
+            {/* Local challenge warning */}
+            {!activeChallenge._id && (
+              <div className="callout callout-warning">
+                <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p>This is a local challenge. To see live leaderboard data, create a new challenge in the backend.</p>
+                  <Button variant="secondary" onClick={handleClearAndCreateNew} size="sm" className="mt-3">
+                    Create new backend challenge
+                  </Button>
+                </div>
+              </div>
             )}
-            
-            {/* Overlay gradient for text readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent"></div>
-            
-            {/* Challenge name overlay - centered */}
-            <div className="absolute inset-0 flex items-center justify-center p-6">
-              <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg text-center">
-                {activeChallenge.name}
-              </h1>
-            </div>
+
+            <ChallengeDashboard />
+
+            <ChallengeInfoModal
+              isOpen={showManagerModal}
+              onClose={() => setShowManagerModal(false)}
+              challenge={activeChallenge}
+              onUpdate={handleChallengeUpdate}
+            />
           </div>
-        </div>
-      )}
-
-      {/* Desktop header with challenge name - Desktop only */}
-      {activeChallenge && (
-        <div className="hidden md:block max-w-md mx-auto bg-gray-50 safe-area-content">
-          <div className="p-6 pb-0">
-            <h1 className="text-4xl font-bold text-blue-600 leading-tight mb-6">
-              {activeChallenge.name} Leaderboard
-            </h1>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className={`p-6 pb-24 ${activeChallenge ? 'md:pt-0 safe-area-content' : 'safe-area-content'}`}
-        style={{ paddingTop: '16px' }}>
-
-      {!activeChallenge && !showForm && (
-        <div className="bg-white rounded-2xl p-8 space-y-6 text-center shadow-lg">
-          {checkingChallenges ? (
-            <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : (
-            <>
-              <p className="text-gray-700 text-lg">
-                You're not in a challenge yet. What would you like to do?
-              </p>
-              <div className="flex justify-center space-x-4">
-                <Button
-                  variant="primary"
-                  onClick={() => setShowForm(true)}
-                  size="md"
-                >
-                  ➕ Create Challenge
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleJoinWithCode}
-                  size="md"
-                >
-                  👥 Join with Code
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {showForm && !activeChallenge && (
-        <ChallengeForm onCreate={handleCreateChallenge} />
-      )}
-
-      {activeChallenge && (
-        <div className="space-y-6">
-          {/* Show warning if this is a local challenge */}
-          {!activeChallenge._id && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
-              <p className="text-yellow-800 text-sm">
-                ⚠️ This is a local challenge. To see live leaderboard data, create a new challenge in the backend.
-              </p>
-              <Button
-                variant="secondary"
-                onClick={handleClearAndCreateNew}
-                size="sm"
-                className="mt-3"
-              >
-                Create New Backend Challenge
-              </Button>
-            </div>
-          )}
-
-          <ChallengeDashboard />
-
-          <ChallengeInfoModal 
-            isOpen={showManagerModal} 
-            onClose={() => setShowManagerModal(false)}
-            challenge={activeChallenge}
-            onUpdate={handleChallengeUpdate}
-          />
-        </div>
-      )}
-
-      {/* Join with Code Modal */}
-      {showJoinCodeModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex justify-center z-[60] p-4" 
-          style={{ alignItems: 'center' }}
-          onClick={handleJoinCodeCancel}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-y-auto relative scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 focus:outline-none scroll-smooth"
-            style={{ maxHeight: 'calc(75vh - 6rem)', minHeight: '400px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 sm:p-6 flex flex-col h-full">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Join Challenge with Code 👥</h2>
-                <button
-                  onClick={handleJoinCodeCancel}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                  aria-label="Close modal"
-                >
-                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-gray-600">
-                  Enter the challenge code provided by your friend or challenge creator to join their fitness challenge.
-                </p>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Code</label>
-                  <input
-                    type="text"
-                    value={challengeCode}
-                    onChange={(e) => setChallengeCode(e.target.value)}
-                    placeholder="Enter challenge code..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleJoinCodeSubmit()
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="flex space-x-3 mt-6">
-                  <button
-                    onClick={handleJoinCodeCancel}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-md font-semibold transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleJoinCodeSubmit}
-                    disabled={!challengeCode.trim()}
-                    className={`flex-1 py-3 px-4 rounded-md font-semibold transition-colors ${
-                      challengeCode.trim() 
-                        ? 'bg-green-600 hover:bg-green-700 text-white' 
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    Join Challenge 🚀
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Starting Weight Modal */}
-      {showStartingWeightModal && validatedChallenge && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex justify-center z-[60] p-4" 
-          style={{ alignItems: 'center' }}
-          onClick={handleStartingWeightCancel}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-y-auto relative scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 focus:outline-none scroll-smooth"
-            style={{ maxHeight: 'calc(75vh - 6rem)', minHeight: '300px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 sm:p-6 flex flex-col h-full">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Enter Your Starting Weight ⚖️</h2>
-                <button
-                  onClick={handleStartingWeightCancel}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                  aria-label="Close modal"
-                >
-                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-800 font-medium mb-1">
-                    Challenge: {validatedChallenge.name}
-                  </p>
-                  <p className="text-xs text-blue-600">
-                    This weight will be used to track your progress throughout the challenge.
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Your Starting Weight (lbs) ⚖️
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={startingWeight}
-                    onChange={(e) => setStartingWeight(e.target.value)}
-                    placeholder="e.g., 154.5"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleStartingWeightSubmit()
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <p className="text-sm text-gray-600 mt-1">
-                    Enter your current weight in pounds. This will be used to track your weight loss progress.
-                  </p>
-                </div>
-
-                <div className="flex space-x-3 mt-6">
-                  <button
-                    onClick={handleStartingWeightCancel}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-md font-semibold transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleStartingWeightSubmit}
-                    disabled={!startingWeight.trim() || isNaN(parseFloat(startingWeight)) || parseFloat(startingWeight) <= 0}
-                    className={`flex-1 py-3 px-4 rounded-md font-semibold transition-colors ${
-                      startingWeight.trim() && !isNaN(parseFloat(startingWeight)) && parseFloat(startingWeight) > 0
-                        ? 'bg-green-600 hover:bg-green-700 text-white' 
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    Join Challenge 🚀
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-        </main>
+        )}
       </div>
+
+      {/* Join with code */}
+      <Modal
+        isOpen={showJoinCodeModal}
+        onClose={handleJoinCodeCancel}
+        title="Join with a code"
+        icon="users"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleJoinCodeCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleJoinCodeSubmit} disabled={!challengeCode.trim()}>
+              Join challenge
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-4 text-sm text-ink-muted">
+          Enter the challenge code from your friend or the challenge creator.
+        </p>
+        <label className="label" htmlFor="join-code">
+          Challenge code
+        </label>
+        <input
+          id="join-code"
+          type="text"
+          value={challengeCode}
+          onChange={(e) => setChallengeCode(e.target.value)}
+          placeholder="Enter challenge code"
+          className="input font-mono uppercase tracking-widest"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleJoinCodeSubmit()
+          }}
+        />
+      </Modal>
+
+      {/* Starting weight */}
+      <Modal
+        isOpen={!!(showStartingWeightModal && validatedChallenge)}
+        onClose={handleStartingWeightCancel}
+        title="Your starting weight"
+        icon="scale"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleStartingWeightCancel}>
+              Back
+            </Button>
+            <Button variant="primary" onClick={handleStartingWeightSubmit} disabled={!startingWeightValid}>
+              Join challenge
+            </Button>
+          </>
+        }
+      >
+        {validatedChallenge && (
+          <div className="callout callout-info mb-4">
+            <Icon name="trophy" className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <p className="font-semibold">{validatedChallenge.name}</p>
+              <p className="opacity-90">This weight is used to track your progress through the challenge.</p>
+            </div>
+          </div>
+        )}
+        <label className="label" htmlFor="starting-weight">
+          Starting weight (lbs)
+        </label>
+        <input
+          id="starting-weight"
+          type="number"
+          inputMode="decimal"
+          step="0.1"
+          value={startingWeight}
+          onChange={(e) => setStartingWeight(e.target.value)}
+          placeholder="e.g. 154.5"
+          className="input"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleStartingWeightSubmit()
+          }}
+        />
+        <p className="mt-2 text-sm text-ink-muted">Enter your current weight in pounds.</p>
+      </Modal>
     </>
   )
 }
