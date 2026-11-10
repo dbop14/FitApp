@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
       participants: [creatorEmail],
       challengeCode: challengeCode || Math.random().toString(36).substring(2, 8).toUpperCase(),
       botName: botName || 'Fitness Motivator',
-      botAvatar: botAvatar || '🤖',
+      botAvatar: botAvatar || '', // the app shows a bot icon when no image URL is set
       scoringMode: scoringMode === 'v2' ? 'v2' : 'classic',
       weighInDay: weighInDay || 'monday',
       photo: photo || null // Add challenge photo

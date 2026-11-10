@@ -193,7 +193,7 @@ router.post('/:challengeId/welcome/:participantName', async (req, res) => {
     const welcomeMessage = new ChatMessage({
       challengeId,
       sender: botName,
-      message: `Welcome ${participantName} to the ${challenge.name} challenge! 💪 Let's crush those fitness goals together!`,
+      message: `Welcome ${participantName} to the ${challenge.name} challenge! Let's crush those fitness goals together!`,
       isBot: true,
       timestamp: new Date()
     });
