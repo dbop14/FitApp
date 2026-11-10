@@ -5,7 +5,6 @@ import PageHeader from '../components/ui/PageHeader'
 import SettingsRow from '../components/ui/SettingsRow'
 import ThemeSelector from '../components/ui/ThemeSelector'
 import Icon from '../components/ui/Icon'
-import LoadDiagnostics from '../components/LoadDiagnostics'
 
 const DATA_SOURCE_LABELS = {
   fitbit: 'Fitbit',
@@ -61,8 +60,6 @@ const Settings = () => {
             <SettingsRow to="/terms-of-service" icon="file" tone="neutral" title="Terms of service" />
           </div>
         </section>
-
-        <LoadDiagnostics />
 
         <button type="button" onClick={handleLogout} className="btn btn-secondary btn-lg w-full text-red-600">
           <Icon name="log-out" className="h-5 w-5" />
