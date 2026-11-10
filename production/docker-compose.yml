@@ -115,6 +115,7 @@ services:
         required: false
     environment:
       - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - MONGO_URI=mongodb://mongoosedb:27017/fitapp
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
