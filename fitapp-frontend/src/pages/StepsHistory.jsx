@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { useChallenge } from '../context/ChallengeContext'
 import { fetchWithAuth, getApiUrl } from '../utils/apiService'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import PageHeader from '../components/ui/PageHeader'
+import Icon from '../components/ui/Icon'
+import BarChart from '../components/ui/BarChart'
 
 /**
  * StepsHistory Page Component
@@ -487,485 +489,164 @@ const StepsHistory = () => {
     setSelectedDay(bar)
   }
 
+  const selectedDayDate = selectedDay?.date instanceof Date ? selectedDay.date : selectedDay?.date ? new Date(selectedDay.date) : null
+  const chartBars = bars.map((bar, idx) => {
+    const d = bar.date instanceof Date ? bar.date : new Date(bar.date)
+    const kind = bar.barColor === '#9ca3af' ? 'muted' : bar.barColor === '#10b981' ? 'met' : 'under'
+    return {
+      key: d.toDateString(),
+      value: bar.steps || 0,
+      kind,
+      isToday: bar.isToday,
+      isSelected: selectedDayDate ? d.toDateString() === selectedDayDate.toDateString() : bar.isToday,
+      topLabel: d.getDate(),
+      bottomLabel: viewMode === 'W' ? d.toLocaleDateString('en-US', { weekday: 'short' }) : d.toLocaleDateString('en-US', { month: 'short' }),
+      showLabel: viewMode === 'W' || idx % 7 === 0,
+      ariaLabel: `${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}: ${(bar.steps || 0).toLocaleString()} steps`,
+    }
+  })
+  const nextDisabled = dateRangeOffset <= 0 && currentDateRange.end >= new Date()
+  const goalPct = stepGoal > 0 ? Math.min(100, Math.round((displayDay.steps / stepGoal) * 100)) : 0
+  const hasWorkouts = displayDay.effortPoints !== undefined || displayDay.strengthSessions !== undefined
+
   return (
     <>
-      {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
-        <div className="flex items-center">
-          <button
-            onClick={() => navigate(-1)}
-            className="mr-4 p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-colors text-white"
-            aria-label="Go back"
-          >
-            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="text-white">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold flex-1 text-center text-white">STEPS HISTORY</h1>
-          <div className="w-10" /> {/* Spacer for centering */}
-        </div>
-      </header>
+      <PageHeader title="Steps history" back />
 
-      <div className="w-full bg-gray-50 min-h-screen relative">
-        {/* Main content with bottom navigation offset and top padding for fixed header */}
-        <main className="px-0 py-6 pb-24 safe-area-content">
+      <div className="page">
         {loading && !hasEverBeenReadyRef.current ? (
-          <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="grid gap-4 lg:grid-cols-3" aria-busy="true">
+            <div className="skeleton h-40" />
+            <div className="skeleton h-40 lg:col-span-2" />
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Selected Day's Steps */}
-            <div className="bg-gradient-to-r from-blue-500 to-blue-800 rounded-2xl p-4 text-white shadow-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="text-xs opacity-90 mb-0.5">
-                    {displayDay.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}
-                  </div>
-                  <div className="text-2xl font-bold mb-1">{displayDay.steps.toLocaleString()}</div>
-                  <div className="text-xs opacity-75">
-                    {displayDay.isToday ? 'Steps Today' : 'Steps'}
-                  </div>
+          <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+            {/* Selected day */}
+            <div className="space-y-4">
+              <section className="card-brand p-5" aria-live="polite">
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-100">
+                  {displayDay.isToday ? 'Today' : displayDay.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-4xl font-bold tracking-tight text-white">{displayDay.steps.toLocaleString()}</span>
+                  <span className="text-sm text-blue-100">steps</span>
                 </div>
-                <div className="flex flex-col items-end text-right">
-                  <div className="text-xs opacity-90 mb-0.5">
-                    {totalStepPoints !== null ? 'TOTAL POINTS' : 'GOAL DAYS'}
-                  </div>
-                  <div className="text-2xl font-bold mb-1">
-                    {totalStepPoints !== null ? totalStepPoints : stepPoints}
-                  </div>
-                  {totalStepPoints !== null && (
-                    <div className="text-xs opacity-75">
+                {stepGoal > 0 && (
+                  <>
+                    <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[rgb(255_255_255/0.2)]">
+                      <div className="h-full rounded-full bg-[#fff]" style={{ width: `${goalPct}%` }} />
                     </div>
-                  )}
+                    <p className="mt-2 text-xs font-medium text-blue-100">
+                      {goalPct}% of {stepGoal.toLocaleString()} goal
+                    </p>
+                  </>
+                )}
+                <div className="mt-4 flex items-center justify-between rounded-xl bg-[rgb(255_255_255/0.12)] px-3 py-2">
+                  <span className="text-xs font-medium text-blue-50">{totalStepPoints !== null ? 'Total step points' : 'Goal days'}</span>
+                  <span className="text-lg font-bold text-white">{totalStepPoints !== null ? totalStepPoints : stepPoints}</span>
                 </div>
-              </div>
+              </section>
+
+              {/* Workouts for the selected day (sources that report them) */}
+              {hasWorkouts && (
+                <section className="card card-pad grid grid-cols-2 gap-3" aria-label="Workouts">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                      <Icon name="flame" className="h-4 w-4 text-orange-600" />
+                      Effort Points
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-ink">{displayDay.effortPoints ?? 0}</div>
+                    <div className="text-xs text-ink-muted">
+                      {displayDay.moderateMinutes ?? 0} moderate + {displayDay.vigorousMinutes ?? 0} vigorous min
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                      <Icon name="dumbbell" className="h-4 w-4 text-brand-ink" />
+                      Strength sessions
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-ink">{displayDay.strengthSessions ?? 0}</div>
+                    <div className="text-xs text-ink-muted">from workouts</div>
+                  </div>
+                </section>
+              )}
             </div>
 
-            {/* Workouts for the selected day (sources that report them) */}
-            {(displayDay.effortPoints !== undefined || displayDay.strengthSessions !== undefined) && (
-              <div className="bg-white rounded-xl px-4 py-3 shadow-sm grid grid-cols-2 gap-3">
+            {/* Chart */}
+            <section className="card card-pad min-w-0 lg:col-span-2" aria-labelledby="steps-chart-title">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs text-gray-500">Effort Points</div>
-                  <div className="text-xl font-bold text-gray-900">{displayDay.effortPoints ?? 0}</div>
-                  <div className="text-xs text-gray-500">
-                    {(displayDay.moderateMinutes ?? 0)} moderate + {(displayDay.vigorousMinutes ?? 0)} vigorous min
+                  <h2 id="steps-chart-title" className="card-title">Daily steps</h2>
+                  <p className="card-subtitle">Goal: {stepGoal.toLocaleString()} steps</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-xl bg-surface-2 p-1" role="tablist" aria-label="Range">
+                    {[
+                      { v: 'W', label: 'Week' },
+                      { v: 'M', label: 'Month' },
+                    ].map(({ v, label }) => (
+                      <button
+                        key={v}
+                        role="tab"
+                        aria-selected={viewMode === v}
+                        onClick={() => setViewMode(v)}
+                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                          viewMode === v ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Strength sessions</div>
-                  <div className="text-xl font-bold text-gray-900">{displayDay.strengthSessions ?? 0}</div>
-                  <div className="text-xs text-gray-500">from workouts</div>
-                </div>
-              </div>
-            )}
-
-            {/* Bar Chart */}
-            <div className="bg-white rounded-xl px-4 py-4 shadow-sm">
-              <div className="mb-1 flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Daily Steps</h3>
-                  <p className="text-sm text-gray-500">Goal: {stepGoal.toLocaleString()} steps</p>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  {/* Time Period Selector (W/M buttons) */}
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                    <button
-                      onClick={() => setViewMode('W')}
-                      className={`px-3 py-1 rounded-md font-semibold text-sm transition-all ${
-                        viewMode === 'W'
-                          ? 'bg-blue-500 text-white'
-                          : 'text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      W
-                    </button>
-                    <button
-                      onClick={() => setViewMode('M')}
-                      className={`px-3 py-1 rounded-md font-semibold text-sm transition-all ${
-                        viewMode === 'M'
-                          ? 'bg-blue-500 text-white'
-                          : 'text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      M
-                    </button>
-                  </div>
-                  {/* Date Range Navigation */}
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg px-1 py-1">
-                    <button
-                      onClick={() => navigateDateRange('prev')}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors"
-                      aria-label="Previous period"
-                    >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="text-gray-600">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
+                  <div className="flex items-center rounded-xl bg-surface-2 p-1">
+                    <button onClick={() => navigateDateRange('prev')} className="rounded-lg p-1.5 text-ink-muted hover:bg-surface hover:text-ink" aria-label="Previous period">
+                      <Icon name="chevron-left" className="h-4 w-4" />
                     </button>
                     <button
                       onClick={resetToToday}
-                      className="text-xs font-semibold text-gray-700 min-w-[60px] text-center hover:bg-gray-200 rounded px-2 py-1 transition-colors"
-                      title="Click to return to today's period"
+                      className="min-w-[72px] rounded-lg px-2 py-1 text-xs font-semibold text-ink hover:bg-surface"
+                      title="Back to the current period"
                     >
                       {formatDateRange()}
                     </button>
                     <button
                       onClick={() => navigateDateRange('next')}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-lg p-1.5 text-ink-muted hover:bg-surface hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Next period"
-                      disabled={dateRangeOffset <= 0 && currentDateRange.end >= new Date()}
+                      disabled={nextDisabled}
                     >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" className={(dateRangeOffset <= 0 && currentDateRange.end >= new Date()) ? 'text-gray-300' : 'text-gray-600'}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
+                      <Icon name="chevron-right" className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
               </div>
-              
-              <div className="px-[18px]">
-                <div ref={chartContainerRef} className="relative" style={{ height: '320px' }}>
-                {/* Y-axis labels as HTML - independent of SVG */}
-                {(() => {
-                  const maxValue = 33333
-                  const chartHeight = 320
-                  const svgHeight = 320
-                  const ticks = [, 5000, 10000, 15000, 20000, 25000]
-                  
-                  return (
-                    <>
-                      {ticks.map((value, i) => {
-                        // Calculate Y position in SVG coordinates - top tick (25000) at y=15 (15px buffer from top)
-                        // Scale so 25000 maps to 15 and 0 maps to chartHeight
-                        const topTickValue = 25000
-                        const topBuffer = 15
-                        const svgY = topBuffer + (chartHeight - topBuffer) - (value / topTickValue) * (chartHeight - topBuffer)
-                        // Convert to percentage of container
-                        const topPosition = (svgY / svgHeight) * 100
-                        const isGoalValue = value === stepGoal && stepGoal > 0
-                        
-                        return (
-                          <div
-                            key={i}
-                            style={{
-                              position: 'absolute',
-                              left: '-30px',
-                              top: `${topPosition}%`,
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              color: isGoalValue ? '#10b981' : '#6b7280',
-                              transform: 'translateY(-50%)',
-                              zIndex: 10,
-                              pointerEvents: 'none',
-                              textAlign: 'right',
-                              width: '50px'
-                            }}
-                          >
-                            {value.toLocaleString()}
-                          </div>
-                        )
-                      })}
-                      {/* Goal label as HTML - only show if goal doesn't match a tick */}
-                      {stepGoal > 0 && !ticks.includes(stepGoal) && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: '-30px',
-                            top: `${((15 + (305 - (stepGoal / 25000) * 305)) / 320) * 100}%`,
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            color: '#10b981',
-                            transform: 'translateY(-50%)',
-                            zIndex: 10,
-                            pointerEvents: 'none',
-                            textAlign: 'right',
-                            width: '50px'
-                          }}
-                        >
-                          {stepGoal.toLocaleString()}
-                        </div>
-                      )}
-                    </>
-                  )
-                })()}
-                
-                <svg width="100%" height="100%" viewBox={`0 0 ${chartWidth} 320`} preserveAspectRatio="none">
-                  {/* Calculate leftmost and rightmost bar edges for all lines */}
-                  {(() => {
-                    const labelOffset = 80
-                    const availableWidth = chartWidth - labelOffset
-                    const barWidth = availableWidth / bars.length
-                    
-                    let leftmostEdge = 150 // Default start
-                    let rightmostEdge = chartWidth
-                    
-                    if (bars.length > 0) {
-                      // Calculate leftmost bar position (index 0)
-                      let firstBarX
-                      if (viewMode === 'W') {
-                        const firstBarWidth = barWidth * 0.25
-                        firstBarX = labelOffset + 0 * barWidth + (barWidth - firstBarWidth) / 2
-                      } else {
-                        const barSpacing = barWidth * 0.05
-                        firstBarX = labelOffset + 0 * barWidth + barSpacing / 2
-                      }
-                      // Start lines before the first bar with some padding
-                      leftmostEdge = Math.min(150, firstBarX - 10)
-                      
-                      // Calculate rightmost bar position
-                      const lastIndex = bars.length - 1
-                      let lastBarX, lastBarWidth
-                      
-                      if (viewMode === 'W') {
-                        lastBarWidth = barWidth * 0.25
-                        lastBarX = labelOffset + lastIndex * barWidth + (barWidth - lastBarWidth) / 2
-                      } else {
-                        const barSpacing = barWidth * 0.05
-                        lastBarWidth = barWidth - barSpacing
-                        lastBarX = labelOffset + lastIndex * barWidth + barSpacing / 2
-                      }
-                      
-                      rightmostEdge = lastBarX + lastBarWidth + 10
-                    }
-                    
-                    return (
-                      <>
-                        {/* Grid lines only - no text labels */}
-                        {(() => {
-                          const chartHeight = 320
-                          const maxValue = 33333
-                          const ticks = [0, 5000, 10000, 15000, 20000, 25000]
-                          
-                          return ticks.map((value, i) => {
-                            // Skip the tick that matches the goal - it will be shown as dashed goal line
-                            if (value === stepGoal && stepGoal > 0) {
-                              return null
-                            }
-                            
-                            // Scale so 25000 maps to 15 (15px buffer) and 0 maps to chartHeight
-                            const topTickValue = 25000
-                            const topBuffer = 15
-                            const y = topBuffer + (chartHeight - topBuffer) - (value / topTickValue) * (chartHeight - topBuffer)
-                            return (
-                              <line
-                                key={i}
-                                x1={leftmostEdge}
-                                y1={y}
-                                x2={rightmostEdge}
-                                y2={y}
-                                stroke="#e5e7eb"
-                                strokeWidth="2"
-                              />
-                            )
-                          })
-                        })()}
-                      </>
-                    )
-                  })()}
-                  
-                  {/* Calculate leftmost and rightmost bar edges for baseline */}
-                  {(() => {
-                    const chartHeight = 380
-                    const maxValue = 33333
-                    const labelOffset = 80
-                    const availableWidth = chartWidth - labelOffset
-                    const barWidth = availableWidth / bars.length
-                    
-                    let leftmostEdge = 150 // Default start
-                    let rightmostEdge = chartWidth
-                    
-                    if (bars.length > 0) {
-                      // Calculate leftmost bar position (index 0)
-                      let firstBarX
-                      if (viewMode === 'W') {
-                        const firstBarWidth = barWidth * 0.25
-                        firstBarX = labelOffset + 0 * barWidth + (barWidth - firstBarWidth) / 2
-                      } else {
-                        const barSpacing = barWidth * 0.05
-                        firstBarX = labelOffset + 0 * barWidth + barSpacing / 2
-                      }
-                      // Start lines before the first bar with some padding
-                      leftmostEdge = Math.min(150, firstBarX - 10)
-                      
-                      // Calculate rightmost bar position
-                      const lastIndex = bars.length - 1
-                      let lastBarX, lastBarWidth
-                      
-                      if (viewMode === 'W') {
-                        lastBarWidth = barWidth * 0.25
-                        lastBarX = labelOffset + lastIndex * barWidth + (barWidth - lastBarWidth) / 2
-                      } else {
-                        const barSpacing = barWidth * 0.05
-                        lastBarWidth = barWidth - barSpacing
-                        lastBarX = labelOffset + lastIndex * barWidth + barSpacing / 2
-                      }
-                      
-                      rightmostEdge = lastBarX + lastBarWidth + 10
-                    }
-                    
-                    return (
-                      <>
-                        {/* X-axis line at base of graph */}
-                        <line
-                          x1={leftmostEdge}
-                          y1="320"
-                          x2={rightmostEdge}
-                          y2="320"
-                          stroke="#9ca3af"
-                          strokeWidth="2"
-                        />
-                        
-                        {/* Goal line - show as dashed line */}
-                        {stepGoal > 0 && (
-                          <line
-                            x1={leftmostEdge}
-                            y1={15 + (305 - (stepGoal / 25000) * 305)}
-                            x2={rightmostEdge}
-                            y2={15 + (305 - (stepGoal / 25000) * 305)}
-                            stroke="#9ca3af"
-                            strokeWidth="2"
-                            strokeDasharray="20,20"
-                            opacity="0.5"
-                          />
-                        )}
-                      </>
-                    )
-                  })()}
-                  
-                  {/* Bars */}
-                  {bars.map((bar, index) => {
-                    const chartHeight = 320
-                    const topTickValue = 25000
-                    const labelOffset = 80
-                    const availableWidth = chartWidth - labelOffset
-                    const barWidth = availableWidth / bars.length
-                    
-                    let actualWidth, x
-                    if (viewMode === 'W') {
-                      // Week view: bars are 1/4 of space, rest is spacing
-                      actualWidth = barWidth * 0.25
-                      x = labelOffset + index * barWidth + (barWidth - actualWidth) / 2
-                    } else {
-                      // Month view: minimal spacing
-                      const barSpacing = barWidth * 0.05
-                      actualWidth = barWidth - barSpacing
-                      x = labelOffset + index * barWidth + barSpacing / 2
-                    }
-                    
-                    const topBuffer = 15
-                    const barHeight = (bar.steps / topTickValue) * (chartHeight - topBuffer)
-                    const y = topBuffer + (chartHeight - topBuffer) - barHeight
-                    const selectedDayDate = selectedDay?.date instanceof Date ? selectedDay.date : selectedDay?.date ? new Date(selectedDay.date) : null
-                    const isSelected = selectedDayDate && bar.date.toDateString() === selectedDayDate.toDateString()
-                    
-                    return (
-                      <g key={index}>
-                        <rect
-                          x={x}
-                          y={y}
-                          width={actualWidth}
-                          height={barHeight}
-                          fill={bar.barColor}
-                          rx="2"
-                          opacity={bar.steps > 0 ? 1 : 0.3}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => handleBarClick(bar)}
-                        />
-                        {/* Selected day indicator */}
-                        {isSelected && (
-                          <rect
-                            x={x}
-                            y={y}
-                            width={actualWidth}
-                            height={barHeight}
-                            fill="white"
-                            rx="2"
-                            opacity="0.3"
-                            style={{ pointerEvents: 'none' }}
-                          />
-                        )}
-                        {/* Today indicator */}
-                        {bar.isToday && (
-                          <line
-                            x1={x + actualWidth / 2}
-                            y1={y}
-                            x2={x + actualWidth / 2}
-                            y2={y - 20}
-                            stroke="#ffffff"
-                            strokeWidth="2"
-                            strokeDasharray="2,2"
-                            style={{ pointerEvents: 'none' }}
-                          />
-                        )}
-                      </g>
-                    )
-                  })}
-                </svg>
-                
-                {/* X-axis labels */}
-                <div className="flex justify-between mt-1 mb-2" style={{ paddingLeft: '35px', paddingRight: '8px' }}>
-                  {bars.length > 0 && (
-                    <>
-                      {viewMode === 'M' ? (
-                        // Month view: Show labels every 7 days
-                        <>
-                          {[0, 7, 14, 21, 28].map((dayIndex) => {
-                            if (dayIndex < bars.length) {
-                              const bar = bars[dayIndex]
-                              return (
-                                <div key={dayIndex} className="flex flex-col items-center text-xs text-gray-500">
-                                  <span className="font-semibold">{bar.date.getDate()}</span>
-                                  <span>{bar.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</span>
-                                </div>
-                              )
-                            }
-                            return null
-                          })}
-                        </>
-                      ) : (
-                        // Week view: Show all 7 days with day of week
-                        <>
-                          {bars.map((bar, idx) => (
-                            <div key={idx} className="flex flex-col items-center text-xs text-gray-500">
-                              <span className="font-semibold">{bar.date.getDate()}</span>
-                              <span>{bar.date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}</span>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              </div>
-              
-              {/* Legend */}
-              <div className="flex items-center justify-center gap-16 mt-12">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-green-500"></div>
-                  <span className="text-xs text-gray-600">Goal Met</span>
-                </div>
-              </div>
-            </div>
 
-            {/* Info Note */}
-            <div className="flex items-start gap-2 bg-blue-50 rounded-xl p-4">
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" className="text-blue-600 mt-0.5 flex-shrink-0">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <p className="text-sm text-blue-800">
+              <BarChart bars={chartBars} goal={stepGoal} onSelect={(i) => handleBarClick(bars[i])} />
+
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-ink-muted">
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-teal-500" />Goal met</span>
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-blue-500" />Under goal</span>
+                {activeChallenge?.startDate && (
+                  <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-[rgb(var(--line-strong))]" />Before challenge</span>
+                )}
+                <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed border-teal-500" />Goal</span>
+              </div>
+            </section>
+
+            {/* Info */}
+            <div className="callout callout-info lg:col-span-3">
+              <Icon name="info" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>
                 {activeChallenge?.scoringMode === 'v2'
                   ? 'In this Points v2 challenge you earn points for steps, a bonus each day you reach the goal, workouts (Effort Points) and strength sessions. Tap your row on the leaderboard for the full breakdown.'
-                  : `Step points are earned when you meet your daily step goal. Each day you reach ${stepGoal.toLocaleString()} steps, you earn 1 point.`}
+                  : `Step points are earned when you meet your daily step goal. Each day you reach ${stepGoal.toLocaleString()} steps, you earn a step point.`}
               </p>
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </div>
     </>
   )
 }
 
 export default StepsHistory
-

@@ -1,104 +1,67 @@
-import React from 'react';
-import { unifiedDesignSystem } from '../../config/unifiedDesignSystem';
+import React, { useEffect, useId } from 'react'
+import Icon from './Icon'
 
 /**
- * Modal Component - Implements designSystem.components.modals
- * 
- * Features:
- * - Overlay with centered modal positioning
- * - Consistent structure: header + content + actions
- * - Close on overlay click or close button
- * - Accessible focus management
- * 
- * Props:
- * @param {boolean} isOpen - Controls modal visibility
- * @param {function} onClose - Function to close the modal
- * @param {string} title - Modal title
- * @param {React.ReactNode} children - Modal content
- * @param {React.ReactNode} actions - Action buttons (optional)
- * @param {string} className - Additional CSS classes for modal container
+ * Modal: bottom sheet on phones, centered dialog from `sm` up.
+ * Props: isOpen, onClose, title, icon (Icon name), children, footer, size ('sm' | 'md' | 'lg'),
+ * dismissable (backdrop / Escape close; default true).
  */
-const Modal = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  children, 
-  actions,
-  className = '' 
-}) => {
-  // Get modal classes directly from the design system
-  const modalClasses = {
-    overlay: unifiedDesignSystem.components.modals.overlay.className,
-    container: unifiedDesignSystem.components.modals.container.className
-  };
-  
-  // Close modal when Escape key is pressed
-  React.useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
+const SIZE = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl' }
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden';
+const Modal = ({ isOpen, onClose, title, icon, children, footer, size = 'md', dismissable = true, className = '' }) => {
+  const titleId = useId()
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape' && dismissable && onClose) onClose()
     }
-
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [isOpen, onClose, dismissable])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
-    <>
-      {/* Overlay - designSystem.components.modals.overlay */}
-      <div 
-        className={modalClasses.overlay}
-        onClick={onClose}
-        role="presentation"
+    <div className="modal-backdrop" onClick={dismissable ? onClose : undefined} role="presentation">
+      <div
+        className={`modal-panel ${SIZE[size] || SIZE.md} ${className}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
       >
-        {/* Modal container - designSystem.components.modals.container */}
-        <div 
-          className={`${modalClasses.container} ${className}`}
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-        >
-          {/* Header - designSystem.components.modals.header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 id="modal-title" className="text-xl font-semibold text-gray-800">
+        {title && (
+          <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-surface px-5 py-4">
+            {icon && (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+                <Icon name={icon} className="h-5 w-5" />
+              </span>
+            )}
+            <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-semibold text-ink">
               {title}
             </h2>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-              aria-label="Close modal"
-            >
-              <span className="text-2xl text-gray-500">×</span>
-            </button>
+            {onClose && (
+              <button type="button" onClick={onClose} className="icon-btn -mr-2" aria-label="Close">
+                <Icon name="x" className="h-5 w-5" />
+              </button>
+            )}
           </div>
-
-          {/* Content - designSystem.components.modals.content */}
-          <div className="mb-6">
-            {children}
+        )}
+        <div className="px-5 py-5">{children}</div>
+        {footer && (
+          <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-line bg-surface px-5 py-4 pb-[calc(1rem+var(--safe-area-bottom))] sm:flex-row sm:justify-end sm:pb-4">
+            {footer}
           </div>
-
-          {/* Actions - designSystem.components.modals.actions */}
-          {actions && (
-            <div className="flex space-x-3 mt-6">
-              {actions}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </>
-  );
-};
+    </div>
+  )
+}
 
-export default Modal;
+export default Modal

@@ -3,6 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { getApiUrl } from '../utils/apiService'
 import { compressImage } from '../utils/imageCompression'
+import Modal from './ui/Modal'
+import Icon from './ui/Icon'
+
+const Fact = ({ icon, label, children, className = '' }) => (
+  <div className={`flex items-start gap-3 rounded-xl bg-surface-2 p-3 ${className}`}>
+    <Icon name={icon} className="mt-0.5 h-5 w-5 shrink-0 text-brand-ink" />
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
+      <div className="font-semibold text-ink">{children}</div>
+    </div>
+  </div>
+)
 
 const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
   const { user } = useContext(UserContext)
@@ -11,35 +23,12 @@ const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
   const [isQuitting, setIsQuitting] = useState(false)
   const modalRef = useRef(null)
   
-  // Focus management, body scroll lock, and keyboard navigation
+  // Focus the dialog content when it opens (Modal handles Escape and scroll lock)
   useEffect(() => {
-    if (isOpen) {
-      // Prevent body scroll
-      document.body.style.overflow = 'hidden'
-      
-      // Focus the modal when it opens
-      if (modalRef.current) {
-        modalRef.current.focus()
-      }
-      
-      // Handle escape key
-      const handleEscape = (e) => {
-        if (e.key === 'Escape') {
-          onClose()
-        }
-      }
-      
-      document.addEventListener('keydown', handleEscape)
-      
-      return () => {
-        document.removeEventListener('keydown', handleEscape)
-        document.body.style.overflow = 'unset'
-      }
-    } else {
-      // Restore body scroll
-      document.body.style.overflow = 'unset'
+    if (isOpen && modalRef.current) {
+      modalRef.current.focus()
     }
-  }, [isOpen, onClose])
+  }, [isOpen])
   const [editData, setEditData] = useState({
     name: challenge?.name || ''
   })
@@ -447,240 +436,176 @@ const ChallengeInfoModal = ({ challenge, isOpen, onClose, onUpdate }) => {
 
   if (!isOpen) return null
 
+  const weighIn = challenge?.weighInDay
+    ? challenge.weighInDay.charAt(0).toUpperCase() + challenge.weighInDay.slice(1)
+    : 'Not set'
+
+
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center z-[60] p-4 pb-8" 
-      role="dialog" 
-      aria-modal="true" 
-      aria-labelledby="modal-title"
-      aria-describedby="modal-description"
-      style={{ alignItems: 'center', marginTop: '-50px' }}
-    >
-      <div 
-        ref={modalRef}
-        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-y-auto relative scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 focus:outline-none scroll-smooth"
-        tabIndex={-1}
-        style={{ maxHeight: 'calc(75vh - 6rem)', minHeight: '400px' }}
-      >
-        <div className="p-4 sm:p-6 flex flex-col h-full">
-          <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200 flex-shrink-0">
-            <h2 id="modal-title" className="text-xl font-bold text-gray-800">
-              {isEditing ? 'Edit Challenge' : 'Challenge Info'}
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              ×
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isEditing ? 'Edit challenge' : 'Challenge info'}
+      icon={isEditing ? 'edit' : 'info'}
+      footer={
+        isEditing ? (
+          <>
+            <button onClick={handleCancel} disabled={isSaving} className="btn btn-secondary">
+              Cancel
             </button>
-          </div>
+            <button onClick={handleSave} disabled={isSaving} className="btn btn-primary">
+              {isSaving ? 'Saving...' : 'Save changes'}
+            </button>
+          </>
+        ) : null
+      }
+    >
+      <div ref={modalRef} tabIndex={-1} className="focus:outline-none">
+        {isEditing ? (
+          <div className="space-y-5">
+            <div>
+              <label className="label" htmlFor="challenge-name-edit">
+                Challenge name
+              </label>
+              <input
+                id="challenge-name-edit"
+                type="text"
+                value={editData.name}
+                onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                className="input"
+                required
+              />
+            </div>
 
-          <div id="modal-description" className="mt-4 pb-4 space-y-4 flex-1 overflow-y-auto">
-            {isEditing ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Challenge Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editData.name}
-                    onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                {/* Challenge Photo Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Photo</label>
-                  <div className="space-y-3">
-                    {/* File Input */}
-                    <input
-                      id="challenge-photo-edit"
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            <div>
+              <label className="label" htmlFor="challenge-photo-edit">
+                Challenge photo
+              </label>
+              <div className="space-y-3">
+                {!photoPreview && challenge?.photo && (
+                  <div>
+                    <img
+                      src={`${getApiUrl()}${challenge.photo}`}
+                      alt="Current challenge photo"
+                      className="h-32 w-full rounded-xl border border-line object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none'
+                      }}
                     />
-                    
-                    {/* Current Photo Preview */}
-                    {!photoPreview && challenge?.photo && (
-                      <div className="relative">
-                        <img
-                          src={`${getApiUrl()}${challenge.photo}`}
-                          alt="Current challenge photo"
-                          className="w-full h-32 object-cover rounded-md border border-gray-200"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                          }}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Current photo</p>
-                      </div>
-                    )}
-                    
-                    {/* New Photo Preview */}
-                    {photoPreview && (
-                      <div className="relative">
-                        <img
-                          src={photoPreview}
-                          alt="New challenge photo preview"
-                          className="w-full h-32 object-cover rounded-md border border-gray-200"
-                        />
-                        <button
-                          type="button"
-                          onClick={removePhoto}
-                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
-                          aria-label="Remove photo"
-                        >
-                          <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                        <p className="text-xs text-gray-500 mt-1">New photo preview</p>
-                      </div>
-                    )}
-                    
-                    <p className="text-xs text-gray-500">
-                      Upload a new photo to replace the current one. Images will be compressed automatically. Max size: 5MB. Supported formats: JPG, PNG, GIF.
-                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">Current photo</p>
                   </div>
-                </div>
+                )}
 
-                <div className="flex space-x-3 pt-4">
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className={`flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
+                {photoPreview && (
+                  <div className="relative">
+                    <img src={photoPreview} alt="New challenge photo preview" className="h-32 w-full rounded-xl border border-line object-cover" />
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                      aria-label="Remove photo"
+                    >
+                      <Icon name="x" className="h-4 w-4" />
+                    </button>
+                    <p className="mt-1 text-xs text-ink-muted">New photo preview</p>
+                  </div>
+                )}
+
+                <input
+                  id="challenge-photo-edit"
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="input file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-ink"
+                />
+                <p className="text-xs text-ink-muted">
+                  Images are compressed automatically. Max size 5MB. JPG, PNG or GIF.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="card-brand p-4">
+              <h3 className="text-lg font-semibold text-white">{challenge?.name}</h3>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-blue-100">
+                <Icon name="calendar" className="h-4 w-4" />
+                {challenge?.startDate} – {challenge?.endDate}
+              </p>
+              {challenge?.scoringMode === 'v2' && (
+                <span className="chip mt-3 bg-[rgb(255_255_255/0.18)] text-white">Points v2</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Fact icon="target" label="Daily goal">
+                {challenge?.stepGoal?.toLocaleString()} steps
+              </Fact>
+              <Fact icon="bot" label="Bot">
+                {challenge?.botName || 'Bot'}
+              </Fact>
+              <Fact icon="hash" label="Challenge code">
+                <span className="font-mono tracking-widest">{challenge?.challengeCode}</span>
+              </Fact>
+              <Fact icon="calendar-check" label="Weigh-in day">
+                {weighIn}
+              </Fact>
+              <Fact icon="users" label="Participants" className="sm:col-span-2">
+                {(challenge?.participants?.length || 0) + 1} people
+                <p className="mt-0.5 break-words text-sm font-normal text-ink-muted">
+                  {challenge?.creatorEmail && `${challenge.creatorEmail} (Creator)`}
+                  {challenge?.participants?.length > 0 && challenge?.creatorEmail && ', '}
+                  {challenge?.participants?.join(', ')}
+                </p>
+              </Fact>
+            </div>
+
+            {isAdmin && !isQuitting && (
+              <div className="border-t border-line pt-4">
+                <h3 className="section-title mb-3 flex items-center gap-2">
+                  <Icon name="crown" className="h-4 w-4" />
+                  Admin controls
+                </h3>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button onClick={() => setIsEditing(true)} className="btn btn-secondary">
+                    <Icon name="edit" className="h-4 w-4" />
+                    Edit
                   </button>
                   <button
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    className={`flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-md font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={handleEndChallenge}
+                    className="btn border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
                   >
-                    Cancel
+                    <Icon name="flag" className="h-4 w-4" />
+                    End
+                  </button>
+                  <button onClick={handleDeleteChallenge} className="btn btn-danger">
+                    <Icon name="trash" className="h-4 w-4" />
+                    Delete
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-blue-500 border border-blue-600 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    {challenge?.name}
-                  </h3>
-                  <p className="text-white opacity-90 text-sm">
-                    {challenge?.startDate} – {challenge?.endDate}
-                  </p>
-                </div>
+            )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-600">Daily Goal</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {challenge?.stepGoal?.toLocaleString()} steps
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-600">Bot</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                      {challenge?.botAvatar} {challenge?.botName}
-                    </p>
-                  </div>
-                </div>
+            {!isAdmin && !isQuitting && (
+              <div className="border-t border-line pt-4">
+                <h3 className="section-title mb-3">Participant controls</h3>
+                <button onClick={handleLeaveChallenge} className="btn btn-danger w-full">
+                  <Icon name="log-out" className="h-4 w-4" />
+                  Leave challenge
+                </button>
+              </div>
+            )}
 
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-600">Challenge Code</p>
-                  <p className="font-mono text-lg font-semibold text-gray-800">
-                    {challenge?.challengeCode}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-600">Participants</p>
-                  <p className="text-lg font-semibold text-gray-800">
-                    {(challenge?.participants?.length || 0) + 1} people
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {challenge?.creatorEmail && `${challenge.creatorEmail} (Creator)`}
-                    {challenge?.participants?.length > 0 && challenge?.creatorEmail && ', '}
-                    {challenge?.participants?.join(', ')}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-600">Weigh-in Day</p>
-                  <p className="text-lg font-semibold text-gray-800">
-                    {challenge?.weighInDay ? challenge.weighInDay.charAt(0).toUpperCase() + challenge.weighInDay.slice(1) : 'Not set'}
-                  </p>
-                </div>
-
-                {isAdmin && !isQuitting && (
-                  <div className="space-y-4">
-                    <div className="border-t pt-4">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-3">👑 Admin Controls</h3>
-                      
-                      <div className="space-y-3">
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md font-medium"
-                        >
-                          ✏️ Edit Challenge
-                        </button>
-                        
-                        <button
-                          onClick={handleEndChallenge}
-                          className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md font-medium"
-                        >
-                          🏁 End Challenge
-                        </button>
-                        
-                        <button
-                          onClick={handleDeleteChallenge}
-                          className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md font-medium"
-                        >
-                          🗑️ Delete Challenge
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!isAdmin && !isQuitting && (
-                  <div className="space-y-4">
-                    <div className="border-t pt-4">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-3">👤 Participant Controls</h3>
-                      
-                      <div className="space-y-3">
-                        <button
-                          onClick={handleLeaveChallenge}
-                          className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md font-medium"
-                        >
-                          🚪 Leave Challenge
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {isQuitting && (
-                  <div className="space-y-4">
-                    <div className="border-t pt-4">
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <p className="text-yellow-800 text-sm text-center">
-                          🗑️ Deleting challenge... Please wait while we clean up the data.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+            {isQuitting && (
+              <div className="callout callout-warning">
+                <span className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+                <p>Deleting challenge. Please wait while we clean up the data.</p>
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 

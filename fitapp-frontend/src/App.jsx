@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { UserProvider } from './context/UserContext'
 import { ChallengeProvider } from './context/ChallengeContext'
 import { ChatNotificationProvider } from './context/ChatNotificationContext'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { useVisibilityRefetch } from './hooks/useVisibilityRefetch'
 import AuthPage from './pages/AuthPage'
 import OAuthCallback from './pages/OAuthCallback'
@@ -29,6 +30,7 @@ import ScrollToTop from './components/ScrollToTop'
 
 const StatusBarTheme = () => {
   const location = useLocation()
+  const { resolved } = useTheme()
 
   React.useEffect(() => {
     const blueHeaderPaths = [
@@ -42,12 +44,13 @@ const StatusBarTheme = () => {
       '/notifications',
       '/steps-history',
       '/weight-history',
-      '/account'
+      '/chat'
     ]
     const isBlueHeaderPage = blueHeaderPaths.some((path) => (
       location.pathname === path || location.pathname.startsWith(`${path}/`)
     ))
-    const themeColor = isBlueHeaderPage ? '#1D4ED8' : '#ffffff'
+    // Pages with the gradient header get the brand blue; others match the canvas
+    const themeColor = isBlueHeaderPage ? '#1D4ED8' : (resolved === 'dark' ? '#0A0F1C' : '#ffffff')
     let themeMeta = document.querySelector('meta[name="theme-color"]')
     if (!themeMeta) {
       themeMeta = document.createElement('meta')
@@ -55,7 +58,7 @@ const StatusBarTheme = () => {
       document.head.appendChild(themeMeta)
     }
     themeMeta.setAttribute('content', themeColor)
-  }, [location.pathname])
+  }, [location.pathname, resolved])
 
   return null
 }
@@ -67,17 +70,18 @@ const App = () => {
   // Clear hash fragments on app initialization to prevent redirect loops
   React.useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash) {
-      console.log('🧹 App: Clearing hash fragment to prevent redirect loops')
+      console.log('App: Clearing hash fragment to prevent redirect loops')
       window.history.replaceState(null, null, window.location.pathname)
     }
     
     // Debug: Log current URL and pathname
-    console.log('🧪 App: Current URL:', window.location.href)
-    console.log('🧪 App: Current pathname:', window.location.pathname)
-    console.log('🧪 App: Current hash:', window.location.hash)
+    console.log('App: Current URL:', window.location.href)
+    console.log('App: Current pathname:', window.location.pathname)
+    console.log('App: Current hash:', window.location.hash)
   }, [])
 
   return (
+    <ThemeProvider>
     <ChallengeProvider>
       <UserProvider>
         <ChatNotificationProvider>
@@ -95,7 +99,7 @@ const App = () => {
             {/* Public Home page at root for Google verification */}
             <Route path="/" element={<Home />} />
 
-            {/* ❌ Auth/Login page does NOT include Navbar */}
+            {/* Auth/Login page has no app shell */}
             <Route path="/login" element={<AuthPage />} />
             <Route path="/auth" element={<Navigate to="/login" replace />} />
             
@@ -111,7 +115,7 @@ const App = () => {
             {/* Public Terms of Service page */}
             <Route path="/terms-of-service" element={<TermsOfService />} />
 
-            {/* ✅ Protected pages wrapped with Navbar layout */}
+            {/* Protected pages use the app shell (sidebar / bottom nav) */}
             <Route
               path="/dashboard"
               element={
@@ -208,6 +212,7 @@ const App = () => {
         </ChatNotificationProvider>
       </UserProvider>
     </ChallengeProvider>
+    </ThemeProvider>
   )
 }
 

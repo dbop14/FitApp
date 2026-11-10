@@ -1,6 +1,7 @@
 import { useContext } from 'react'
 import { UserContext } from '../context/UserContext'
 import { useLeaderboard } from '../hooks/useLeaderboard'
+import Icon from './ui/Icon'
 
 const fmt = (n) => {
   const v = Number(n) || 0
@@ -17,10 +18,10 @@ const V2TodayPoints = ({ challenge, onClick }) => {
 
   const t = row.today || {}
   const items = [
-    { label: 'Steps', value: t.stepPoints },
-    { label: 'Goal bonus', value: t.goalBonusPoints },
-    { label: 'Effort', value: t.effortPoints },
-    { label: 'Strength', value: t.strengthPoints },
+    { label: 'Steps', value: t.stepPoints, icon: 'steps' },
+    { label: 'Goal bonus', value: t.goalBonusPoints, icon: 'target' },
+    { label: 'Effort', value: t.effortPoints, icon: 'flame' },
+    { label: 'Strength', value: t.strengthPoints, icon: 'dumbbell' },
   ]
   const provisional = row.today ? row.today.provisional !== false : true
 
@@ -28,27 +29,35 @@ const V2TodayPoints = ({ challenge, onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4"
+      className="card card-pad card-interactive block h-full w-full text-left"
       aria-label={`Today's points: ${fmt(t.total)}${provisional ? ', provisional' : ''}`}
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-800">Today's points</h2>
-        {provisional && (
-          <span className="text-[11px] font-medium text-amber-800 bg-amber-100 rounded-full px-2 py-0.5">Provisional</span>
-        )}
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
+          <Icon name="sparkles" className="h-5 w-5" />
+        </span>
+        <h2 className="flex-1 text-sm font-medium text-ink-muted">Today's points</h2>
+        {provisional && <span className="chip chip-warning">Provisional</span>}
+        <Icon name="chevron-right" className="h-4 w-4 text-ink-subtle" />
       </div>
-      <div className="mt-1 text-3xl font-bold text-gray-900">{fmt(t.total)}</div>
-      <dl className="mt-3 grid grid-cols-4 gap-2 text-center">
-        {items.map(({ label, value }) => (
-          <div key={label} className="rounded-lg bg-gray-50 py-2">
-            <dt className="text-[11px] text-gray-500">{label}</dt>
-            <dd className="text-sm font-semibold text-gray-900">{fmt(value)}</dd>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-3xl font-bold tracking-tight text-ink">{fmt(t.total)}</span>
+        <span className="text-sm text-ink-muted">pts today</span>
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {items.map(({ label, value, icon }) => (
+          <div key={label} className="flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-2">
+            <Icon name={icon} className="h-4 w-4 shrink-0 text-brand-ink" />
+            <div className="min-w-0">
+              <dt className="truncate text-[11px] font-medium text-ink-muted">{label}</dt>
+              <dd className="text-sm font-semibold text-ink">{fmt(value)}</dd>
+            </div>
           </div>
         ))}
       </dl>
-      <p className="mt-3 text-xs text-gray-500">
-        Challenge total {fmt(row.totalPoints)} pts
-        {provisional && ' · Today can still change as your data syncs.'}
+      <p className="mt-3 text-xs text-ink-muted">
+        Challenge total <span className="font-semibold text-ink">{fmt(row.totalPoints)}</span> pts
+        {provisional && ' \u00b7 Today can still change as your data syncs.'}
       </p>
     </button>
   )

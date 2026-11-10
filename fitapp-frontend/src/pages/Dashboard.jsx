@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useContext, useRef, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { useChallenge } from '../context/ChallengeContext'
 import { fetchWithAuth, getApiUrl } from '../utils/apiService'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
-import UserCard from '../components/ui/UserCard'
 import ProgressCard from '../components/ui/ProgressCard'
 import StatCard from '../components/ui/StatCard'
 import WeightInputModal from '../components/WeightInputModal'
 import ReconnectBanner from '../components/ReconnectBanner'
 import V2TodayPoints from '../components/V2TodayPoints'
+import PageHeader from '../components/ui/PageHeader'
+import Icon from '../components/ui/Icon'
+import Avatar from '../components/ui/Avatar'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { useUserData } from '../hooks/useUserData'
 import { useChallenges } from '../hooks/useChallenges'
 import { useQueryClient } from '@tanstack/react-query'
@@ -786,9 +788,7 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('❌ Sync failed:', error)
-      const dataSource = user?.dataSource || 'google-fit'
-      const sourceName = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'
-      setSyncError(error.message || `Failed to sync with ${sourceName}`)
+      setSyncError(error.message || 'Failed to sync your fitness data')
     } finally {
       setIsSyncing(false)
     }
@@ -797,13 +797,12 @@ const Dashboard = () => {
   // Safety check for user object
   if (!user) {
     return (
-      <div className="w-full bg-gray-50 min-h-screen relative">
-        <main className="px-0 py-6 pb-24 safe-area-content">
-          <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        </main>
-      </div>
+      <>
+        <PageHeader title="FitApp" />
+        <div className="page flex min-h-[60vh] items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      </>
     )
   }
 
@@ -843,294 +842,276 @@ const Dashboard = () => {
   }
   const allCardsDataReady = hasEverBeenReadyRef.current || cardsReadyThisRender
 
+  // Weight card value: on weigh-in day prefer the value submitted via Confirm Weight
+  // (participantData.lastWeight); otherwise the most recent synced weight.
+  const weightValue = (() => {
+    const isWeighInDay = !!(shouldPromptForWeight && activeChallenge)
+    const weightToShow = isWeighInDay
+      ? (participantData?.lastWeight ?? currentUserData?.weight ?? mostRecentWeight)
+      : (currentUserData?.weight ?? mostRecentWeight)
+    return weightToShow !== null && weightToShow !== undefined
+      ? `${weightToShow.toFixed(1)} lbs`
+      : 'N/A'
+  })()
 
+  const weightSubtitle = (() => {
+    if (!activeChallenge) {
+      // Not in a challenge - show most recent weight source
+      return mostRecentWeight && !currentUserData?.weight
+        ? 'Most recent weight'
+        : ''
+    }
+
+    // In a challenge - check if challenge has started
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    let startDate = null
+    if (activeChallenge.startDate) {
+      if (activeChallenge.startDate.includes('T')) {
+        startDate = new Date(activeChallenge.startDate)
+      } else {
+        const dateMatch = activeChallenge.startDate.match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (dateMatch) {
+          startDate = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]))
+        } else {
+          startDate = new Date(activeChallenge.startDate)
+        }
+      }
+      startDate.setHours(0, 0, 0, 0)
+    }
+
+    const challengeHasStarted = startDate && today >= startDate
+
+    // Check if first weigh-in day has passed
+    let firstWeighInDayHasPassed = false
+    if (challengeHasStarted && activeChallenge.weighInDay) {
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const firstWeighInDay = new Date(startDate)
+      const startDayName = dayNames[firstWeighInDay.getDay()]
+      const weighInDayIndex = dayNames.indexOf(activeChallenge.weighInDay.toLowerCase())
+      const startDayIndex = dayNames.indexOf(startDayName)
+
+      let daysUntilWeighIn = (weighInDayIndex - startDayIndex + 7) % 7
+      if (daysUntilWeighIn === 0 && startDayName === activeChallenge.weighInDay.toLowerCase()) {
+        daysUntilWeighIn = 0
+      }
+
+      firstWeighInDay.setDate(firstWeighInDay.getDate() + daysUntilWeighIn)
+      firstWeighInDay.setHours(0, 0, 0, 0)
+      firstWeighInDayHasPassed = today >= firstWeighInDay
+    }
+
+    // Only show starting weight once the challenge has started, the first
+    // weigh-in day has passed (or is today) and a starting weight is confirmed
+    if (challengeHasStarted && firstWeighInDayHasPassed && participantData?.startingWeight) {
+      return `Started: ${participantData.startingWeight} lbs`
+    }
+    return ''
+  })()
+
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = user.name ? user.name.split(' ')[0] : ''
+  const todayLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  const isBackgroundFetching = (userDataFetching || challengesFetching) && (userData || challengesData)
 
   return (
     <>
-      {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
-        <h1 className="text-2xl font-bold text-center text-white">
-          FitApp
-        </h1>
-      </header>
+      <PageHeader
+        title={firstName ? `${greeting}, ${firstName}` : greeting}
+        subtitle={todayLabel}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={handleSyncClick}
+              disabled={isSyncing}
+              className="icon-btn-on-brand disabled:opacity-60"
+              aria-label={isSyncing ? 'Syncing fitness data' : 'Sync fitness data'}
+              title="Sync data"
+            >
+              <Icon name="refresh" className={`h-5 w-5 ${isSyncing || isBackgroundFetching ? 'animate-spin' : ''}`} />
+            </button>
+            <Link to="/account-settings" className="ml-1 md:hidden" aria-label="Account settings">
+              <Avatar src={user.picture} name={user.name} size="sm" className="ring-2 ring-[rgb(255_255_255/0.4)]" />
+            </Link>
+          </>
+        }
+      />
 
-      <div className="w-full bg-gray-50 min-h-screen relative">
-        {/* Main content with bottom navigation offset and top padding for fixed header */}
-        <main className="px-0 py-6 pb-24 safe-area-content">
+      <div className="page">
         <ReconnectBanner />
 
-        {/* Show loading spinner at center if initial data hasn't loaded yet */}
         {!allCardsDataReady && (
-          <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+            <div className="skeleton h-48 md:col-span-2" />
+            <div className="skeleton h-48" />
+            <div className="skeleton h-32" />
+            <div className="skeleton h-32" />
+            <div className="skeleton h-32" />
           </div>
         )}
-        
-        {/* Main Dashboard Content - Only show when data is ready */}
+
         {allCardsDataReady && (
-          <div className="space-y-2">
-            {/* Subtle loading indicator when fetching in background - above User Card */}
-            {(userDataFetching || challengesFetching) && (userData || challengesData) && (
-              <div className="flex items-center justify-center py-4">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="grid gap-4 md:grid-flow-row-dense md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+            {/* Setting-up notice */}
+            {!hasFitnessData && (
+              <div className="callout callout-warning md:col-span-2 lg:col-span-3">
+                <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">Setting up fitness data sync</p>
+                  <p className="opacity-90">We're connecting to your fitness data. This can take a moment for new accounts.</p>
+                </div>
               </div>
             )}
-            
-            {/* User Card at Top */}
-            <UserCard
-              name={user.name}
-              picture={user.picture}
-              message="Let's check your activity"
-              onClick={() => console.log('User card clicked')}
-            />
 
-            {/* Challenge Ranking Card - Only show if we have data or have confirmed no data */}
-            {activeChallenge && (userRank !== null || hasInitialDataLoaded) && (
-              <StatCard
-                variant="deep"
-                title="Challenge Ranking"
-                value={userRank?.rank ? `#${userRank.rank}` : 'N/A'}
-                subtitle={activeChallenge.name}
-                iconType="rank"
-                onClick={() => {
-                  window.location.href = '/leaderboard'
-                }}
-              />
-            )}
-            {!activeChallenge && (
-              <StatCard
-                variant="deep"
-                title="Join or create a challenge to start competing!"
-                value=""
-                subtitle=""
-                iconType="rank"
-                onClick={() => {
-                  window.location.href = '/challenges'
-                }}
-              />
-            )}
-
-            {/* Steps Card - Show progress card when in challenge, stat card when not */}
+            {/* Steps: progress toward the challenge goal, or plain steps outside a challenge */}
             {hasFitnessData && (() => {
-              const currentSteps = currentUserData.steps ?? 0;
-              
-              // If in a challenge, show progress card with goal
+              const currentSteps = currentUserData.steps ?? 0
               if (activeChallenge?.stepGoal) {
-                const stepGoal = activeChallenge.stepGoal;
-                const { achieved } = getStepProgress(stepGoal);
+                const stepGoal = activeChallenge.stepGoal
+                const { achieved } = getStepProgress(stepGoal)
                 return (
                   <ProgressCard
-                    title="Step Goal Progress"
+                    title="Steps today"
                     current={currentSteps}
                     goal={stepGoal}
                     achieved={achieved}
                     showPointStatus={activeChallenge.scoringMode !== 'v2'}
                     onClick={() => navigate('/steps-history')}
+                    className="md:col-span-2"
                   />
-                );
+                )
               }
-              
-              // If not in a challenge, show simple stat card with just current steps
               return (
-                <StatCard
-                  variant="primary"
-                  title="Current Steps"
-                  value={currentSteps.toLocaleString()}
-                  subtitle="Steps Today"
-                  iconType="steps"
+                <ProgressCard
+                  title="Steps today"
+                  current={currentSteps}
                   onClick={() => navigate('/steps-history')}
+                  className="md:col-span-2"
                 />
-              );
+              )
             })()}
 
-            {/* Points v2: today's points by category */}
-            {activeChallenge?.scoringMode === 'v2' && (
-              <V2TodayPoints challenge={activeChallenge} onClick={() => navigate('/leaderboard')} />
-            )}
-
-            {/* Confirm Weight Button - Only on weigh-in day */}
-            {shouldPromptForWeight && activeChallenge && (
-              <button
-                onClick={() => setShowWeightModal(true)}
-                className="w-full flex items-center justify-center space-x-2 p-4 rounded-xl font-semibold transition-all bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-md"
-              >
-                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Confirm Weight</span>
-              </button>
-            )}
-
-            {/* Weight Card - Only show if we have data or have confirmed no data after initial load */}
-            {hasInitialDataLoaded && (
+            {/* Challenge ranking */}
+            {activeChallenge && (userRank !== null || hasInitialDataLoaded) && (
               <StatCard
-                variant="light"
-                title="Current Weight"
-              value={(() => {
-                // On weigh-in day: prefer the value submitted via Confirm Weight (participantData.lastWeight)
-                // Otherwise: use most recent weight synced from preferred data source (Google Fit/Fitbit)
-                const isWeighInDay = !!(shouldPromptForWeight && activeChallenge);
-                const weightToShow = isWeighInDay
-                  ? (participantData?.lastWeight ?? currentUserData?.weight ?? mostRecentWeight)
-                  : (currentUserData?.weight ?? mostRecentWeight);
-                return weightToShow !== null && weightToShow !== undefined
-                  ? `${weightToShow.toFixed(1)} lbs`
-                  : 'N/A';
-              })()}
-              subtitle={(() => {
-                if (!activeChallenge) {
-                  // Not in a challenge - show most recent weight source
-                  return mostRecentWeight && !currentUserData?.weight
-                    ? 'Most recent weight'
-                    : '';
-                }
-                
-                // In a challenge - check if challenge has started
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                let startDate = null;
-                if (activeChallenge.startDate) {
-                  if (activeChallenge.startDate.includes('T')) {
-                    startDate = new Date(activeChallenge.startDate);
-                  } else {
-                    const dateMatch = activeChallenge.startDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-                    if (dateMatch) {
-                      startDate = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]));
-                    } else {
-                      startDate = new Date(activeChallenge.startDate);
-                    }
-                  }
-                  startDate.setHours(0, 0, 0, 0);
-                }
-                
-                const challengeHasStarted = startDate && today >= startDate;
-                
-                // Check if first weigh-in day has passed
-                let firstWeighInDayHasPassed = false;
-                if (challengeHasStarted && activeChallenge.weighInDay) {
-                  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                  const firstWeighInDay = new Date(startDate);
-                  const startDayName = dayNames[firstWeighInDay.getDay()];
-                  const weighInDayIndex = dayNames.indexOf(activeChallenge.weighInDay.toLowerCase());
-                  const startDayIndex = dayNames.indexOf(startDayName);
-                  
-                  let daysUntilWeighIn = (weighInDayIndex - startDayIndex + 7) % 7;
-                  if (daysUntilWeighIn === 0 && startDayName === activeChallenge.weighInDay.toLowerCase()) {
-                    daysUntilWeighIn = 0;
-                  }
-                  
-                  firstWeighInDay.setDate(firstWeighInDay.getDate() + daysUntilWeighIn);
-                  firstWeighInDay.setHours(0, 0, 0, 0);
-                  firstWeighInDayHasPassed = today >= firstWeighInDay;
-                }
-                
-                // Only show starting weight if:
-                // 1. Challenge has started
-                // 2. First weigh-in day has passed (or is today)
-                // 3. Starting weight has been confirmed (not null)
-                if (challengeHasStarted && firstWeighInDayHasPassed && participantData?.startingWeight) {
-                  return `Started: ${participantData.startingWeight} lbs`;
-                } else {
-                  // Don't show starting weight if challenge hasn't started, first weigh-in day hasn't passed, or weight hasn't been confirmed
-                  return '';
-                }
-              })()}
-              iconType="weight"
-              onClick={() => navigate('/weight-history')}
+                title="Challenge ranking"
+                value={userRank?.rank ? `#${userRank.rank}` : 'N/A'}
+                subtitle={activeChallenge.name}
+                icon="trophy"
+                onClick={() => navigate('/leaderboard')}
+                className={hasFitnessData ? '' : 'lg:col-span-2'}
+              />
+            )}
+            {!activeChallenge && (
+              <StatCard
+                title="No active challenge"
+                subtitle="Join or create a challenge to start competing."
+                icon="trophy"
+                onClick={() => navigate('/challenges')}
               />
             )}
 
-          {/* Status indicator */}
-          {!hasFitnessData && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="text-yellow-600">
-                  <svg width="32" height="32" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-yellow-800">Setting up fitness data sync...</h3>
-                  <p className="text-yellow-700">We're working on connecting to your fitness data. This may take a moment for new accounts.</p>
-                </div>
+            {/* Points v2: today's points by category */}
+            {activeChallenge?.scoringMode === 'v2' && (
+              <div className="md:col-span-2">
+                <V2TodayPoints challenge={activeChallenge} onClick={() => navigate('/leaderboard')} />
               </div>
-            </div>
-          )}
+            )}
 
-
-
-          {/* Recent Activity */}
-          <div className="mb-6">
-            <h3 className={unifiedDesignSystem.typography.hierarchy.sectionTitle + " text-blue-900 mb-4"}>
-              Recent Activity
-            </h3>
-            <div className="space-y-3">
-              {/* Sync Button */}
-              <button
-                onClick={handleSyncClick}
-                disabled={isSyncing}
-                className={`w-full flex items-center justify-center space-x-2 p-4 rounded-xl font-semibold transition-all ${
-                  isSyncing
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                } text-white shadow-md`}
+            {/* Weight */}
+            {hasInitialDataLoaded && (
+              <StatCard
+                title="Current weight"
+                value={weightValue}
+                subtitle={weightSubtitle}
+                icon="scale"
+                tone="accent"
+                onClick={() => navigate('/weight-history')}
               >
+                {shouldPromptForWeight && activeChallenge && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowWeightModal(true)
+                    }}
+                    className="btn btn-primary mt-4 w-full"
+                  >
+                    <Icon name="check-circle" className="h-5 w-5" />
+                    Confirm weight
+                  </button>
+                )}
+              </StatCard>
+            )}
+
+            {/* Sync status */}
+            <section className={`card card-pad flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-5 md:col-span-2 ${activeChallenge?.scoringMode === 'v2' ? 'lg:col-span-3' : 'lg:col-span-2'}`} aria-labelledby="sync-heading">
+              <div className="flex items-center gap-3 lg:flex-1">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-2 text-ink-muted">
+                  <Icon name="cloud" className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 id="sync-heading" className="text-sm font-medium text-ink-muted">Data sync</h3>
+                  <p className="text-sm font-semibold text-ink">
+                    {currentUserData.lastSync
+                      ? `Last synced ${new Date(currentUserData.lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                      : 'Not synced yet'}
+                  </p>
+                </div>
+                <span className="h-2.5 w-2.5 rounded-full bg-teal-500" aria-hidden="true" />
+              </div>
+              {syncError && (
+                <div className="callout callout-danger" role="alert">
+                  <Icon name="alert-circle" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{syncError}</span>
+                </div>
+              )}
+              <button onClick={handleSyncClick} disabled={isSyncing} className="btn btn-secondary mt-auto w-full lg:mt-0 lg:w-auto lg:shrink-0">
                 {isSyncing ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Syncing...</span>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                    Syncing...
                   </>
                 ) : (
                   <>
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Sync Data</span>
+                    <Icon name="refresh" className="h-4 w-4" />
+                    Sync data
                   </>
                 )}
               </button>
+            </section>
 
-              {/* Sync Error Message */}
-              {syncError && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                  <div className="flex items-center space-x-2">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20" className="text-red-600">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-red-800 text-sm">{syncError}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Sync Status */}
-              <div className="flex items-center justify-between p-4 bg-blue-500 rounded-xl">
-                <div className="flex items-center space-x-3">
-                  <div className="w-3 h-3 bg-white rounded-full"></div>
-                  <span className="text-white">Fitness data synced successfully</span>
-                </div>
-                <span className="text-sm text-white opacity-80">
-                  {currentUserData.lastSync ? new Date(currentUserData.lastSync).toLocaleTimeString() : '—'}
-                </span>
-              </div>
-
-            </div>
-          </div>
+            {/* Shortcuts (phones and tablets; the sidebar has these on desktop) */}
+            <nav className="grid grid-cols-2 gap-3 md:col-span-2 lg:hidden" aria-label="Shortcuts">
+              {[
+                { to: '/steps-history', icon: 'steps', label: 'Steps history' },
+                { to: '/weight-history', icon: 'scale', label: 'Weight history' },
+                ...(activeChallenge ? [{ to: '/leaderboard', icon: 'medal', label: 'Leaderboard' }] : []),
+                { to: '/challenges', icon: 'trophy', label: 'Challenges' },
+              ].map((s) => (
+                <Link key={s.to} to={s.to} className="card card-interactive flex items-center gap-3 p-3 text-sm font-semibold text-ink">
+                  <Icon name={s.icon} className="h-5 w-5 text-brand-ink" />
+                  <span className="truncate">{s.label}</span>
+                </Link>
+              ))}
+            </nav>
           </div>
         )}
-      </main>
-    </div>
+      </div>
 
-    {/* Weight Input Modal */}
-    {activeChallenge && (
-      <WeightInputModal
-        isOpen={showWeightModal}
-        onClose={() => setShowWeightModal(false)}
-        challenge={activeChallenge}
-        onWeightSubmitted={handleWeightSubmitted}
-        user={user}
-      />
-    )}
+      {/* Weight Input Modal */}
+      {activeChallenge && (
+        <WeightInputModal
+          isOpen={showWeightModal}
+          onClose={() => setShowWeightModal(false)}
+          challenge={activeChallenge}
+          onWeightSubmitted={handleWeightSubmitted}
+          user={user}
+        />
+      )}
     </>
   )
 }

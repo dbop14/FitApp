@@ -41,15 +41,12 @@ const StackedAvatars = ({
 
   const generateGradient = (name) => {
     // Generate a consistent color based on name
+    // Brand blues and teal accent only
     const colors = [
       'from-blue-400 to-blue-600',
-      'from-purple-400 to-purple-600', 
-      'from-green-400 to-green-600',
-      'from-pink-400 to-pink-600',
-      'from-indigo-400 to-indigo-600',
+      'from-blue-500 to-blue-800',
       'from-teal-400 to-teal-600',
-      'from-orange-400 to-orange-600',
-      'from-red-400 to-red-600'
+      'from-blue-300 to-blue-500',
     ];
     
     let hash = 0;
@@ -66,7 +63,7 @@ const StackedAvatars = ({
         {visibleParticipants.map((participant, index) => (
           <div 
             key={participant.userId || index}
-            className={`relative ${sizeClasses[size]} rounded-full border-2 border-white bg-white shadow-sm z-${10 - index}`}
+            className={`relative ${sizeClasses[size]} rounded-full border-2 border-white bg-white shadow-sm`}
             style={{ zIndex: 10 - index }}
           >
             {participant.picture ? (
@@ -93,7 +90,7 @@ const StackedAvatars = ({
         {/* Show count for remaining participants */}
         {remainingCount > 0 && (
           <div 
-            className={`relative ${sizeClasses[size]} rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-gray-600 font-semibold ${textSizeClasses[size]} shadow-sm`}
+            className={`relative ${sizeClasses[size]} rounded-full border-2 border-white bg-surface-2 flex items-center justify-center text-ink-muted font-semibold ${textSizeClasses[size]} shadow-sm`}
             style={{ zIndex: 1 }}
           >
             +{remainingCount}
@@ -103,7 +100,7 @@ const StackedAvatars = ({
 
       {/* Total count text */}
       {showCount && (
-        <span className="ml-2 text-sm text-gray-600 font-medium">
+        <span className="ml-2 text-sm text-ink-muted font-medium">
           {participants.length}
         </span>
       )}

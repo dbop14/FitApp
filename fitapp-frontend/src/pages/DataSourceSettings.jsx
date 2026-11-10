@@ -1,7 +1,8 @@
 import { useState, useContext, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
-import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
+import PageHeader from '../components/ui/PageHeader'
+import Icon from '../components/ui/Icon'
 import Button from '../components/ui/Button'
 import { getDataSourceStatus, updateDataSource, startGoogleHealthConnect, disconnectGoogleHealth, updateMaxHeartRate, startWhoopConnect, disconnectWhoop } from '../utils/apiService'
 
@@ -23,6 +24,61 @@ const WHOOP_ERRORS = {
   locked: 'Your data source is locked for a Points v2 challenge you are in, so WHOOP cannot become your source until it ends.',
   disabled: 'WHOOP is not available yet.',
 }
+
+// One card per selectable source (WHOOP, Google Health)
+const SourceCard = ({ id, name, icon, connected, onConnect, onDisconnect, connectLabel, blurb, activeText, highlight, children, dataSource, isLoading, onSwitch }) => {
+  const active = dataSource === id
+  return (
+    <section
+      className={`card overflow-hidden ${highlight ? 'ring-2 ring-blue-400' : ''} ${active ? 'border-blue-300' : ''}`}
+      aria-labelledby={`src-${id}`}
+    >
+      <div className="flex items-center gap-3 p-4 sm:p-5">
+        <span
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+            active ? 'bg-gradient-to-br from-blue-500 to-blue-800 text-white' : 'bg-surface-2 text-ink-muted'
+          }`}
+        >
+          <Icon name={icon} className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 id={`src-${id}`} className="font-semibold text-ink">{name}</h3>
+          <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+            <span className={`h-2 w-2 rounded-full ${connected ? 'bg-teal-500' : 'bg-surface-3'}`} aria-hidden="true" />
+            {connected ? 'Connected' : 'Not connected'}
+          </p>
+        </div>
+        {active && <span className="chip chip-brand">Active</span>}
+        {!active && connected && (
+          <button onClick={() => onSwitch(id)} disabled={isLoading} className="btn btn-sm btn-secondary">
+            Switch
+          </button>
+        )}
+      </div>
+      <div className="border-t border-line px-4 py-4 sm:px-5">
+        {!connected ? (
+          <>
+            <Button onClick={onConnect} disabled={isLoading} variant="primary" className="w-full">
+              <Icon name="link" className="h-4 w-4" />
+              {connectLabel}
+            </Button>
+            <p className="mt-2 text-center text-xs text-ink-muted">{blurb}</p>
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-ink-muted">{active ? activeText : 'Connected but not in use'}</p>
+            <button onClick={onDisconnect} disabled={isLoading} className="btn btn-sm btn-ghost text-red-600 hover:text-red-700">
+              <Icon name="unlink" className="h-4 w-4" />
+              Disconnect
+            </button>
+          </div>
+        )}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 
 const DataSourceSettings = () => {
   const { user } = useContext(UserContext)
@@ -234,204 +290,124 @@ const DataSourceSettings = () => {
 
   return (
     <>
-      {/* Edge-to-edge header - spans full width */}
-      <header className="bg-gradient-to-r from-blue-500 to-blue-800 px-6 py-4 text-white w-screen fixed top-0 left-0 right-0 z-50 safe-area-header">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleBack}
-            className="text-white hover:text-blue-200 transition-colors"
-          >
-            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
-          <h1 className="text-2xl font-bold text-center text-white flex-1">
-            Data Source
-          </h1>
-          <div className="w-6"></div> {/* Spacer for centering */}
-        </div>
-      </header>
+      <PageHeader title="Data source" subtitle="Where your steps and workouts come from" back={handleBack} />
 
-      <div className="max-w-md mx-auto bg-gray-50 min-h-screen relative">
-        <main className="p-6 pb-24 safe-area-content">
-          {/* Page header */}
-          <div className="mb-6">
-            <h1 className={unifiedDesignSystem.typography.hierarchy.pageTitle}>
-              Data Source Settings
-            </h1>
-            <p className="text-sm text-gray-600 mt-2">
-              Choose where your steps and workouts come from
-            </p>
+      <div className="page-narrow">
+        {isLoadingStatus ? (
+          <div className="space-y-4" aria-busy="true">
+            <div className="skeleton h-36" />
+            <div className="skeleton h-36" />
           </div>
+        ) : (
+          <div className="space-y-4">
+            {error && (
+              <div className="callout callout-danger" role="alert">
+                <Icon name="alert-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+                <p>{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="callout callout-success" role="status">
+                <Icon name="check-circle" className="mt-0.5 h-5 w-5 shrink-0" />
+                <p>{success}</p>
+              </div>
+            )}
 
-          {isLoadingStatus ? (
-            <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
-              <p className="text-gray-600">Loading...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {sourceLocks.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-blue-900">
+            {sourceLocks.length > 0 && (
+              <div className="callout callout-info">
+                <Icon name="lock" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">
                     Locked source: {SOURCE_LABELS[sourceLocks[0].lockedSource] || sourceLocks[0].lockedSource}
                   </p>
-                  <p className="text-xs text-blue-800 mt-1">
-                    You are in {sourceLocks.length === 1 ? `"${sourceLocks[0].challengeName}"` : `${sourceLocks.length} Points v2 challenges`}, which {sourceLocks.length === 1 ? 'uses' : 'use'} the source you had when you joined until {sourceLocks.length === 1 ? 'it ends' : 'they end'}. 
+                  <p className="opacity-90">
+                    You are in {sourceLocks.length === 1 ? `"${sourceLocks[0].challengeName}"` : `${sourceLocks.length} Points v2 challenges`}, which{' '}
+                    {sourceLocks.length === 1 ? 'uses' : 'use'} the source you had when you joined until {sourceLocks.length === 1 ? 'it ends' : 'they end'}.
                   </p>
                 </div>
-              )}
-              {/* Legacy and missing sources: Google Fit and Fitbit can no longer be chosen */}
-              {dataSource === 'google-fit' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-amber-900">You're on Google Fit</p>
-                  <p className="text-xs text-amber-800 mt-1">
+              </div>
+            )}
+
+            {/* Legacy and missing sources: Google Fit and Fitbit can no longer be chosen */}
+            {dataSource === 'google-fit' && (
+              <div className="callout callout-warning">
+                <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">You're on Google Fit</p>
+                  <p className="opacity-90">
                     Google Fit shuts down at the end of 2026. Your steps keep syncing until you switch, but once you connect {sourceChoices} you can't switch back.
                   </p>
                 </div>
-              )}
-              {dataSource === 'fitbit' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-amber-900">Fitbit is no longer syncing</p>
-                  <p className="text-xs text-amber-800 mt-1">
+              </div>
+            )}
+            {dataSource === 'fitbit' && (
+              <div className="callout callout-warning">
+                <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">Fitbit is no longer syncing</p>
+                  <p className="opacity-90">
                     Fitbit shut down its old connection on October 30, 2026. Connect Google Health to sync your Fitbit data again.
                   </p>
                 </div>
-              )}
-              {dataSource === 'none' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-blue-900">Connect a data source</p>
-                  <p className="text-xs text-blue-800 mt-1">
-                    Connect {sourceChoices} to start syncing your steps and workouts.
-                  </p>
+              </div>
+            )}
+            {dataSource === 'none' && (
+              <div className="callout callout-info">
+                <Icon name="link" className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">Connect a data source</p>
+                  <p className="opacity-90">Connect {sourceChoices} to start syncing your steps and workouts.</p>
                 </div>
-              )}
-              {!googleHealthEnabled && !whoopEnabled && (
-                <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
-                  <p className="text-sm text-gray-600">New data sources are coming soon.</p>
-                </div>
-              )}
+              </div>
+            )}
+            {!googleHealthEnabled && !whoopEnabled && (
+              <div className="card card-pad text-center text-sm text-ink-muted">New data sources are coming soon.</div>
+            )}
 
-              {/* WHOOP Option */}
-              {whoopEnabled && (
-                <div className="bg-white rounded-2xl shadow-sm border p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold" aria-hidden="true">W</div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800">WHOOP</h3>
-                        <p className="text-sm text-gray-600">{whoopConnected ? 'Connected' : 'Not connected'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {dataSource === 'whoop' && <span className="text-blue-600 font-semibold text-sm">Active</span>}
-                      {dataSource !== 'whoop' && whoopConnected && (
-                        <button
-                          onClick={() => handleDataSourceChange('whoop')}
-                          disabled={isLoading}
-                          className="text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
-                        >
-                          Switch
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    {!whoopConnected ? (
-                      <>
-                        <Button onClick={handleConnectWhoop} disabled={isLoading} variant="primary" size="md" className="w-full">
-                          Connect WHOOP
-                        </Button>
-                        <p className="text-xs text-gray-500 mt-2 text-center">
-                          Syncs steps and workouts (with heart-rate zones) from WHOOP. Log weigh-ins in FitApp. Sleep and recovery are not read.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500">
-                          {dataSource === 'whoop' ? 'Your steps and workouts sync from WHOOP' : 'Connected but not in use'}
-                        </p>
-                        <button
-                          onClick={handleDisconnectWhoop}
-                          disabled={isLoading}
-                          className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+            {whoopEnabled && (
+              <SourceCard
+                dataSource={dataSource}
+                isLoading={isLoading}
+                onSwitch={handleDataSourceChange}
+                id="whoop"
+                name="WHOOP"
+                icon="watch"
+                connected={whoopConnected}
+                onConnect={handleConnectWhoop}
+                onDisconnect={handleDisconnectWhoop}
+                connectLabel="Connect WHOOP"
+                blurb="Syncs steps and workouts (with heart-rate zones) from WHOOP. Log weigh-ins in FitApp. Sleep and recovery are not read."
+                activeText="Your steps and workouts sync from WHOOP"
+              />
+            )}
 
-              {/* Google Health Option (replaces the Fitbit Web API and, later, Google Fit) */}
-              {googleHealthEnabled && (
-                <div className={`bg-white rounded-2xl shadow-sm border p-6 ${dataSource === 'fitbit' ? 'ring-2 ring-blue-400' : ''}`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="text-gray-600">
-                        <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M12 21s-7.5-4.6-9.6-9.3C1 8.5 3 5 6.4 5c2 0 3.3 1.1 4.1 2.3h3C14.3 6.1 15.6 5 17.6 5 21 5 23 8.5 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#4285F4"/>
-                          <path d="M6 12h3l1.5-3 2 6 1.5-3h4" stroke="#fff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800">Google Health</h3>
-                        <p className="text-sm text-gray-600">
-                          {googleHealthConnected ? 'Connected' : 'Not connected'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {dataSource === 'google-health' && (
-                        <span className="text-blue-600 font-semibold text-sm">Active</span>
-                      )}
-                      {dataSource !== 'google-health' && googleHealthConnected && (
-                        <button
-                          onClick={() => handleDataSourceChange('google-health')}
-                          disabled={isLoading}
-                          className="text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
-                        >
-                          Switch
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    {!googleHealthConnected ? (
-                      <>
-                        <Button onClick={handleConnectGoogleHealth} disabled={isLoading} variant="primary" size="md" className="w-full">
-                          Connect Google Health
-                        </Button>
-                        <p className="text-xs text-gray-500 mt-2 text-center">
-                          Syncs steps, workouts and weight from Fitbit devices and the Google Health app. Fitbit users: use this to reconnect.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500">
-                          {dataSource === 'google-health'
-                            ? 'Your steps, workouts and weight sync from Google Health'
-                            : 'Connected but not in use'}
-                        </p>
-                        <button
-                          onClick={handleDisconnectGoogleHealth}
-                          disabled={isLoading}
-                          className="text-red-600 hover:text-red-700 text-xs font-medium disabled:opacity-50"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {googleHealthConnected && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <label htmlFor="max-hr" className="block text-sm font-medium text-gray-800">
-                        Max heart rate
-                      </label>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Used to work out Effort Points when your workouts don't include heart-rate zones. Leave blank to use {defaultMaxHeartRate} bpm. A rough guide is 220 minus your age.
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
+            {/* Google Health replaces the Fitbit Web API and, later, Google Fit */}
+            {googleHealthEnabled && (
+              <SourceCard
+                dataSource={dataSource}
+                isLoading={isLoading}
+                onSwitch={handleDataSourceChange}
+                id="google-health"
+                name="Google Health"
+                icon="heart-pulse"
+                connected={googleHealthConnected}
+                onConnect={handleConnectGoogleHealth}
+                onDisconnect={handleDisconnectGoogleHealth}
+                connectLabel="Connect Google Health"
+                blurb="Syncs steps, workouts and weight from Fitbit devices and the Google Health app. Fitbit users: use this to reconnect."
+                activeText="Your steps, workouts and weight sync from Google Health"
+                highlight={dataSource === 'fitbit'}
+              >
+                {googleHealthConnected && (
+                  <div className="border-t border-line px-4 py-4 sm:px-5">
+                    <label htmlFor="max-hr" className="label mb-0">
+                      Max heart rate
+                    </label>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Used to work out Effort Points when your workouts don't include heart-rate zones. Leave blank to use {defaultMaxHeartRate} bpm. A rough guide is 220 minus your age.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="relative w-32">
                         <input
                           id="max-hr"
                           type="number"
@@ -441,57 +417,25 @@ const DataSourceSettings = () => {
                           placeholder={String(defaultMaxHeartRate)}
                           value={maxHeartRate}
                           onChange={(e) => setMaxHeartRate(e.target.value)}
-                          className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          className="input pr-12"
                         />
-                        <span className="text-sm text-gray-600">bpm</span>
-                        <button
-                          onClick={handleSaveMaxHeartRate}
-                          disabled={isLoading}
-                          className="ml-auto text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
-                        >
-                          Save
-                        </button>
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">bpm</span>
                       </div>
+                      <button onClick={handleSaveMaxHeartRate} disabled={isLoading} className="btn btn-secondary ml-auto">
+                        Save
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </SourceCard>
+            )}
 
-              {/* Error and Success Messages */}
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-red-800 text-sm">{error}</p>
-                </div>
-              )}
-              
-              {success && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-green-800 text-sm">{success}</p>
-                </div>
-              )}
-
-              {/* Info Box */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800 text-sm">
-                  <strong>Note:</strong> You can use one data source at a time. Weigh-ins are logged in FitApp. Sleep is never read.
-                </p>
-              </div>
+            <div className="callout border-line bg-surface-2 text-ink-muted">
+              <Icon name="info" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>You can use one data source at a time. Weigh-ins are logged in FitApp. Sleep is never read.</p>
             </div>
-          )}
-
-          {/* Back Button */}
-          <div className="mt-8">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleBack}
-              size="lg"
-              className="w-full"
-            >
-              Back to Settings
-            </Button>
           </div>
-        </main>
+        )}
       </div>
     </>
   )

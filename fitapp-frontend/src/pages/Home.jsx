@@ -1,7 +1,9 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useContext, useEffect } from 'react'
 import { UserContext } from '../context/UserContext'
+import Icon from '../components/ui/Icon'
+import fitappLogo from '../assets/fitapp-logo.svg'
 
 const Home = () => {
   const navigate = useNavigate()
@@ -36,28 +38,37 @@ const Home = () => {
   }, [user, isStandalone, navigate])
   
   return (
-    <div className="min-h-screen bg-white py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header Section */}
-        <header className="mb-8">
-          <div className="text-center mb-6">
-            <h1 className="text-5xl font-bold text-blue-600 mb-4">
-              Welcome to FitApp
-            </h1>
-            <p className="text-xl text-gray-700 mb-4">
-              Your Fitness Challenge Companion
-            </p>
+    <div className="min-h-screen bg-canvas">
+      {/* Header Section */}
+      <header className="relative overflow-hidden bg-gradient-to-br from-blue-500 to-blue-800 px-4 pb-16 pt-[calc(2.5rem+var(--safe-area-top))] text-white sm:px-6 lg:px-8">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[rgb(255_255_255/0.08)]" />
+        <div className="relative mx-auto max-w-4xl text-center">
+          <div className="mx-auto mb-5 h-20 w-20 rounded-3xl bg-[#fff] p-3 shadow-brand">
+            <img src={fitappLogo} alt="FitApp logo" className="h-full w-full object-contain" />
           </div>
-        </header>
+          <h1 className="mb-3 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+            Welcome to FitApp
+          </h1>
+          <p className="mb-6 text-lg text-blue-100 sm:text-xl">
+            Your Fitness Challenge Companion
+          </p>
+          <Link to="/login" className="btn btn-lg bg-[#fff] text-blue-700 hover:bg-blue-50">
+            <Icon name="log-in" className="h-5 w-5" />
+            Sign in
+          </Link>
+        </div>
+      </header>
+
+      <div className="mx-auto -mt-8 max-w-4xl px-4 pb-12 sm:px-6 lg:px-8">
 
         {/* PRIMARY PURPOSE STATEMENT - Must be first in main content for Google crawler */}
         <main>
           <section className="mb-8">
-            <div className="bg-blue-50 border-4 border-blue-400 rounded-lg p-8 mb-6 max-w-4xl mx-auto shadow-lg">
-              <h2 className="text-3xl font-bold text-blue-900 mb-6 text-center">
+            <div className="card relative mx-auto mb-6 max-w-4xl border-t-4 border-t-blue-500 p-6 sm:p-8">
+              <h2 className="mb-6 text-center text-2xl font-bold text-ink sm:text-3xl">
                 Purpose of This Application
               </h2>
-              <div className="text-lg text-gray-900 leading-relaxed space-y-4">
+              <div className="space-y-4 text-base leading-relaxed text-ink sm:text-lg">
                 <p>
                   <strong>Purpose of FitApp:</strong> FitApp is a fitness challenge application. The purpose of this application is to help users track their fitness progress, 
                   participate in fitness competitions with friends, and stay motivated through social fitness challenges.
@@ -76,22 +87,22 @@ const Home = () => {
 
           {/* Privacy Policy and Terms of Service Links - Prominent and immediately visible */}
           <section className="mb-8">
-            <div className="bg-white border-2 border-blue-300 rounded-lg p-6 max-w-4xl mx-auto text-center space-y-4">
-              <p className="text-lg text-gray-800">
+            <div className="card mx-auto max-w-4xl space-y-4 p-6 text-center">
+              <p className="text-base text-ink sm:text-lg">
                 <strong>Privacy Policy:</strong> For information about how we collect, use, and protect your data, please review our{' '}
                 <a 
                   href="https://fitapp.herringm.com/privacy-policy" 
-                  className="text-blue-600 hover:text-blue-800 underline font-bold text-xl"
+                  className="text-lg font-bold underline"
                   title="Privacy Policy"
                 >
                   Privacy Policy
                 </a>.
               </p>
-              <p className="text-lg text-gray-800">
+              <p className="text-base text-ink sm:text-lg">
                 <strong>Terms of Service:</strong> By using FitApp, you agree to our{' '}
                 <a 
                   href="https://fitapp.herringm.com/terms-of-service" 
-                  className="text-blue-600 hover:text-blue-800 underline font-bold text-xl"
+                  className="text-lg font-bold underline"
                   title="Terms of Service"
                 >
                   Terms of Service
@@ -102,11 +113,11 @@ const Home = () => {
 
           {/* Additional Purpose Information */}
           <section className="mb-12">
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-8 mb-8 border-l-4 border-blue-600">
-            <h2 className="text-3xl font-semibold text-blue-800 mb-6">
+          <div className="mb-8 rounded-2xl border-l-4 border-blue-600 bg-brand-soft p-6 sm:p-8">
+            <h2 className="mb-6 text-2xl font-semibold text-brand-ink sm:text-3xl">
               About FitApp - Our Purpose
             </h2>
-            <div className="space-y-4 text-lg text-gray-700">
+            <div className="space-y-4 text-base text-ink sm:text-lg">
               <p>
                 <strong>FitApp</strong> is a fitness challenge application designed to help you stay motivated, 
                 track your progress, and compete with friends in fun fitness challenges. Our purpose is to 
@@ -124,49 +135,49 @@ const Home = () => {
 
           {/* Key Features */}
           <div className="mb-8">
-            <h2 className="text-2xl font-semibold text-blue-800 mb-6">
+            <h2 className="mb-6 text-2xl font-semibold text-ink">
               What FitApp Does
             </h2>
             <div className="grid md:grid-cols-2 gap-6">
-              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center">
-                  <span className="text-blue-600 mr-2">🏃</span>
+              <div className="card p-6">
+                <h3 className="mb-3 flex items-center text-lg font-semibold text-ink">
+                  <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink"><Icon name="steps" className="h-5 w-5" /></span>
                   Fitness Tracking
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-ink-muted">
                   Automatically syncs your step count and weight data from Google Fit to track your 
                   daily fitness progress.
                 </p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center">
-                  <span className="text-blue-600 mr-2">🏆</span>
+              <div className="card p-6">
+                <h3 className="mb-3 flex items-center text-lg font-semibold text-ink">
+                  <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink"><Icon name="trophy" className="h-5 w-5" /></span>
                   Challenge Competitions
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-ink-muted">
                   Join fitness challenges with friends, compete on leaderboards, and earn points 
                   based on your daily activity.
                 </p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center">
-                  <span className="text-blue-600 mr-2">📊</span>
+              <div className="card p-6">
+                <h3 className="mb-3 flex items-center text-lg font-semibold text-ink">
+                  <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink"><Icon name="line-chart" className="h-5 w-5" /></span>
                   Progress Monitoring
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-ink-muted">
                   View your fitness history, track trends over time, and monitor your progress 
                   toward your fitness goals.
                 </p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center">
-                  <span className="text-blue-600 mr-2">💬</span>
+              <div className="card p-6">
+                <h3 className="mb-3 flex items-center text-lg font-semibold text-ink">
+                  <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink"><Icon name="chat" className="h-5 w-5" /></span>
                   Social Features
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-ink-muted">
                   Chat with challenge participants, share your progress, and stay motivated with 
                   your fitness community.
                 </p>
@@ -175,11 +186,11 @@ const Home = () => {
           </div>
 
           {/* How It Works */}
-          <div className="bg-gray-50 rounded-lg p-8 mb-8">
-            <h2 className="text-2xl font-semibold text-blue-800 mb-6">
+          <div className="card mb-8 p-6 sm:p-8">
+            <h2 className="mb-6 text-2xl font-semibold text-ink">
               How It Works
             </h2>
-            <ol className="list-decimal list-inside space-y-3 text-gray-700">
+            <ol className="list-inside list-decimal space-y-3 text-ink-muted marker:font-bold marker:text-brand-ink">
               <li>
                 <strong>Sign in with Google:</strong> Use your Google account to securely authenticate 
                 and connect your Google Fit data.
@@ -203,11 +214,11 @@ const Home = () => {
         </main>
 
         {/* Footer */}
-        <footer className="text-center text-gray-600 mt-12 pt-8 border-t border-gray-200">
+        <footer className="mt-12 border-t border-line pt-8 text-center text-ink-muted">
           <p className="mb-2">© {new Date().getFullYear()} FitApp. All rights reserved.</p>
           <p className="text-sm">
             For questions or support, contact us at{' '}
-            <a href="mailto:support@herringm.com" className="text-blue-600 hover:text-blue-800 underline">
+            <a href="mailto:support@herringm.com" className="underline">
               support@herringm.com
             </a>
           </p>

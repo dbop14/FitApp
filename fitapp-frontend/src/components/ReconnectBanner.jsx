@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { getDataSourceStatus } from '../utils/apiService'
+import Icon from './ui/Icon'
 
 const DISMISS_KEY = 'fitapp_reconnect_banner_dismissed'
 
@@ -44,18 +45,18 @@ const ReconnectBanner = () => {
   const buttonLabel = status.dataSource === 'none' ? 'Connect' : status.dataSource === 'google-fit' ? 'Switch' : 'Reconnect'
 
   return (
-    <div className="mx-4 mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4" role="status">
-      <p className="text-sm text-amber-900">{message}</p>
-      <div className="mt-3 flex gap-3">
-        <button
-          onClick={() => navigate('/data-source-settings')}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          {buttonLabel}
-        </button>
-        <button onClick={dismiss} className="text-sm text-amber-900 underline">
-          Not now
-        </button>
+    <div className="callout callout-warning mb-4 items-start" role="status">
+      <Icon name="unlink" className="mt-0.5 h-5 w-5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p>{message}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button onClick={() => navigate('/data-source-settings')} className="btn btn-sm btn-primary">
+            {buttonLabel}
+          </button>
+          <button onClick={dismiss} className="btn btn-sm btn-ghost">
+            Not now
+          </button>
+        </div>
       </div>
     </div>
   )
