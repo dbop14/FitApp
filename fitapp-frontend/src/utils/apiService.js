@@ -38,6 +38,19 @@ export const fetchWithAuth = async (url, options = {}) => {
   return response;
 };
 
+// Authenticated call that returns { status, json } instead of throwing, so
+// callers can show the server's message (e.g. a Points v2 source lock, 409).
+const authedJson = async (url, options = {}) => {
+  const response = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token')}`, ...options.headers },
+  });
+  const json = await response.json().catch(() => ({}));
+  return { status: response.status, ok: response.ok, json };
+};
+
+const LockedError = (json) => Object.assign(new Error(json.error || 'Your data source is locked for a Points v2 challenge'), { locked: true });
+
 // Helper function to get the API base URL
 export const getApiUrl = () => {
   return import.meta.env.VITE_API_URL || 'https://fitappbackend.herringm.com';
@@ -58,17 +71,13 @@ export const getDataSourceStatus = async (googleId) => {
 // Update user's data source preference
 export const updateDataSource = async (googleId, dataSource) => {
   const apiUrl = getApiUrl();
-  const response = await fetchWithAuth(`${apiUrl}/api/user/datasource`, {
+  const { ok, status, json } = await authedJson(`${apiUrl}/api/user/datasource`, {
     method: 'PUT',
     body: JSON.stringify({ googleId, dataSource })
   });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to update data source');
-  }
-  
-  return await response.json();
+  if (status === 409 && json.locked) throw LockedError(json);
+  if (!ok) throw new Error(json.error || 'Failed to update data source');
+  return json;
 };
 
 // Initiate Fitbit OAuth flow
@@ -81,25 +90,32 @@ export const initiateFitbitOAuth = (googleId) => {
 // Start the Google Health connection: ask the backend (signed in) for Google's
 // consent URL, then go there. Google sends the user back to Data Source Settings.
 export const startGoogleHealthConnect = async () => {
-  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/google-health/url`);
-  const { url } = await response.json();
-  window.location.href = url;
+  const { ok, status, json } = await authedJson(`${getApiUrl()}/api/auth/google-health/url`);
+  if (status === 409 && json.locked) throw LockedError(json);
+  if (!ok) throw new Error(json.error || 'Could not start the Google Health connection');
+  window.location.href = json.url;
 };
 
-export const disconnectGoogleHealth = async () => {
-  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/google-health/disconnect`, { method: 'POST' });
-  return response.json();
+// confirm: true disconnects even when this is the locked source of a v2 challenge.
+export const disconnectGoogleHealth = async ({ confirm = false } = {}) => {
+  const { ok, status, json } = await authedJson(`${getApiUrl()}/api/auth/google-health/disconnect`, { method: 'POST', body: JSON.stringify({ confirm }) });
+  if (status === 409 && json.locked) throw LockedError(json);
+  if (!ok) throw new Error(json.error || 'Could not disconnect Google Health');
+  return json;
 };
 
 export const startWhoopConnect = async () => {
-  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/whoop/url`);
-  const { url } = await response.json();
-  window.location.href = url;
+  const { ok, status, json } = await authedJson(`${getApiUrl()}/api/auth/whoop/url`);
+  if (status === 409 && json.locked) throw LockedError(json);
+  if (!ok) throw new Error(json.error || 'Could not start the WHOOP connection');
+  window.location.href = json.url;
 };
 
-export const disconnectWhoop = async () => {
-  const response = await fetchWithAuth(`${getApiUrl()}/api/auth/whoop/disconnect`, { method: 'POST' });
-  return response.json();
+export const disconnectWhoop = async ({ confirm = false } = {}) => {
+  const { ok, status, json } = await authedJson(`${getApiUrl()}/api/auth/whoop/disconnect`, { method: 'POST', body: JSON.stringify({ confirm }) });
+  if (status === 409 && json.locked) throw LockedError(json);
+  if (!ok) throw new Error(json.error || 'Could not disconnect WHOOP');
+  return json;
 };
 
 // Max heart rate for Effort Points when a workout has no zone breakdown. null resets to the default.

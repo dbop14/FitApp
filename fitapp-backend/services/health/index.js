@@ -45,7 +45,7 @@ function getHealthSourceName(user) {
 // Adapter object for new-style sources, or null for legacy ones.
 function getHealthSource(user) {
   const name = getHealthSourceName(user);
-  if (name === 'google-health') return isGoogleHealthEnabled() ? googleHealth : null;
+  if (name === 'google-health') return isGoogleHealthEnabled() && (user.googleHealthRefreshToken || user.googleHealthAccessToken) ? googleHealth : null;
   if (name === 'whoop') return isWhoopEnabled() && (user.whoopRefreshToken || user.whoopAccessToken) ? whoop : null;
   return null;
 }
@@ -54,12 +54,17 @@ function isLegacySource(user) {
   return ['google-fit', 'fitbit'].includes(getHealthSourceName(user));
 }
 
+// Server-synced sources: steps never come from the browser for these users.
+function isServerSource(user) {
+  return ['google-health', 'whoop'].includes(user?.dataSource);
+}
+
 // Legacy Fitbit endpoints were decommissioned on 2026-10-30 (HTTP 410).
 function needsReconnect(user) {
   const name = getHealthSourceName(user);
   if (name === 'fitbit') return true;
-  if (name === 'google-health' && user.googleHealthLastError === 'invalid_grant') return true;
-  if (name === 'whoop' && user.whoopLastError === 'invalid_grant') return true;
+  if (name === 'google-health' && (user.googleHealthLastError === 'invalid_grant' || !user.googleHealthRefreshToken)) return true;
+  if (name === 'whoop' && (user.whoopLastError === 'invalid_grant' || !user.whoopRefreshToken)) return true;
   return false;
 }
 
@@ -151,6 +156,7 @@ module.exports = {
   getHealthSource,
   getHealthSourceName,
   isLegacySource,
+  isServerSource,
   needsReconnect,
   syncHealthHistory,
   buildDailyRows,

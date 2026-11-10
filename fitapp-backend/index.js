@@ -345,6 +345,26 @@ if (IS_MAIN) cron.schedule('55 23 * * *', async () => {
 
 console.log('⏰ Nightly active-challenge step backfill scheduled (runs at 23:55)');
 
+// Points v2: morning backfill of the previous 2 days, and the 48h finalize pass.
+const v2Jobs = require('./services/scoring/v2Jobs');
+if (IS_MAIN) cron.schedule('30 6 * * *', async () => {
+  try {
+    const r = await v2Jobs.morningBackfill();
+    console.log(`✅ v2 morning backfill: ${r.challenges} challenge(s), ${r.synced}/${r.users} user(s) synced, ${r.skipped} skipped, ${r.failed} failed, ${r.finalized} day(s) finalized`);
+  } catch (error) {
+    console.error('❌ Error during v2 morning backfill:', error.message);
+  }
+}, { timezone: APP_TIMEZONE });
+if (IS_MAIN) cron.schedule('30 0 * * *', async () => {
+  try {
+    const r = await v2Jobs.finalizePass();
+    console.log(`🔒 v2 finalize pass: ${r.finalized} day(s) finalized across ${r.challenges} challenge(s)`);
+  } catch (error) {
+    console.error('❌ Error during v2 finalize pass:', error.message);
+  }
+}, { timezone: APP_TIMEZONE });
+console.log('⏰ Points v2 jobs scheduled (morning backfill 06:30, finalize pass 00:30)');
+
 // Increase JSON body size limit to 1MB to accommodate profile photos
 // Profile photos are compressed to ~50KB file size (~67KB as base64 data URL)
 // But we allow up to 1MB for flexibility

@@ -120,7 +120,8 @@ test('HealthSource routing: WHOOP adapter only when enabled and connected', asyn
   assert.equal(health.getHealthSource({ dataSource: 'whoop', whoopRefreshToken: 'x' }), null);
   process.env.WHOOP_ENABLED = 'true';
   assert.equal(health.needsReconnect({ dataSource: 'whoop', whoopLastError: 'invalid_grant' }), true);
-  assert.equal(health.needsReconnect({ dataSource: 'whoop' }), false);
+  assert.equal(health.needsReconnect({ dataSource: 'whoop', whoopRefreshToken: 'x' }), false);
+  assert.equal(health.needsReconnect({ dataSource: 'whoop' }), true, 'disconnected');
 });
 
 test('sync pages through cycles and writes steps, effort and strength per day; weight untouched', async () => {

@@ -373,6 +373,19 @@ router.get('/userdata', async (req, res) => {
         needsReconnect: health.needsReconnect(user),
       });
     }
+    // A server-synced source that is switched off or disconnected: return what we
+    // have rather than falling through to the Google Fit code below.
+    if (health.isServerSource(user)) {
+      return res.json({
+        steps: user.steps || 0,
+        weight: user.weight || null,
+        lastSync: user.lastSync || null,
+        name: user.name || null,
+        picture: user.picture || null,
+        dataSource,
+        needsReconnect: health.needsReconnect(user),
+      });
+    }
     
     // If using Fitbit, check for Fitbit tokens
     if (dataSource === 'fitbit') {
@@ -962,6 +975,9 @@ router.put('/datasource', async (req, res) => {
   if (!googleId) {
     return res.status(400).json({ error: 'Missing googleId' });
   }
+  if (googleId !== req.user.googleId) {
+    return res.status(403).json({ error: 'You can only change your own data source' });
+  }
   
   if (!dataSource || !['google-fit', 'fitbit', 'google-health', 'whoop'].includes(dataSource)) {
     return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit", "fitbit", "google-health" or "whoop"' });
@@ -996,10 +1012,18 @@ router.put('/datasource', async (req, res) => {
       });
     }
 
+    // Points v2 source lock
+    const sourceLock = require('../services/health/sourceLock');
+    const lock = await sourceLock.checkSwitch(user.googleId, dataSource);
+    if (!lock.ok) {
+      return res.status(409).json({ error: lock.message, locked: true, locks: lock.locks });
+    }
+
     // Update data source
     user.dataSource = dataSource;
     if (dataSource === 'google-health') user.oauthType = 'google';
     await user.save();
+    if (lock.upgrade) await sourceLock.moveLocks(user.googleId, dataSource);
     
     console.log(`✅ Updated data source for user ${googleId} to ${dataSource}`);
     
@@ -1062,6 +1086,7 @@ router.get('/datasource', async (req, res) => {
       whoopEnabled: isWhoopEnabled(),
       whoopConnected: !!user.whoopRefreshToken,
       whoopConnectedAt: user.whoopConnectedAt || null,
+      sourceLocks: await require('../services/health/sourceLock').getActiveLocks(user.googleId),
       oauthType: user.oauthType || null,
       needsReconnect: health.needsReconnect(user),
       maxHeartRate: user.maxHeartRate || null,

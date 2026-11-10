@@ -589,4 +589,5 @@ if (require.main === module) {
 module.exports = backfillStepHistoryAndPoints;
 // Exposed for tests only.
 module.exports.recalcStepPointsForParticipant = recalcStepPointsForParticipant;
+module.exports.syncGoogleFitHistoryForUser = syncGoogleFitHistoryForUser;
 

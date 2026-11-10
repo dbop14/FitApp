@@ -44,6 +44,20 @@ ChallengeParticipantSchema.pre('save', function (next) {
   next();
 });
 
+// Joining a v2 challenge locks the participant's data source (see
+// services/health/sourceLock.js). Done here so every join path gets it.
+ChallengeParticipantSchema.pre('save', async function () {
+  if (!this.isNew || this.lockedSource) return;
+  const Challenge = require('./Challenge');
+  const challenge = await Challenge.findById(this.challengeId).select('scoringMode').lean().catch(() => null);
+  if (!challenge || challenge.scoringMode !== 'v2') return;
+  const User = require('./User');
+  const user = await User.findOne({ googleId: this.userId }).select('dataSource oauthType').lean();
+  if (!user) return;
+  this.scoringMode = 'v2';
+  this.lockedSource = require('../services/health/sourceLock').sourceToLock(user);
+});
+
 // Add unique compound index to prevent duplicate participants
 ChallengeParticipantSchema.index({ challengeId: 1, userId: 1 }, { unique: true });
 

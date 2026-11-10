@@ -11,12 +11,16 @@ const GOOGLE_HEALTH_ERRORS = {
   expired: 'The connection took too long. Please try again.',
   access_denied: 'Google Health access was not granted.',
   disabled: 'Google Health is not available yet.',
+  locked: 'Your data source is locked for a Points v2 challenge you are in, so Google Health cannot become your source until it ends.',
 }
+
+const SOURCE_LABELS = { 'google-health': 'Google Health', 'google-fit': 'Google Fit', fitbit: 'Fitbit', whoop: 'WHOOP' }
 
 const WHOOP_ERRORS = {
   scopes: 'Please allow access to cycles, workouts, body measurements and profile, then try again.',
   expired: 'The connection took too long. Please try again.',
   access_denied: 'WHOOP access was not granted.',
+  locked: 'Your data source is locked for a Points v2 challenge you are in, so WHOOP cannot become your source until it ends.',
   disabled: 'WHOOP is not available yet.',
 }
 
@@ -30,6 +34,7 @@ const DataSourceSettings = () => {
   const [fitbitConnected, setFitbitConnected] = useState(false)
   const [googleHealthEnabled, setGoogleHealthEnabled] = useState(false)
   const [googleHealthConnected, setGoogleHealthConnected] = useState(false)
+  const [sourceLocks, setSourceLocks] = useState([])
   const [whoopEnabled, setWhoopEnabled] = useState(false)
   const [whoopConnected, setWhoopConnected] = useState(false)
   const [maxHeartRate, setMaxHeartRate] = useState('')
@@ -95,6 +100,7 @@ const DataSourceSettings = () => {
       setFitbitConnected(status.fitbitConnected || false)
       setGoogleHealthEnabled(status.googleHealthEnabled || false)
       setGoogleHealthConnected(status.googleHealthConnected || false)
+      setSourceLocks(status.sourceLocks || [])
       setWhoopEnabled(status.whoopEnabled || false)
       setWhoopConnected(status.whoopConnected || false)
       setMaxHeartRate(status.maxHeartRate ? String(status.maxHeartRate) : '')
@@ -160,7 +166,13 @@ const DataSourceSettings = () => {
     setIsLoading(true)
     setError('')
     try {
-      const result = await disconnectGoogleHealth()
+      let result
+      try {
+        result = await disconnectGoogleHealth()
+      } catch (err) {
+        if (!err.locked || !window.confirm(`${err.message}\n\nDisconnect anyway?`)) throw err
+        result = await disconnectGoogleHealth({ confirm: true })
+      }
       setGoogleHealthConnected(false)
       setDataSource(result.dataSource || 'google-fit')
       setSuccess('Google Health disconnected')
@@ -186,7 +198,13 @@ const DataSourceSettings = () => {
     setIsLoading(true)
     setError('')
     try {
-      const result = await disconnectWhoop()
+      let result
+      try {
+        result = await disconnectWhoop()
+      } catch (err) {
+        if (!err.locked || !window.confirm(`${err.message}\n\nDisconnect anyway?`)) throw err
+        result = await disconnectWhoop({ confirm: true })
+      }
       setWhoopConnected(false)
       setDataSource(result.dataSource || 'google-fit')
       setSuccess('WHOOP disconnected')
@@ -266,6 +284,16 @@ const DataSourceSettings = () => {
             </div>
           ) : (
             <div className="space-y-4">
+              {sourceLocks.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                  <p className="text-sm font-semibold text-blue-900">
+                    Locked source: {SOURCE_LABELS[sourceLocks[0].lockedSource] || sourceLocks[0].lockedSource}
+                  </p>
+                  <p className="text-xs text-blue-800 mt-1">
+                    You are in {sourceLocks.length === 1 ? `"${sourceLocks[0].challengeName}"` : `${sourceLocks.length} Points v2 challenges`}, which {sourceLocks.length === 1 ? 'uses' : 'use'} the source you had when you joined until {sourceLocks.length === 1 ? 'it ends' : 'they end'}. Fitbit and Google Fit users can still move to Google Health.
+                  </p>
+                </div>
+              )}
               {/* WHOOP Option */}
               {whoopEnabled && (
                 <div className="bg-white rounded-2xl shadow-sm border p-6">

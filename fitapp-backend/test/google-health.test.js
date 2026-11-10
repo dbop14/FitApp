@@ -136,13 +136,16 @@ test('durations parse from "123s", "1.5s" and {seconds}', () => {
 test('HealthSource routing: only connected google-health users use the adapter, and only when enabled', () => {
   assert.equal(health.getHealthSource({ dataSource: 'google-fit' }), null);
   assert.equal(health.getHealthSource({ dataSource: 'fitbit' }), null);
-  assert.equal(health.getHealthSource({ dataSource: 'google-health', oauthType: 'google' }).name, 'google-health');
+  assert.equal(health.getHealthSource({ dataSource: 'google-health', oauthType: 'google', googleHealthRefreshToken: 'r' }).name, 'google-health');
+  assert.equal(health.getHealthSource({ dataSource: 'google-health', oauthType: 'google' }), null, 'not connected');
   process.env.GOOGLE_HEALTH_ENABLED = 'false';
-  assert.equal(health.getHealthSource({ dataSource: 'google-health', oauthType: 'google' }), null);
+  assert.equal(health.getHealthSource({ dataSource: 'google-health', oauthType: 'google', googleHealthRefreshToken: 'r' }), null);
   process.env.GOOGLE_HEALTH_ENABLED = 'true';
   assert.equal(health.needsReconnect({ dataSource: 'fitbit' }), true);
   assert.equal(health.needsReconnect({ dataSource: 'google-fit' }), false);
-  assert.equal(health.needsReconnect({ dataSource: 'google-health', oauthType: 'google', googleHealthLastError: 'invalid_grant' }), true);
+  assert.equal(health.needsReconnect({ dataSource: 'google-health', oauthType: 'google', googleHealthRefreshToken: 'r', googleHealthLastError: 'invalid_grant' }), true);
+  assert.equal(health.needsReconnect({ dataSource: 'google-health', oauthType: 'google' }), true, 'disconnected');
+  assert.equal(health.needsReconnect({ dataSource: 'google-health', oauthType: 'google', googleHealthRefreshToken: 'r' }), false);
 });
 
 // --- sync ----------------------------------------------------------------------

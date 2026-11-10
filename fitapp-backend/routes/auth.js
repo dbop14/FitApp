@@ -367,6 +367,7 @@ router.get('/auth/fitbit/callback', async (req, res) => {
 const authenticateJWT = require('../middleware/auth');
 const { isGoogleHealthEnabled, CONNECT_BACKFILL_DAYS } = require('../config/healthSources');
 const googleHealthAuth = require('../utils/googleHealthAuth');
+const sourceLock = require('../services/health/sourceLock');
 
 function frontendBase(req) {
   const host = req.get('host') || '';
@@ -399,9 +400,11 @@ function backfillAfterConnect(user, label) {
 }
 
 // Step 1: the signed-in app asks for the consent URL (JWT required), then navigates to it.
-router.get('/auth/google-health/url', authenticateJWT, (req, res) => {
+router.get('/auth/google-health/url', authenticateJWT, async (req, res) => {
   if (!isGoogleHealthEnabled()) return res.status(404).json({ error: 'Google Health is not enabled' });
   if (!req.user.googleId) return res.status(403).json({ error: 'Sign in first' });
+  const lock = await sourceLock.checkSwitch(req.user.googleId, 'google-health');
+  if (!lock.ok) return res.status(409).json({ error: lock.message, locked: true });
   res.json({ url: googleHealthAuth.buildAuthUrl(req.user.googleId) });
 });
 
@@ -422,6 +425,8 @@ router.get('/auth/google-health/callback', async (req, res) => {
   try {
     const user = await User.findOne({ googleId });
     if (!user) return back({ googleHealth: 'error', reason: 'no_user' });
+    const lock = await sourceLock.checkSwitch(googleId, 'google-health');
+    if (!lock.ok) return back({ googleHealth: 'error', reason: 'locked' });
 
     const tokens = await googleHealthAuth.exchangeCode(String(code || ''));
     const missing = require('../config/healthSources').GOOGLE_HEALTH_SCOPES.filter((sc) => !tokens.scope.includes(sc));
@@ -462,6 +467,7 @@ router.get('/auth/google-health/callback', async (req, res) => {
     user.fitbitRefreshToken = undefined;
     user.fitbitTokenExpiry = undefined;
     await user.save();
+    if (lock.upgrade) await sourceLock.moveLocks(googleId, 'google-health');
     console.log(`✅ User ${googleId} connected Google Health${legacyFitbitToken ? ' (legacy Fitbit tokens cleared)' : ''}`);
 
     backfillAfterConnect(user, 'Google Health');
@@ -477,13 +483,20 @@ router.get('/auth/google-health/callback', async (req, res) => {
 router.post('/auth/google-health/disconnect', authenticateJWT, async (req, res) => {
   const user = await User.findOne({ googleId: req.user.googleId });
   if (!user) return res.status(404).json({ error: 'User not found' });
+  const locked = await sourceLock.isLockedTo(user.googleId, 'google-health');
+  if (locked && req.body?.confirm !== true) {
+    return res.status(409).json({ locked: true, error: 'Google Health is your locked source for a Points v2 challenge. Disconnecting stops your steps and workouts counting until you reconnect.' });
+  }
   await googleHealthAuth.revokeToken(user.googleHealthRefreshToken || user.googleHealthAccessToken);
   user.googleHealthAccessToken = undefined;
   user.googleHealthRefreshToken = undefined;
   user.googleHealthTokenExpiry = undefined;
   user.googleHealthLastError = undefined;
-  if (user.dataSource === 'google-health') user.dataSource = 'google-fit';
-  user.oauthType = undefined;
+  // Locked: stay on Google Health (disconnected) so no other source fills in.
+  if (user.dataSource === 'google-health' && !locked) {
+    user.dataSource = 'google-fit';
+    user.oauthType = undefined;
+  }
   await user.save();
   res.json({ dataSource: user.dataSource });
 });
@@ -498,6 +511,8 @@ router.get('/auth/whoop/url', authenticateJWT, async (req, res) => {
   if (!isWhoopEnabled()) return res.status(404).json({ error: 'WHOOP is not enabled' });
   const user = await User.findOne({ googleId: req.user.googleId });
   if (!user) return res.status(403).json({ error: 'Sign in first' });
+  const lock = await sourceLock.checkSwitch(user.googleId, 'whoop');
+  if (!lock.ok) return res.status(409).json({ error: lock.message, locked: true });
   res.json({ url: await whoopAuth.buildAuthUrl(user) });
 });
 
@@ -513,6 +528,11 @@ router.get('/auth/whoop/callback', async (req, res) => {
     return back({ whoop: 'error', reason: String(error) });
   }
   const googleId = user.googleId;
+  const lock = await sourceLock.checkSwitch(googleId, 'whoop');
+  if (!lock.ok) {
+    await user.save().catch(() => {});
+    return back({ whoop: 'error', reason: 'locked' });
+  }
   try {
     const tokens = await whoopAuth.exchangeCode(String(code || ''));
     const granted = tokens.scope.split(/\s+/);
@@ -564,13 +584,18 @@ router.get('/auth/whoop/callback', async (req, res) => {
 router.post('/auth/whoop/disconnect', authenticateJWT, async (req, res) => {
   const user = await User.findOne({ googleId: req.user.googleId });
   if (!user) return res.status(404).json({ error: 'User not found' });
+  const locked = await sourceLock.isLockedTo(user.googleId, 'whoop');
+  if (locked && req.body?.confirm !== true) {
+    return res.status(409).json({ locked: true, error: 'WHOOP is your locked source for a Points v2 challenge. Disconnecting stops your steps and workouts counting until you reconnect.' });
+  }
   await whoopAuth.revokeAccess(user);
   user.whoopAccessToken = undefined;
   user.whoopRefreshToken = undefined;
   user.whoopTokenExpiry = undefined;
   user.whoopLastError = undefined;
   user.whoopUserId = undefined;
-  if (user.dataSource === 'whoop') {
+  // Locked: stay on WHOOP (disconnected) so no other source fills in.
+  if (user.dataSource === 'whoop' && !locked) {
     user.dataSource = user.googleHealthRefreshToken ? 'google-health' : 'google-fit';
   }
   await user.save();

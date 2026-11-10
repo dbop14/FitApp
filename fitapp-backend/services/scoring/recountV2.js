@@ -93,6 +93,12 @@ const FIELD_MAP = (r) => ({
 async function recountV2Participant(challenge, participant, asOf = new Date()) {
   const result = await scoreParticipant(challenge, participant, asOf);
   const fields = FIELD_MAP(result);
+  // Participants who joined before source locking existed get locked now.
+  if (!participant.lockedSource) {
+    const User = require('../../models/User');
+    const user = await User.findOne({ googleId: participant.userId }).select('dataSource oauthType').lean();
+    if (user) fields.lockedSource = require('../health/sourceLock').sourceToLock(user);
+  }
   const changed = Object.entries(fields).some(([k, v]) => participant[k] !== v);
   if (changed) {
     participant.$locals.v2EngineWrite = true;
