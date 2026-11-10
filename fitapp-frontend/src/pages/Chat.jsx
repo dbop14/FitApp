@@ -854,19 +854,21 @@ const Chat = () => {
 
               if (isCardMessage) {
                 // Card styles: brand blues for points and reminders, teal accent for weight loss
+                // Each achievement has its own color. `badge` tints the small icon on the
+                // avatar (a fixed hex, so it stays readable on the white badge in dark mode).
                 const CARD_STYLE = {
-                  stepGoalCard: { bg: 'from-blue-500 to-blue-800', icon: 'target', label: 'Step goal reached' },
-                  goalBonusCard: { bg: 'from-blue-500 to-blue-800', icon: 'target', label: 'Daily goal bonus' },
-                  weeklyBonusCard: { bg: 'from-blue-600 to-blue-900', icon: 'calendar-check', label: 'Weekly bonus' },
-                  dailyStepUpdateCard: { bg: 'from-blue-400 to-blue-600', icon: 'steps' },
-                  weighInReminderCard: { bg: 'from-blue-500 to-blue-800', icon: 'scale' },
-                  weightLossCard: { bg: 'from-teal-500 to-teal-700', icon: 'trending-down', label: 'Weight loss achievement' },
-                  welcomeCard: { bg: 'from-blue-400 to-blue-600', icon: 'users', label: 'Welcome to the challenge' },
-                  startReminderCard: { bg: 'from-blue-400 to-blue-600', icon: 'flag' },
-                  winnerCard: { bg: 'from-blue-700 to-blue-900', icon: 'crown', label: 'Challenge winner' },
-                  leaveCard: { bg: 'from-gray-500 to-gray-600', icon: 'log-out', label: 'Left the challenge' },
+                  stepGoalCard: { bg: 'from-emerald-500 to-green-700', badge: '#047857', icon: 'target', label: 'Step goal reached' },
+                  goalBonusCard: { bg: 'from-teal-500 to-cyan-700', badge: '#0e7490', icon: 'target', label: 'Daily goal bonus' },
+                  weeklyBonusCard: { bg: 'from-violet-500 to-indigo-700', badge: '#4338ca', icon: 'calendar-check', label: 'Weekly bonus' },
+                  weightLossCard: { bg: 'from-pink-500 to-rose-700', badge: '#be123c', icon: 'trending-down', label: 'Weight loss achievement' },
+                  winnerCard: { bg: 'from-amber-500 to-orange-700', badge: '#c2410c', icon: 'crown', label: 'Challenge winner' },
+                  welcomeCard: { bg: 'from-sky-500 to-blue-700', badge: '#1d4ed8', icon: 'users', label: 'Welcome to the challenge' },
+                  weighInReminderCard: { bg: 'from-blue-500 to-blue-800', badge: '#1e40af', icon: 'scale' },
+                  dailyStepUpdateCard: { bg: 'from-cyan-500 to-blue-700', badge: '#0e7490', icon: 'steps' },
+                  startReminderCard: { bg: 'from-indigo-500 to-blue-700', badge: '#3730a3', icon: 'flag' },
+                  leaveCard: { bg: 'from-slate-500 to-slate-700', badge: '#334155', icon: 'log-out', label: 'Left the challenge' },
                 };
-                const style = CARD_STYLE[msg.messageType] || { bg: 'from-blue-500 to-blue-600', icon: 'bell' };
+                const style = CARD_STYLE[msg.messageType] || { bg: 'from-blue-500 to-blue-700', badge: '#1d4ed8', icon: 'bell' };
 
                 // Milestone cards open the leaderboard
                 const handleCardClick = () => {
@@ -941,7 +943,7 @@ const Chat = () => {
                       {showPerson ? (
                         <span className="relative shrink-0">
                           <Avatar src={cardAvatar} name={msg.cardData?.userName} size="lg" className="ring-2 ring-[rgb(255_255_255/0.6)]" />
-                          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#fff] text-blue-700 shadow">
+                          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#fff] shadow" style={{ color: style.badge }}>
                             <Icon name={style.icon} className="h-3.5 w-3.5" strokeWidth={2.25} />
                           </span>
                         </span>
