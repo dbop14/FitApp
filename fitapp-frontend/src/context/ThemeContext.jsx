@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 // Theme preference: 'system' follows prefers-color-scheme; 'light' / 'dark'
 // override it. Stored per device. index.html applies the class before first
@@ -39,8 +39,16 @@ export const ThemeProvider = ({ children }) => {
 
   const resolved = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
 
+  // Fade colors only when the theme actually switches, not on first load
+  // (index.html already applied the right class before paint).
+  const firstRun = useRef(true)
   useEffect(() => {
     const root = document.documentElement
+    if (firstRun.current) {
+      firstRun.current = false
+      root.classList.toggle('dark', resolved === 'dark')
+      return undefined
+    }
     root.classList.add('theme-transition')
     root.classList.toggle('dark', resolved === 'dark')
     const t = setTimeout(() => root.classList.remove('theme-transition'), 250)

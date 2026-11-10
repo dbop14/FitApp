@@ -41,6 +41,19 @@ if (typeof navigator !== 'undefined') {
   }
 }
 
+// Load diagnostics (read by Settings on the dev site): keep the last 20 page
+// loads with their navigation type and whether a service-worker update caused them.
+try {
+  const nav = performance.getEntriesByType?.('navigation')?.[0]
+  const log = JSON.parse(localStorage.getItem('fitapp_load_log') || '[]')
+  const swReload = sessionStorage.getItem('fitapp_sw_reload_pending') === '1'
+  sessionStorage.removeItem('fitapp_sw_reload_pending')
+  log.push({ t: Date.now(), type: nav?.type || 'unknown', reason: swReload ? 'service-worker-update' : (nav?.type === 'reload' ? 'reload' : 'open') })
+  localStorage.setItem('fitapp_load_log', JSON.stringify(log.slice(-20)))
+} catch {
+  // storage unavailable
+}
+
 // iOS Home Screen app: iOS 26.1+ paints a blurred scrim over the top of
 // black-translucent web apps. index.css pushes header text below it.
 if (typeof navigator !== 'undefined' && navigator.standalone === true) {
@@ -115,12 +128,24 @@ if ('serviceWorker' in navigator) {
         registration = reg;
         console.log('✅ Service Worker registered successfully:', reg.scope);
 
-        // Guard to avoid multiple reloads
+        // Guard to avoid multiple reloads, and never reload more than once per
+        // 30 seconds (prevents a reload loop if the browser keeps swapping workers)
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (refreshing) return;
+          try {
+            const last = Number(sessionStorage.getItem('fitapp_sw_reload_at') || 0);
+            if (Date.now() - last < 30000) {
+              console.log('Controller changed again within 30s, not reloading');
+              return;
+            }
+            sessionStorage.setItem('fitapp_sw_reload_at', String(Date.now()));
+            sessionStorage.setItem('fitapp_sw_reload_pending', '1');
+          } catch {
+            // storage unavailable: fall through to a single reload
+          }
           refreshing = true;
-          console.log('🔄 Controller changed, reloading to latest version...');
+          console.log('Controller changed, reloading to latest version...');
           window.location.reload();
         });
 
