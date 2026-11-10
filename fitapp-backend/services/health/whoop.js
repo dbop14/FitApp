@@ -7,7 +7,10 @@
 //   getWorkouts(user, startYmd, endYmd)    -> [{ date, start, end, type, category, durationMinutes,
 //                                               moderateMinutes, vigorousMinutes, effortPoints, isStrength, scored }]
 //
-// Steps: each cycle's step_count is credited to the local day the cycle starts.
+// Steps: each cycle's step_count is credited to the local day the cycle mostly
+// covers (see cycleDate). Cycles run bedtime to bedtime, usually starting before
+// midnight, so crediting the start day (as first specified) put most days' steps
+// on the day before.
 // Effort: WHOOP heart-rate zones 1-2 are moderate, 3-5 vigorous. Strain is ignored.
 
 const SCORING_V2 = require('../../config/scoringV2');
@@ -65,6 +68,16 @@ function localDate(iso, tz) {
   return new Date(Date.parse(iso) + offsetMinutes(tz) * 60000).toISOString().slice(0, 10);
 }
 
+// The local day a cycle mostly covers: the day of its midpoint, or for the open
+// (current) cycle the day 12 hours after it started.
+const OPEN_CYCLE_HOURS = 12;
+function cycleDate(c) {
+  const start = Date.parse(c.start);
+  const end = c.end ? Date.parse(c.end) : null;
+  const mid = end && end > start ? start + (end - start) / 2 : start + OPEN_CYCLE_HOURS * 3600000;
+  return localDate(new Date(mid).toISOString(), c.timezone_offset);
+}
+
 // Query window padded a day each side so offsets cannot drop a record.
 function windowIso(startYmd, endYmd) {
   return {
@@ -85,7 +98,7 @@ function parseDailySteps(cycles, startYmd, endYmd) {
   const byDate = new Map();
   for (const c of cycles) {
     if (!c.start || c.step_count === undefined || c.step_count === null) continue;
-    const date = localDate(c.start, c.timezone_offset);
+    const date = cycleDate(c);
     byDate.set(date, (byDate.get(date) || 0) + Number(c.step_count));
   }
   const days = [];
@@ -162,6 +175,7 @@ module.exports = {
   parseDailySteps,
   parseWorkouts,
   localDate,
+  cycleDate,
   offsetMinutes,
   WhoopError,
 };

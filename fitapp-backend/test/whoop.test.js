@@ -72,14 +72,24 @@ const connectedUser = (extra = {}) => User.create({
 
 // --- parsing -----------------------------------------------------------------
 
-test('steps: each cycle credited to its local start day, same-day cycles summed, missing days null', () => {
-  const days = whoop.parseDailySteps([...fixtures.cyclesPage1.records, ...fixtures.cyclesPage2.records], '2026-11-06', '2026-11-09');
+test('steps: each cycle credited to the day it mostly covers; open cycle to start + 12h; missing days null', () => {
+  const days = whoop.parseDailySteps([...fixtures.cyclesPage1.records, ...fixtures.cyclesPage2.records], '2026-11-05', '2026-11-09');
   assert.deepEqual(days, [
-    { date: '2026-11-06', steps: null }, // cycle without step_count
-    { date: '2026-11-07', steps: 12000 }, // 11250 (started 23:40 local) + 750
+    { date: '2026-11-05', steps: null }, // the cycle covering it has no step_count
+    { date: '2026-11-06', steps: 750 },
+    { date: '2026-11-07', steps: 11250 }, // started 11:40 PM Nov 6
     { date: '2026-11-08', steps: null },
-    { date: '2026-11-09', steps: 4100 }, // open cycle, steps so far
+    { date: '2026-11-09', steps: 4100 }, // open cycle that started 11:10 PM Nov 8
   ]);
+});
+
+test('cycle dating: a bedtime-to-bedtime cycle belongs to the day between the two bedtimes', () => {
+  // Real pattern: 11:16 PM Nov 8 -> 11:06 PM Nov 9 local
+  assert.equal(whoop.cycleDate({ start: '2026-11-09T04:16:18.208Z', end: '2026-11-10T04:06:40.020Z', timezone_offset: '-05:00' }), '2026-11-09');
+  // Started just after midnight: same day
+  assert.equal(whoop.cycleDate({ start: '2026-11-08T05:15:00.000Z', end: '2026-11-09T04:16:18.208Z', timezone_offset: '-05:00' }), '2026-11-08');
+  // Open cycle started 11:06 PM Nov 9 -> Nov 10
+  assert.equal(whoop.cycleDate({ start: '2026-11-10T04:06:40.020Z', end: null, timezone_offset: '-05:00' }), '2026-11-10');
 });
 
 test('workouts: zones 1-2 moderate, 3-5 vigorous; sport table; strength 20+ min; unscored and short count 0', () => {
@@ -132,9 +142,10 @@ test('sync pages through cycles and writes steps, effort and strength per day; w
   await health.syncHealthHistory(user, { days: 3, now: new Date('2026-11-09T20:00:00Z') });
 
   const rows = Object.fromEntries((await FitnessHistory.find({ userId: 'wh-user' }).lean()).map((r) => [health.todayYmd(r.date), r]));
-  assert.equal(rows['2026-11-07'].steps, 12000);
-  assert.equal(rows['2026-11-07'].effortPoints, 59);
+  assert.equal(rows['2026-11-07'].steps, 11250);
+  assert.equal(rows['2026-11-07'].effortPoints, 59 + 15); // run + generic activity (15 moderate minutes)
   assert.equal(rows['2026-11-07'].source, 'whoop');
+  assert.equal(rows['2026-11-08'].steps, 0, 'no cycle covers Nov 8: the manual row keeps its value');
   assert.equal(rows['2026-11-08'].weight, 194, 'manual weigh-in kept');
   assert.equal(rows['2026-11-08'].strengthSessions, 1);
   assert.equal(rows['2026-11-08'].effortPoints, 27);
