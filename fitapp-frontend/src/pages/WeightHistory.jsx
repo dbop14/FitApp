@@ -564,15 +564,14 @@ const WeightHistory = () => {
   // Format date range for display
   const formatDateRange = () => {
     if (!currentDateRange.start || !currentDateRange.end) return ''
-    
-    const start = currentDateRange.start
-    const end = currentDateRange.end
-    
-    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-    
-    return `${startStr.toUpperCase()} - ${endStr.toUpperCase()}`
+    const start = new Date(currentDateRange.start)
+    const end = new Date(currentDateRange.end)
+    const thisYear = new Date().getFullYear()
+    const withYear = start.getFullYear() !== thisYear || end.getFullYear() !== thisYear
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: '2-digit' } : {}) })
+    return `${fmt(start)} – ${fmt(end)}`
   }
+
 
   // Calculate chart dimensions and scaling for weight
   const getChartData = () => {
@@ -769,7 +768,7 @@ const WeightHistory = () => {
             <section className="card card-pad min-w-0 lg:col-span-2" aria-labelledby="weight-chart-title">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 id="weight-chart-title" className="card-title">Weight trend</h2>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                   <div className="flex rounded-xl bg-surface-2 p-1" role="tablist" aria-label="Range">
                     {[
                       { v: 'W', label: 'Week' },
@@ -788,7 +787,7 @@ const WeightHistory = () => {
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center rounded-xl bg-surface-2 p-1">
+                  <div className="flex flex-1 items-center justify-between rounded-xl bg-surface-2 p-1 sm:flex-none">
                     <button
                       onClick={() => navigateDateRange('prev')}
                       className="rounded-lg p-1.5 text-ink-muted hover:bg-surface hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
@@ -799,7 +798,7 @@ const WeightHistory = () => {
                     </button>
                     <button
                       onClick={resetToToday}
-                      className="min-w-[72px] rounded-lg px-2 py-1 text-xs font-semibold text-ink hover:bg-surface"
+                      className="whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-ink hover:bg-surface"
                       title="Back to the current period"
                     >
                       {formatDateRange()}

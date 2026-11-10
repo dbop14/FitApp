@@ -385,15 +385,14 @@ const StepsHistory = () => {
   // Format date range for display
   const formatDateRange = () => {
     if (!currentDateRange.start || !currentDateRange.end) return ''
-    
-    const start = currentDateRange.start
-    const end = currentDateRange.end
-    
-    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-    
-    return `${startStr.toUpperCase()} - ${endStr.toUpperCase()}`
+    const start = new Date(currentDateRange.start)
+    const end = new Date(currentDateRange.end)
+    const thisYear = new Date().getFullYear()
+    const withYear = start.getFullYear() !== thisYear || end.getFullYear() !== thisYear
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: '2-digit' } : {}) })
+    return `${fmt(start)} – ${fmt(end)}`
   }
+
 
   // Calculate chart dimensions and scaling
   const getChartData = () => {
@@ -579,7 +578,7 @@ const StepsHistory = () => {
                   <h2 id="steps-chart-title" className="card-title">Daily steps</h2>
                   <p className="card-subtitle">Goal: {stepGoal.toLocaleString()} steps</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                   <div className="flex rounded-xl bg-surface-2 p-1" role="tablist" aria-label="Range">
                     {[
                       { v: 'W', label: 'Week' },
@@ -598,13 +597,13 @@ const StepsHistory = () => {
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center rounded-xl bg-surface-2 p-1">
+                  <div className="flex flex-1 items-center justify-between rounded-xl bg-surface-2 p-1 sm:flex-none">
                     <button onClick={() => navigateDateRange('prev')} className="rounded-lg p-1.5 text-ink-muted hover:bg-surface hover:text-ink" aria-label="Previous period">
                       <Icon name="chevron-left" className="h-4 w-4" />
                     </button>
                     <button
                       onClick={resetToToday}
-                      className="min-w-[72px] rounded-lg px-2 py-1 text-xs font-semibold text-ink hover:bg-surface"
+                      className="whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-ink hover:bg-surface"
                       title="Back to the current period"
                     >
                       {formatDateRange()}

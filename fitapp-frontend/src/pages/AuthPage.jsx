@@ -150,7 +150,7 @@ const AuthPage = () => {
       </div>
 
       {/* Sign-in card */}
-      <div className="-mt-10 flex flex-1 items-start justify-center px-4 pb-[calc(2rem+var(--safe-area-bottom))] lg:mt-0 lg:items-center lg:px-12">
+      <div className="relative z-10 -mt-10 flex flex-1 items-start justify-center px-4 pb-[calc(2rem+var(--safe-area-bottom))] lg:mt-0 lg:items-center lg:px-12">
         <div className="card w-full max-w-md p-6 text-center sm:p-8">
           <h2 className="text-xl font-bold text-ink">Welcome</h2>
           <p className="mt-1 text-sm text-ink-muted">Sign in with your Google account to continue.</p>
