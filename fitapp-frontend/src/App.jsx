@@ -96,8 +96,8 @@ const App = () => {
           <AddToHomeScreen />
           <NotificationPermissionDialog />
           <Routes>
-            {/* Public Home page at root for Google verification */}
-            <Route path="/" element={<Home />} />
+            {/* Root shows the login page; the public app description lives at /home */}
+            <Route path="/" element={<AuthPage />} />
 
             {/* Auth/Login page has no app shell */}
             <Route path="/login" element={<AuthPage />} />

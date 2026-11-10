@@ -28,11 +28,11 @@ const TermsOfService = () => {
             FitApp is a fitness challenge application that allows users to:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Track fitness activities, including step counts and weight measurements</li>
+            <li>Track fitness activities, including step counts, workouts and weight measurements</li>
             <li>Participate in fitness challenges with other users</li>
             <li>Compete on leaderboards and earn points based on fitness achievements</li>
             <li>Communicate with other participants through in-app chat features</li>
-            <li>Sync fitness data from Google Fit</li>
+            <li>Sync fitness data from Google Health or WHOOP</li>
           </ul>
           <p className="mt-4">
             We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time, with or without notice.
@@ -67,29 +67,29 @@ const TermsOfService = () => {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-ink mt-8 mb-3 sm:text-2xl">4. Fitness Data and Google Fit Integration</h2>
+          <h2 className="text-xl font-semibold text-ink mt-8 mb-3 sm:text-2xl">4. Fitness Data and Data Source Integrations</h2>
           
           <h3 className="text-lg font-semibold text-ink mt-6 mb-2">4.1 Data Accuracy</h3>
           <p>
-            FitApp relies on data from Google Fit and other sources. While we strive to provide accurate information, we cannot guarantee the accuracy, completeness, or reliability of fitness data. You acknowledge that:
+            FitApp relies on data from Google Health, WHOOP and other sources. While we strive to provide accurate information, we cannot guarantee the accuracy, completeness, or reliability of fitness data. You acknowledge that:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>Fitness data may be subject to errors or delays</li>
-            <li>Data synchronization depends on third-party services (Google Fit)</li>
+            <li>Data synchronization depends on third-party services (Google Health or WHOOP)</li>
             <li>You are responsible for ensuring your fitness tracking devices are properly configured</li>
           </ul>
 
-          <h3 className="text-lg font-semibold text-ink mt-6 mb-2">4.2 Google Fit Permissions</h3>
+          <h3 className="text-lg font-semibold text-ink mt-6 mb-2">4.2 Data Source Permissions</h3>
           <p>
-            By connecting your Google Fit account, you grant FitApp permission to:
+            By connecting Google Health or WHOOP in Data Source Settings, you grant FitApp permission to:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Read your activity data (step counts)</li>
-            <li>Read your body measurements (weight)</li>
+            <li>Read your activity data (step counts and workouts, including heart-rate zones)</li>
+            <li>Read your body measurements (weight, from Google Health)</li>
             <li>Store and process this data to provide our Service</li>
           </ul>
           <p className="mt-4">
-            You may revoke these permissions at any time through your Google account settings, which will limit or disable certain features of the Service.
+            You may disconnect a data source at any time in Data Source Settings, or revoke access through your Google account settings or your WHOOP account, which will limit or disable certain features of the Service.
           </p>
         </section>
 
@@ -243,7 +243,7 @@ const TermsOfService = () => {
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-ink mt-8 mb-3 sm:text-2xl">11. Third-Party Services</h2>
           <p>
-            FitApp integrates with third-party services, including Google OAuth and Google Fit. Your use of these services is subject to their respective terms of service and privacy policies. We are not responsible for:
+            FitApp integrates with third-party services, including Google OAuth, Google Health and WHOOP. Your use of these services is subject to their respective terms of service and privacy policies. We are not responsible for:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>The availability or functionality of third-party services</li>

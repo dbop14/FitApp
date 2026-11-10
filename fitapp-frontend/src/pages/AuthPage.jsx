@@ -179,6 +179,11 @@ const AuthPage = () => {
             </a>
             .
           </p>
+          <p className="mt-3 text-xs text-ink-muted">
+            <a href="/home" className="underline">About FitApp</a>
+            {' · '}
+            <a href="/privacy-policy" className="underline">Privacy Policy</a>
+          </p>
         </div>
       </div>
     </div>

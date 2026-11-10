@@ -61,7 +61,7 @@ const PrivacyPolicy = () => {
           </p>
 
           <h3 className="text-lg font-semibold text-ink mt-6 mb-2">2.3 Authentication Tokens</h3>
-          <p>To maintain your connection with Google Fit, we securely store:</p>
+          <p>To maintain your connection with your fitness data source (Google Health, WHOOP, or a legacy Google Fit connection), we securely store:</p>
           <ul className="list-disc pl-6 space-y-2">
             <li>OAuth access tokens (encrypted)</li>
             <li>OAuth refresh tokens (encrypted)</li>
@@ -92,7 +92,7 @@ const PrivacyPolicy = () => {
           <p>We use the information we collect for the following purposes:</p>
           <ul className="list-disc pl-6 space-y-2">
             <li><strong>To Provide Our Service:</strong> To enable you to participate in fitness challenges, track your progress, and compete with friends</li>
-            <li><strong>To Sync Fitness Data:</strong> To automatically retrieve and display your step count and weight from Google Fit</li>
+            <li><strong>To Sync Fitness Data:</strong> To automatically retrieve and display your steps, workouts and weight from the data source you connect (Google Health or WHOOP)</li>
             <li><strong>To Calculate Progress:</strong> To calculate your points, rankings, and progress within challenges</li>
             <li><strong>To Enable Communication:</strong> To allow you to send and receive messages within challenge chat rooms</li>
             <li><strong>To Display Leaderboards:</strong> To show your name, profile picture, and progress on challenge leaderboards (visible to other challenge participants)</li>
@@ -116,7 +116,8 @@ const PrivacyPolicy = () => {
 
           <h3 className="text-lg font-semibold text-ink mt-6 mb-2">4.2 With Third-Party Services</h3>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Google:</strong> We use Google OAuth for authentication and Google Fit API to access your fitness data. Your use of these services is subject to Google's Privacy Policy.</li>
+            <li><strong>Google:</strong> We use Google OAuth for authentication and, if you connect it, the Google Health API to access your fitness data. Your use of these services is subject to Google's Privacy Policy.</li>
+            <li><strong>WHOOP:</strong> If you connect WHOOP, we use the WHOOP API to access your fitness data. Your use of WHOOP is subject to WHOOP's Privacy Policy.</li>
             <li><strong>Hosting Services:</strong> We use cloud hosting services to store and process your data. These services are bound by strict confidentiality agreements.</li>
           </ul>
 
@@ -160,7 +161,7 @@ const PrivacyPolicy = () => {
             <li><strong>Access:</strong> You can access your personal data through the app's settings</li>
             <li><strong>Correction:</strong> You can update your profile information through the app</li>
             <li><strong>Deletion:</strong> You can request deletion of your account and associated data</li>
-            <li><strong>Revoke Google Fit Access:</strong> You can revoke Google Fit permissions at any time through your Google account settings</li>
+            <li><strong>Disconnect Your Data Source:</strong> You can disconnect Google Health or WHOOP at any time in Data Source Settings, and revoke FitApp's access through your Google account settings or your WHOOP account</li>
             <li><strong>Opt-Out of Challenges:</strong> You can leave challenges at any time, which will remove your data from that challenge's leaderboard</li>
           </ul>
           <p className="mt-4">To exercise these rights, please contact us using the information provided in Section 10.</p>
@@ -226,10 +227,10 @@ const PrivacyPolicy = () => {
           </p>
           <p className="mt-4">Specifically:</p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>We only use Google Fit data to provide fitness tracking and challenge features within our app</li>
-            <li>We do not transfer Google Fit data to third parties except as necessary to provide our service</li>
-            <li>We do not use Google Fit data for advertising or marketing purposes</li>
-            <li>We do not allow humans to read your Google Fit data unless you have given explicit consent or it is necessary for security purposes</li>
+            <li>We only use data received from Google APIs (Google Health, and Google Fit for legacy connections) to provide fitness tracking and challenge features within our app</li>
+            <li>We do not transfer this data to third parties except as necessary to provide our service</li>
+            <li>We do not use this data for advertising or marketing purposes</li>
+            <li>We do not allow humans to read this data unless you have given explicit consent or it is necessary for security purposes</li>
           </ul>
         </section>
 

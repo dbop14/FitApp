@@ -74,11 +74,11 @@ const Home = () => {
                   participate in fitness competitions with friends, and stay motivated through social fitness challenges.
                 </p>
                 <p>
-                  <strong>How FitApp Works:</strong> The application automatically syncs with Google Fit to track daily steps and weight measurements, 
+                  <strong>How FitApp Works:</strong> The application automatically syncs with Google Health or WHOOP to track daily steps and weight measurements, 
                   enabling users to compete in challenges and view leaderboards without manual data entry.
                 </p>
                 <p>
-                  <strong>Our Mission:</strong> Our purpose is to make fitness tracking social, engaging, and easy by connecting your Google Fit account 
+                  <strong>Our Mission:</strong> Our purpose is to make fitness tracking social, engaging, and easy by connecting your Google Health or WHOOP account 
                   and enabling you to participate in fitness competitions with friends.
                 </p>
               </div>
@@ -121,11 +121,11 @@ const Home = () => {
               <p>
                 <strong>FitApp</strong> is a fitness challenge application designed to help you stay motivated, 
                 track your progress, and compete with friends in fun fitness challenges. Our purpose is to 
-                make fitness tracking social, engaging, and easy by automatically syncing your Google Fit data 
+                make fitness tracking social, engaging, and easy by automatically syncing your Google Health or WHOOP data 
                 and enabling you to participate in fitness competitions with friends.
               </p>
               <p>
-                Our application connects with your <strong>Google Fit</strong> account to automatically 
+                Our application connects with your <strong>Google Health</strong> or <strong>WHOOP</strong> account to automatically 
                 track your daily step count and weight measurements, making it easy to participate in 
                 fitness challenges without manual data entry. We help you stay accountable and motivated 
                 through friendly competition and progress tracking.
@@ -145,7 +145,7 @@ const Home = () => {
                   Fitness Tracking
                 </h3>
                 <p className="text-ink-muted">
-                  Automatically syncs your step count and weight data from Google Fit to track your 
+                  Automatically syncs your step count and weight data from Google Health or WHOOP to track your 
                   daily fitness progress.
                 </p>
               </div>
@@ -193,7 +193,7 @@ const Home = () => {
             <ol className="list-inside list-decimal space-y-3 text-ink-muted marker:font-bold marker:text-brand-ink">
               <li>
                 <strong>Sign in with Google:</strong> Use your Google account to securely authenticate 
-                and connect your Google Fit data.
+                and connect your Google Health or WHOOP data.
               </li>
               <li>
                 <strong>Join Challenges:</strong> Create or join fitness challenges with friends and 
@@ -201,7 +201,7 @@ const Home = () => {
               </li>
               <li>
                 <strong>Automatic Sync:</strong> FitApp automatically retrieves your daily step count 
-                and weight from Google Fit.
+                and weight from Google Health or WHOOP.
               </li>
               <li>
                 <strong>Compete & Track:</strong> View leaderboards, track your progress, and chat 
