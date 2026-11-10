@@ -18,6 +18,7 @@ const Challenge = require('./models/Challenge');
 const ChallengeParticipant = require('./models/ChallengeParticipant');
 const User = require('./models/User');
 const ChatMessage = require('./models/ChatMessage'); // You'll need to create this model or import from backend
+const { planV2Cards, v2WinnerMessage } = require('./v2Cards');
 
 // MongoDB connection
 let mongoConnected = false;
@@ -587,6 +588,10 @@ const handleStepPointIncrease = async (participant, previousPoints, currentPoint
     const user = await User.findOne({ googleId: participant.userId });
 
   console.log(`   Challenge found: ${!!challenge}, Matrix Room ID: ${challenge?.matrixRoomId || 'none'}, User found: ${!!user}`);
+  if (challenge && challenge.scoringMode === 'v2') {
+    console.log('   ⏭️ Skipping - Points v2 challenges get goal-bonus and weekly cards instead');
+    return;
+  }
   if (challenge && challenge.matrixRoomId && user) {
     // Only send if challenge is active
     const now = new Date();
@@ -771,6 +776,54 @@ const startStepPointMonitoring = async () => {
     startStepPointPolling();
   } else {
     console.log('⚡ Real-time step point monitoring active via change streams');
+  }
+};
+
+// --- Points v2 cards ----------------------------------------------------------
+
+const backendBase = () => process.env.BACKEND_URL || process.env.BACKEND_API_URL || 'http://backend:3000';
+
+// The backend recounts a v2 challenge with the engine and returns per-person
+// totals, today's points and each week's bonus.
+const fetchV2Leaderboard = async (challengeId) => {
+  const headers = process.env.BOT_PASSWORD ? { 'x-bot-secret': process.env.BOT_PASSWORD } : undefined;
+  const res = await fetch(`${backendBase()}/api/leaderboard/${challengeId}`, { headers });
+  if (!res.ok) throw new Error(`leaderboard ${res.status}`);
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows.filter((r) => r.scoringMode === 'v2') : [];
+};
+
+const checkV2Bonuses = async () => {
+  if (!mongoConnected) return;
+  try {
+    const today = getDateStringInTimeZone(new Date());
+    const challenges = await Challenge.find({ scoringMode: 'v2', startDate: { $lte: today }, endDate: { $gte: today } })
+      .select('_id name matrixRoomId botName stepGoal startDate endDate scoringMode').lean();
+    for (const challenge of challenges) {
+      const challengeKey = challenge._id.toString();
+      if (!challenge.matrixRoomId || announcedWinners.has(challengeKey)) continue;
+      let rows;
+      try {
+        rows = await fetchV2Leaderboard(challengeKey);
+      } catch (err) {
+        console.error(`❌ v2 cards: could not load leaderboard for ${challenge.name}: ${err.message}`);
+        continue;
+      }
+      const botName = challenge.botName || 'Fitness Motivator';
+      for (const card of planV2Cards(challenge, rows, { todayYmd: today })) {
+        if (card.type === 'weeklyBonusCard') {
+          // Once per person per week, across days and restarts.
+          const sent = await ChatMessage.findOne({
+            challengeId: challengeKey, messageType: 'weeklyBonusCard', userId: card.userId, 'cardData.weekIndex': card.weekIndex,
+          }).select('_id').lean();
+          if (sent) continue;
+        }
+        // goalBonusCard: sendCardMessage already allows one per person per type per day.
+        await sendCardMessage(challenge.matrixRoomId, card.message, challenge._id, botName, card.type, card.cardData, card.picture, card.userId);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error checking v2 bonus cards:', err.message);
   }
 };
 
@@ -1098,6 +1151,26 @@ const announceChallengeWinner = async () => {
         continue;
       }
       
+      if (challenge.scoringMode === 'v2') {
+        // Points v2: the winner has the highest totalPoints, freshly recounted.
+        let rows = [];
+        try {
+          rows = await fetchV2Leaderboard(challengeKey);
+        } catch (err) {
+          console.error(`   ❌ Could not load v2 leaderboard: ${err.message}`);
+          continue;
+        }
+        const top = [...rows].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))[0];
+        if (!top) {
+          console.log('   ⏭️ Skipping - no participants');
+          continue;
+        }
+        const { message, cardData } = v2WinnerMessage(challenge, top);
+        await sendCardMessage(challenge.matrixRoomId, message, challenge._id, challenge.botName || 'Fitness Motivator', 'winnerCard', cardData, top.picture, top.userId);
+        announcedWinners.add(challengeKey);
+        continue;
+      }
+
       const participants = await ChallengeParticipant.find({ challengeId: challengeKey })
         .sort({ points: -1 })
         .limit(1);
@@ -1552,6 +1625,9 @@ const setupCronJobs = () => {
   // Monitor step point changes (change stream with low-frequency polling fallback)
   startStepPointMonitoring();
 
+  // Points v2 goal-bonus and weekly cards (every 10 minutes)
+  setInterval(() => { checkV2Bonuses(); }, STEP_POINT_POLL_INTERVAL_MS);
+
   console.log('✅ Cron jobs and monitoring intervals set up');
   console.log('📋 Scheduled cron jobs:');
   console.log('   - Daily user data sync: 12:00 AM');
@@ -1675,6 +1751,7 @@ const start = async () => {
     setTimeout(() => {
       checkNewParticipants();
       checkStepPointChanges();
+      checkV2Bonuses();
     }, 2000); // 2 second delay to ensure all initialization is complete
     
     if (client) {

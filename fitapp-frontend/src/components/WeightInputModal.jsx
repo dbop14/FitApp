@@ -17,13 +17,18 @@ import { fetchWithAuth, getApiUrl } from '../utils/apiService'
  * @param {function} onWeightSubmitted - Callback when weight is successfully submitted
  * @param {object} user - Current user object (includes dataSource: 'google-fit' | 'fitbit')
  */
+// Where a pre-filled weight came from. WHOOP weight is not used, so WHOOP users
+// see their last logged weight ('history').
+const WEIGHT_SOURCE_LABELS = { 'google-fit': 'Google Fit', fitbit: 'Fitbit', 'google-health': 'Google Health', history: 'your last weigh-in' }
+
 const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user }) => {
   const [weight, setWeight] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [isWeighInDay, setIsWeighInDay] = useState(false)
-  const [weightSource, setWeightSource] = useState(null) // 'google-fit' | 'fitbit' | 'manual'
+  const [weightSource, setWeightSource] = useState(null) // a WEIGHT_SOURCE_LABELS key, or 'manual'
+  const isPrefilled = Boolean(weightSource && weightSource !== 'manual')
 
   // Check if today is a weigh-in day (including first weigh-in day for future challenges)
   useEffect(() => {
@@ -95,14 +100,16 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
     setLoading(true)
     setError(null)
     const dataSource = user?.dataSource || 'google-fit'
-    const sourceLabel = dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'
+    // Weight comes from Google Fit (legacy) or Google Health; WHOOP weight is not
+    // used, so WHOOP and no-source users get their last logged weight.
+    const sourceLabel = WEIGHT_SOURCE_LABELS[dataSource] || 'your last weigh-in'
 
     try {
       const apiUrl = getApiUrl()
       let mostRecentWeight = null
 
-      if (dataSource === 'fitbit') {
-        // Fitbit: GET userdata triggers Fitbit sync and returns steps/weight
+      if (dataSource !== 'google-fit') {
+        // Server-synced sources: GET userdata syncs (when possible) and returns the stored weight
         const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`)
         if (response.ok) {
           const data = await response.json()
@@ -131,7 +138,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
         }
       }
 
-      const weightSourceKey = dataSource === 'fitbit' ? 'fitbit' : 'google-fit'
+      const weightSourceKey = WEIGHT_SOURCE_LABELS[dataSource] ? dataSource : 'history'
       if (mostRecentWeight && mostRecentWeight > 0) {
         setWeight(mostRecentWeight.toFixed(1))
         setWeightSource(weightSourceKey)
@@ -144,7 +151,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
       console.error('Error fetching weight:', err)
       if (user?.weight && user.weight > 0) {
         setWeight(user.weight.toFixed(1))
-        setWeightSource(dataSource === 'fitbit' ? 'fitbit' : 'google-fit')
+        setWeightSource(WEIGHT_SOURCE_LABELS[dataSource] ? dataSource : 'history')
       } else {
         setWeight('')
         setWeightSource(null)
@@ -268,10 +275,10 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
           {/* Weight Confirmation Form */}
           {!loading && (
             <div className="space-y-4">
-              {(weightSource === 'google-fit' || weightSource === 'fitbit') && weight && (
+              {isPrefilled && weight && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
                   <p className="text-sm text-green-800 font-medium mb-1">
-                    ✓ Most recent weight from {weightSource === 'fitbit' ? 'Fitbit' : 'Google Fit'}
+                    ✓ Most recent weight from {WEIGHT_SOURCE_LABELS[weightSource] || 'your last weigh-in'}
                   </p>
                   <p className="text-xs text-green-600">
                     This is your most recent weight. Please confirm or edit if needed.
@@ -289,7 +296,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
                   value={weight}
                   onChange={(e) => {
                     setWeight(e.target.value)
-                    if (weightSource === 'google-fit' || weightSource === 'fitbit') {
+                    if (isPrefilled) {
                       setWeightSource('manual')
                     }
                   }}
@@ -303,7 +310,7 @@ const WeightInputModal = ({ isOpen, onClose, challenge, onWeightSubmitted, user 
                   }}
                 />
                 <p className="text-sm text-gray-600 mt-1">
-                  {(weightSource === 'google-fit' || weightSource === 'fitbit')
+                  {isPrefilled
                     ? 'Confirm this weight or edit if it\'s not accurate.'
                     : 'Enter your current weight in pounds.'}
                 </p>

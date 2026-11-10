@@ -77,6 +77,10 @@ export const ChatNotificationProvider = ({ children }) => {
         switch (message.messageType) {
           case 'stepGoalCard':
             return `${userName} earned a step point!`;
+          case 'goalBonusCard':
+            return `${userName} hit today's step goal!`;
+          case 'weeklyBonusCard':
+            return `${userName} earned the weekly bonus!`;
           case 'dailyStepUpdateCard':
             return 'Check everyone\'s step progress!';
           case 'weighInReminderCard':

@@ -9,6 +9,7 @@ import ProgressCard from '../components/ui/ProgressCard'
 import StatCard from '../components/ui/StatCard'
 import WeightInputModal from '../components/WeightInputModal'
 import ReconnectBanner from '../components/ReconnectBanner'
+import V2TodayPoints from '../components/V2TodayPoints'
 import { useUserData } from '../hooks/useUserData'
 import { useChallenges } from '../hooks/useChallenges'
 import { useQueryClient } from '@tanstack/react-query'
@@ -630,16 +631,16 @@ const Dashboard = () => {
       const dataSource = user?.dataSource || 'google-fit'
       let syncData = null // Store sync result to check for errors
       
-      if (dataSource === 'fitbit') {
-        // For Fitbit, use backend API which handles Fitbit sync
-        console.log('🔄 Syncing Fitbit data via backend...')
+      if (dataSource !== 'google-fit') {
+        // Server-synced sources (Google Health, WHOOP, legacy Fitbit, none): the backend syncs
+        console.log(`🔄 Syncing ${dataSource} data via backend...`)
         const apiUrl = getApiUrl()
         
         // First sync current data
         const response = await fetchWithAuth(`${apiUrl}/api/user/userdata?googleId=${user.sub}`)
         
         if (!response.ok) {
-          throw new Error('Failed to sync Fitbit data')
+          throw new Error('Failed to sync data')
         }
         
         syncData = await response.json()
@@ -703,7 +704,7 @@ const Dashboard = () => {
         
         // Only refetch if we didn't get an error/warning
         const currentUser = user || JSON.parse(localStorage.getItem('fitapp_user') || '{}')
-        const shouldRefetch = currentUser?.dataSource !== 'fitbit' || (!syncData?.error && !syncData?.warning)
+        const shouldRefetch = (currentUser?.dataSource || 'google-fit') === 'google-fit' || (!syncData?.error && !syncData?.warning)
         
         if (shouldRefetch) {
           await queryClient.invalidateQueries({ queryKey: ['userData', user.sub] })
@@ -923,7 +924,7 @@ const Dashboard = () => {
                     current={currentSteps}
                     goal={stepGoal}
                     achieved={achieved}
-                    showPointStatus={true}
+                    showPointStatus={activeChallenge.scoringMode !== 'v2'}
                     onClick={() => navigate('/steps-history')}
                   />
                 );
@@ -941,6 +942,11 @@ const Dashboard = () => {
                 />
               );
             })()}
+
+            {/* Points v2: today's points by category */}
+            {activeChallenge?.scoringMode === 'v2' && (
+              <V2TodayPoints challenge={activeChallenge} onClick={() => navigate('/leaderboard')} />
+            )}
 
             {/* Confirm Weight Button - Only on weigh-in day */}
             {shouldPromptForWeight && activeChallenge && (

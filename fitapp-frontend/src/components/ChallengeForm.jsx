@@ -14,6 +14,7 @@ const ChallengeForm = ({ onCreate, onClose }) => {
   const [botAvatar, setBotAvatar] = useState('🤖')
   const [challengeCode, setChallengeCode] = useState('')
   const [weighInDay, setWeighInDay] = useState('monday')
+  const [scoringMode, setScoringMode] = useState('classic')
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
   
@@ -102,7 +103,8 @@ const ChallengeForm = ({ onCreate, onClose }) => {
       picture: user?.picture, // Add creator's profile picture
       userName: user?.name, // Add creator's actual name
       startingWeight: null, // Starting weight will be set on first weigh-in day
-      weighInDay
+      weighInDay,
+      scoringMode
     }
 
     console.log('🌐 Sending to:', API_BASE_URL)
@@ -326,6 +328,34 @@ const ChallengeForm = ({ onCreate, onClose }) => {
                 <p className="text-xs text-gray-500 mt-1">Time when challenge ends</p>
               </div>
             </div>
+
+            <fieldset>
+              <legend className="block text-sm font-medium text-gray-700 mb-1">Scoring</legend>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { value: 'classic', title: 'Classic', text: '1 point for each day you reach the step goal, plus weight-loss points at the end.' },
+                  { value: 'v2', title: 'Points v2', text: 'Points for steps, a daily goal bonus, workouts (Effort Points), strength sessions, a weekly consistency bonus and weight loss. Each member\'s data source is locked when they join.' },
+                ].map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer ${scoringMode === opt.value ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="scoringMode"
+                      value={opt.value}
+                      checked={scoringMode === opt.value}
+                      onChange={() => setScoringMode(opt.value)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-800">{opt.title}</span>
+                      <span className="block text-xs text-gray-600">{opt.text}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Daily Step Goal</label>

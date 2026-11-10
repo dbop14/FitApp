@@ -60,7 +60,12 @@ const ChallengeDashboard = () => {
         startWeight: startWeight,
         currentWeight: currentWeight,
         weightLossPercentage: weightLossPercentage,
-        isCurrentUser: participant.userId === user?.sub
+        isCurrentUser: participant.userId === user?.sub,
+        // Points v2 (absent for Classic)
+        scoringMode: participant.scoringMode || 'classic',
+        breakdown: participant.breakdown || null,
+        today: participant.today || null,
+        weeks: participant.weeks || []
       }
     })
   })()

@@ -41,7 +41,7 @@ const ChatMessageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'stepGoalCard', 'dailyStepUpdateCard', 'weighInReminderCard', 'weightLossCard', 'welcomeCard', 'startReminderCard', 'winnerCard', 'leaveCard'],
+    enum: ['text', 'stepGoalCard', 'dailyStepUpdateCard', 'weighInReminderCard', 'weightLossCard', 'welcomeCard', 'startReminderCard', 'winnerCard', 'leaveCard', 'goalBonusCard', 'weeklyBonusCard'],
     default: 'text'
   },
   imageUrl: {

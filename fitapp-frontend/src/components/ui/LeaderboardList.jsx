@@ -1,11 +1,54 @@
-import React from 'react'
+import React, { useState } from 'react'
+
+// Points v2 shows tenths; Classic points are whole numbers.
+const formatPoints = (n) => {
+  const v = Number(n) || 0
+  return Number.isInteger(v) ? String(v) : v.toFixed(1)
+}
+
+const V2_CATEGORIES = [
+  { key: 'steps', label: 'Steps' },
+  { key: 'goalBonus', label: 'Daily goal bonus' },
+  { key: 'effort', label: 'Effort' },
+  { key: 'strength', label: 'Strength' },
+  { key: 'weekly', label: 'Weekly bonus' },
+  { key: 'weightLoss', label: 'Weight loss' },
+]
+
+// Expanded detail for a Points v2 row: totals by category, plus today's points.
+const V2Breakdown = ({ participant }) => {
+  const b = participant.breakdown || {}
+  const t = participant.today
+  const todayTotal = t ? t.total ?? ((t.stepPoints || 0) + (t.goalBonusPoints || 0) + (t.effortPoints || 0) + (t.strengthPoints || 0)) : null
+  const weeksEarned = (participant.weeks || []).filter((w) => w.points > 0).length
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        {V2_CATEGORIES.map(({ key, label }) => (
+          <React.Fragment key={key}>
+            <dt className="text-gray-600">{label}</dt>
+            <dd className="text-right font-medium text-gray-900">{formatPoints(b[key])}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      <p className="mt-2 text-xs text-gray-500">
+        {todayTotal !== null && <>Today: {formatPoints(todayTotal)} pts{t?.provisional ? ' (provisional)' : ''}. </>}
+        Weekly bonus earned {weeksEarned} {weeksEarned === 1 ? 'week' : 'weeks'}.
+      </p>
+    </div>
+  )
+}
 
 const LeaderboardList = ({ participants, currentUserId, onCardTap }) => {
   // Get all participants (no more slicing - show everyone)
   const allParticipants = participants
+  const [expandedId, setExpandedId] = useState(null)
   
-  // Handle card tap
+  // Handle card tap: v2 rows expand to show the breakdown
   const handleCardTap = (participant) => {
+    if (participant.scoringMode === 'v2') {
+      setExpandedId((id) => (id === participant.id ? null : participant.id))
+    }
     if (onCardTap) {
       onCardTap(participant)
     }
@@ -35,6 +78,8 @@ const LeaderboardList = ({ participants, currentUserId, onCardTap }) => {
         {allParticipants.map((participant, index) => {
           const rank = index + 1 // Start from rank 1
           const isCurrentUser = participant.id === currentUserId
+          const isV2 = participant.scoringMode === 'v2'
+          const isExpanded = isV2 && expandedId === participant.id
           
           // Get medal emoji for top 3
           const getMedalEmoji = (rank) => {
@@ -64,7 +109,8 @@ const LeaderboardList = ({ participants, currentUserId, onCardTap }) => {
               onKeyDown={(e) => handleKeyDown(e, participant)}
               role="button"
               tabIndex={0}
-              aria-label={`${participant.name} - Rank ${rank} - ${participant.totalPoints || 0} points`}
+              aria-expanded={isV2 ? isExpanded : undefined}
+              aria-label={`${participant.name} - Rank ${rank} - ${isV2 ? formatPoints(participant.totalPoints) : (participant.totalPoints || 0)} points${isV2 ? ' - tap for breakdown' : ''}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
@@ -112,8 +158,13 @@ const LeaderboardList = ({ participants, currentUserId, onCardTap }) => {
                         </span>
                       )}
                     </div>
+                    {isV2 && participant.breakdown && (
+                      <div className="text-xs text-gray-500">
+                        Steps {formatPoints(participant.breakdown.steps)} · Effort {formatPoints(participant.breakdown.effort)} · Bonus {formatPoints((participant.breakdown.goalBonus || 0) + (participant.breakdown.weekly || 0))}
+                      </div>
+                    )}
                     {/* Show step goal points if available */}
-                    {participant.stepGoalPoints !== undefined && (
+                    {!isV2 && participant.stepGoalPoints !== undefined && (
                       <div className="text-xs text-gray-500">
                         Step Points: {participant.stepGoalPoints}
                       </div>
@@ -130,13 +181,14 @@ const LeaderboardList = ({ participants, currentUserId, onCardTap }) => {
                 {/* Right Section - Total Points */}
                 <div className="text-right">
                   <div className="text-lg font-semibold text-gray-700">
-                    {participant.totalPoints || 0}
+                    {isV2 ? formatPoints(participant.totalPoints) : (participant.totalPoints || 0)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    pts
+                    pts{isV2 && <span aria-hidden="true"> {isExpanded ? '▴' : '▾'}</span>}
                   </div>
                 </div>
               </div>
+              {isExpanded && <V2Breakdown participant={participant} />}
             </li>
           )
         })}

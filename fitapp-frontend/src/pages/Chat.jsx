@@ -840,7 +840,9 @@ const Chat = () => {
                       welcomeCard: 'bg-gradient-to-r from-blue-500 to-cyan-600',
                       startReminderCard: 'bg-gradient-to-r from-orange-500 to-amber-600',
                       winnerCard: 'bg-gradient-to-r from-yellow-500 to-orange-600',
-                      leaveCard: 'bg-gradient-to-r from-gray-500 to-gray-600'
+                      leaveCard: 'bg-gradient-to-r from-gray-500 to-gray-600',
+                      goalBonusCard: 'bg-gradient-to-r from-green-500 to-emerald-600',
+                      weeklyBonusCard: 'bg-gradient-to-r from-indigo-500 to-violet-600'
                     };
                     return gradients[cardType] || 'bg-gradient-to-r from-blue-500 to-blue-600';
                   };
@@ -869,10 +871,11 @@ const Chat = () => {
                     const gradient = getCardGradient(msg.messageType);
                     // For cards, always use the user's profile picture (the user mentioned in the card)
                     const cardAvatar = msg.userPicture;
-                    const hasProfilePhoto = cardAvatar && (msg.messageType === 'stepGoalCard' || msg.messageType === 'weightLossCard' || msg.messageType === 'welcomeCard' || msg.messageType === 'winnerCard');
+                    const isPointsCard = ['stepGoalCard', 'goalBonusCard', 'weeklyBonusCard'].includes(msg.messageType);
+                    const hasProfilePhoto = cardAvatar && (isPointsCard || msg.messageType === 'weightLossCard' || msg.messageType === 'welcomeCard' || msg.messageType === 'winnerCard');
                     
                     // Check if this is a milestone card that should be clickable
-                    const isMilestoneCard = msg.messageType === 'stepGoalCard' || 
+                    const isMilestoneCard = isPointsCard || 
                                            msg.messageType === 'weightLossCard' || 
                                            msg.messageType === 'welcomeCard' || 
                                            msg.messageType === 'winnerCard';
@@ -890,7 +893,11 @@ const Chat = () => {
                       onClick: handleWeighInCardClick
                     } : {};
                     
-                    if (msg.messageType === 'stepGoalCard') {
+                    if (isPointsCard) {
+                      const badge = msg.messageType === 'stepGoalCard' ? '+1' : `+${msg.cardData?.points ?? ''}`
+                      const detail = msg.messageType === 'weeklyBonusCard'
+                        ? `${msg.cardData?.activeDays ?? ''} active days in week ${msg.cardData?.weekNumber ?? ''}`
+                        : `${msg.cardData?.stepCount?.toLocaleString()} steps`
                       return (
                         <div {...cardProps} className={cardClasses}>
                           {/* Profile Photo */}
@@ -919,14 +926,14 @@ const Chat = () => {
                               {msg.cardData?.userName || 'Someone'}
                             </div>
                             <div className="text-xs opacity-90">
-                              {msg.cardData?.stepCount?.toLocaleString()} steps
+                              {detail}
                             </div>
                           </div>
                           
                           {/* +1 Point Badge */}
                           <div className="flex-shrink-0">
                             <div className="bg-white bg-opacity-25 rounded-full w-10 h-10 flex items-center justify-center border-2 border-white">
-                              <span className="text-white font-bold text-sm">+1</span>
+                              <span className="text-white font-bold text-sm">{badge}</span>
                             </div>
                           </div>
                         </div>

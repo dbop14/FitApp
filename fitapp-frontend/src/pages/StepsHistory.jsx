@@ -309,13 +309,17 @@ const StepsHistory = () => {
             })
           }
           
-          // Fill in actual step data
+          // Fill in actual step data, plus workout effort and strength (Google Health / WHOOP)
           data.forEach(entry => {
-            if (entry.date && entry.steps !== null && entry.steps !== undefined) {
-              const dateKey = new Date(entry.date).toISOString().split('T')[0]
-              if (dayMap.has(dateKey)) {
-                dayMap.get(dateKey).steps = entry.steps
-              }
+            if (!entry.date) return
+            const dateKey = new Date(entry.date).toISOString().split('T')[0]
+            const day = dayMap.get(dateKey)
+            if (!day) return
+            if (entry.steps !== null && entry.steps !== undefined) {
+              day.steps = entry.steps
+            }
+            for (const f of ['effortPoints', 'moderateMinutes', 'vigorousMinutes', 'strengthSessions']) {
+              if (entry[f] !== null && entry[f] !== undefined) day[f] = entry[f]
             }
           })
           
@@ -537,6 +541,24 @@ const StepsHistory = () => {
                 </div>
               </div>
             </div>
+
+            {/* Workouts for the selected day (sources that report them) */}
+            {(displayDay.effortPoints !== undefined || displayDay.strengthSessions !== undefined) && (
+              <div className="bg-white rounded-xl px-4 py-3 shadow-sm grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-gray-500">Effort Points</div>
+                  <div className="text-xl font-bold text-gray-900">{displayDay.effortPoints ?? 0}</div>
+                  <div className="text-xs text-gray-500">
+                    {(displayDay.moderateMinutes ?? 0)} moderate + {(displayDay.vigorousMinutes ?? 0)} vigorous min
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Strength sessions</div>
+                  <div className="text-xl font-bold text-gray-900">{displayDay.strengthSessions ?? 0}</div>
+                  <div className="text-xs text-gray-500">from workouts</div>
+                </div>
+              </div>
+            )}
 
             {/* Bar Chart */}
             <div className="bg-white rounded-xl px-4 py-4 shadow-sm">
@@ -932,7 +954,9 @@ const StepsHistory = () => {
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
               <p className="text-sm text-blue-800">
-                Step points are earned when you meet your daily step goal. Each day you reach {stepGoal.toLocaleString()} steps, you earn 1 point.
+                {activeChallenge?.scoringMode === 'v2'
+                  ? 'In this Points v2 challenge you earn points for steps, a bonus each day you reach the goal, workouts (Effort Points) and strength sessions. Tap your row on the leaderboard for the full breakdown.'
+                  : `Step points are earned when you meet your daily step goal. Each day you reach ${stepGoal.toLocaleString()} steps, you earn 1 point.`}
               </p>
             </div>
           </div>
