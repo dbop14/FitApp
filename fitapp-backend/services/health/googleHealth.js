@@ -152,35 +152,131 @@ function parseWeights(points, startYmd, endYmd) {
 
 // --- Workouts ----------------------------------------------------------------
 
-async function getWorkouts(user, startYmd, endYmd) {
-  const startIso = `${fromDayNumber(dayNumber(startYmd) - 1)}T00:00:00Z`; // pad for timezone
-  const endIso = `${fromDayNumber(dayNumber(endYmd) + 2)}T00:00:00Z`;
-  const filter = `exercise.interval.start_time >= "${startIso}" AND exercise.interval.start_time < "${endIso}"`;
+// Exercise sessions can only be filtered on their civil (local) start time.
+async function getWorkouts(user, startYmd, endYmd, config = SCORING_V2) {
+  const endExclusive = fromDayNumber(dayNumber(endYmd) + 1);
+  const filter = `exercise.interval.civil_start_time >= "${startYmd}T00:00:00"`
+    + ` AND exercise.interval.civil_start_time < "${endExclusive}T00:00:00"`;
   const points = await listDataPoints(user, 'exercise', filter,
-    (p) => new Date(p.exercise?.interval?.startTime || 0) < new Date(startIso));
-  return parseWorkouts(points, startYmd, endYmd);
+    (p) => new Date(p.exercise?.interval?.startTime || 0) < new Date(`${fromDayNumber(dayNumber(startYmd) - 1)}T00:00:00Z`));
+  // Sessions with no zone data: fetch heart-rate samples for the max-HR fallback.
+  const hrSamples = new Map();
+  for (const p of points) {
+    if (!needsHeartRate(p, config)) continue;
+    try {
+      hrSamples.set(p.name, await getHeartRateSamples(user, p.exercise.interval.startTime, p.exercise.interval.endTime));
+    } catch (err) {
+      // Fall back to the session's average heart rate.
+      console.warn(`Google Health heart-rate read failed (${err.status || ''} ${err.code || err.message})`);
+    }
+  }
+  return parseWorkouts(points, startYmd, endYmd, config, { maxHr: user.maxHeartRate, hrSamples });
 }
 
-function parseWorkouts(points, startYmd, endYmd, config = SCORING_V2) {
+function needsHeartRate(p, config) {
+  const ex = p.exercise;
+  const start = ex?.interval?.startTime;
+  const end = ex?.interval?.endTime;
+  if (!start || !end || !p.name) return false;
+  if (ex.metricsSummary?.heartRateZoneDurations || ex.metricsSummary?.activeZoneMinutes !== undefined) return false;
+  return (new Date(end) - new Date(start)) / 60000 >= config.MIN_WORKOUT_MINUTES;
+}
+
+async function getHeartRateSamples(user, startIso, endIso) {
+  const filter = `heart_rate.sample_time.physical_time >= "${startIso}" AND heart_rate.sample_time.physical_time < "${endIso}"`;
+  const points = await listDataPoints(user, 'heart-rate', filter, () => false);
+  return parseHeartRate(points);
+}
+
+// -> [{ t: epoch ms, bpm }] sorted by time
+function parseHeartRate(points) {
   const out = [];
+  for (const p of points) {
+    const t = Date.parse(p.heartRate?.sampleTime?.physicalTime);
+    const bpm = Number(p.heartRate?.beatsPerMinute);
+    if (Number.isFinite(t) && bpm > 0) out.push({ t, bpm });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+function effectiveMaxHr(maxHr, config) {
+  const n = Number(maxHr);
+  return n >= config.MIN_MAX_HR && n <= config.MAX_MAX_HR ? n : config.DEFAULT_MAX_HR;
+}
+
+function zoneOf(bpm, maxHr, config) {
+  if (bpm >= maxHr * config.VIGOROUS_PCT_MAX_HR) return 'vigorous';
+  if (bpm >= maxHr * config.MODERATE_PCT_MAX_HR) return 'moderate';
+  return null;
+}
+
+// Each sample's zone holds until the next sample (or the session end), with
+// long gaps (lost signal) counted only up to HR_SAMPLE_MAX_GAP_SECONDS.
+function zoneMinutesFromSamples(samples, startIso, endIso, maxHr, config) {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  const inside = samples.filter((s) => s.t >= start && s.t < end);
+  const secs = { moderate: 0, vigorous: 0 };
+  for (let i = 0; i < inside.length; i++) {
+    const next = i + 1 < inside.length ? inside[i + 1].t : end;
+    const gap = Math.min((next - inside[i].t) / 1000, config.HR_SAMPLE_MAX_GAP_SECONDS);
+    const zone = zoneOf(inside[i].bpm, maxHr, config);
+    if (zone) secs[zone] += gap;
+  }
+  return { moderateMinutes: Math.round(secs.moderate / 60), vigorousMinutes: Math.round(secs.vigorous / 60) };
+}
+
+// The local day a session starts on: civil date if given, else its UTC offset,
+// else the app timezone.
+function workoutDate(interval) {
+  const civil = fromGoogleDate(interval.civilStartTime?.date);
+  if (civil) return civil;
+  if (interval.startUtcOffset !== undefined) {
+    const shifted = new Date(Date.parse(interval.startTime) + durationSeconds(interval.startUtcOffset) * 1000);
+    return shifted.toISOString().slice(0, 10);
+  }
+  return ymdInZone(interval.startTime);
+}
+
+function parseWorkouts(points, startYmd, endYmd, config = SCORING_V2, { maxHr, hrSamples } = {}) {
+  const out = [];
+  const userMaxHr = effectiveMaxHr(maxHr, config);
   for (const p of points) {
     const ex = p.exercise;
     const start = ex?.interval?.startTime;
     const end = ex?.interval?.endTime;
     if (!start || !end) continue;
     // Credit a workout to the calendar day it starts on.
-    const date = fromGoogleDate(ex.interval.civilStartTime?.date) || ymdInZone(start);
+    const date = workoutDate(ex.interval);
     if (date < startYmd || date > endYmd) continue;
-    const zones = ex.metricsSummary?.heartRateZoneDurations;
-    const moderateMinutes = Math.round(durationSeconds(zones?.moderateTime) / 60);
-    // Peak counts as vigorous (Fitbit cardio + peak zones are both 2x active zone minutes).
-    const vigorousMinutes = Math.round((durationSeconds(zones?.vigorousTime) + durationSeconds(zones?.peakTime)) / 60);
     const durationMinutes = Math.round((new Date(end) - new Date(start)) / 60000);
+    const summary = ex.metricsSummary || {};
+    const zones = summary.heartRateZoneDurations;
+    let moderateMinutes = 0;
+    let vigorousMinutes = 0;
+    let effortSource = 'none';
+    if (zones) {
+      moderateMinutes = Math.round(durationSeconds(zones.moderateTime) / 60);
+      // Peak counts as vigorous (Fitbit cardio + peak zones are both 2x active zone minutes).
+      vigorousMinutes = Math.round((durationSeconds(zones.vigorousTime) + durationSeconds(zones.peakTime)) / 60);
+      effortSource = 'zones';
+    } else if ((hrSamples?.get(p.name) || []).some((h) => h.t >= Date.parse(start) && h.t < Date.parse(end))) {
+      ({ moderateMinutes, vigorousMinutes } = zoneMinutesFromSamples(hrSamples.get(p.name), start, end, userMaxHr, config));
+      effortSource = 'heart-rate';
+    } else if (summary.averageHeartRateBeatsPerMinute !== undefined && summary.activeZoneMinutes === undefined) {
+      // Whole session in the zone of its average heart rate.
+      const zone = zoneOf(Number(summary.averageHeartRateBeatsPerMinute), userMaxHr, config);
+      const minutes = Math.round((durationSeconds(ex.activeDuration) || (Date.parse(end) - Date.parse(start)) / 1000) / 60);
+      if (zone === 'moderate') moderateMinutes = minutes;
+      if (zone === 'vigorous') vigorousMinutes = minutes;
+      effortSource = 'average-heart-rate';
+    }
     let effortPoints = effortPointsForWorkout({ start, end, moderateMinutes, vigorousMinutes }, config);
-    // No zone split reported: fall back to the session's active zone minutes,
-    // which are already weighted 1x moderate / 2x vigorous.
-    if (!zones && ex.metricsSummary?.activeZoneMinutes !== undefined && durationMinutes >= config.MIN_WORKOUT_MINUTES) {
-      effortPoints = Number(ex.metricsSummary.activeZoneMinutes) || 0;
+    // No zone split but active zone minutes reported: those are already
+    // weighted 1x moderate / 2x vigorous.
+    if (!zones && summary.activeZoneMinutes !== undefined) {
+      effortPoints = durationMinutes >= config.MIN_WORKOUT_MINUTES ? Number(summary.activeZoneMinutes) || 0 : 0;
+      effortSource = 'active-zone-minutes';
     }
     const type = ex.exerciseType || 'EXERCISE_TYPE_UNSPECIFIED';
     out.push({
@@ -192,6 +288,7 @@ function parseWorkouts(points, startYmd, endYmd, config = SCORING_V2) {
       moderateMinutes,
       vigorousMinutes,
       effortPoints,
+      effortSource,
       isStrength: GOOGLE_HEALTH_STRENGTH_TYPES.has(type) && durationMinutes >= config.STRENGTH_MIN_MINUTES,
     });
   }
@@ -207,6 +304,9 @@ module.exports = {
   parseDailySteps,
   parseWeights,
   parseWorkouts,
+  parseHeartRate,
+  zoneMinutesFromSamples,
+  effectiveMaxHr,
   durationSeconds,
   GoogleHealthError,
 };

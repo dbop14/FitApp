@@ -30,6 +30,7 @@ function mockGoogle({ tokenScope, failSteps } = {}) {
     }
     if (u.includes('/dataTypes/weight/dataPoints')) return json(200, fixtures.weight);
     if (u.includes('/dataTypes/exercise/dataPoints')) return json(200, fixtures.exercise);
+    if (u.includes('/dataTypes/heart-rate/dataPoints')) return json(200, fixtures.heartRate);
     return json(404, {});
   };
 }
@@ -83,9 +84,44 @@ test('workouts: zones give effort (1x moderate, 2x vigorous+peak), 10-minute min
   assert.equal(byType.WEIGHTLIFTING.effortPoints, 12); // activeZoneMinutes fallback
   assert.equal(byType.WEIGHTLIFTING.isStrength, true);
   assert.equal(byType.WEIGHTLIFTING.date, '2026-11-08'); // 17:00 New York
-  assert.equal(byType.WALKING.effortPoints, 0);
+  const shortWalk = w.find((x) => x.type === 'WALKING' && x.durationMinutes === 8);
+  assert.equal(shortWalk.effortPoints, 0);
   assert.equal(byType.STRENGTH_TRAINING.effortPoints, 10);
   assert.equal(byType.STRENGTH_TRAINING.isStrength, false);
+});
+
+test('Apple Health/Whoop workouts: effort from heart-rate samples and max HR; dated by UTC offset', () => {
+  const hr = googleHealth.parseHeartRate(fixtures.heartRate.dataPoints);
+  const name = 'users/1234567890/dataTypes/exercise/dataPoints/111';
+  const pick = (opts) => googleHealth.parseWorkouts(fixtures.exercise.dataPoints, '2026-11-01', '2026-11-09', undefined, opts)
+    .find((x) => x.start.startsWith('2026-11-05T23:07'));
+
+  const def = pick({ hrSamples: new Map([[name, hr]]) }); // default max HR 185
+  assert.equal(def.date, '2026-11-05');
+  assert.equal(def.effortSource, 'heart-rate');
+  assert.equal(def.moderateMinutes, 20);
+  assert.equal(def.vigorousMinutes, 10);
+  assert.equal(def.effortPoints, 40);
+
+  const own = pick({ maxHr: 200, hrSamples: new Map([[name, hr]]) }); // 150 bpm is only moderate at 200
+  assert.equal(own.moderateMinutes, 30);
+  assert.equal(own.vigorousMinutes, 0);
+  assert.equal(own.effortPoints, 30);
+
+  const avg = pick({}); // no samples: whole active duration in the zone of the 134 bpm average
+  assert.equal(avg.effortSource, 'average-heart-rate');
+  assert.equal(avg.moderateMinutes, 48);
+  assert.equal(avg.effortPoints, 48);
+
+  assert.equal(googleHealth.effectiveMaxHr(500, require('../config/scoringV2')), 185, 'out-of-range max HR falls back to the default');
+});
+
+test('heart-rate gaps (lost signal) count at most 60 seconds', () => {
+  const cfg = require('../config/scoringV2');
+  const t0 = Date.parse('2026-11-05T12:00:00Z');
+  const samples = [{ t: t0, bpm: 150 }, { t: t0 + 10 * 60000, bpm: 150 }];
+  const z = googleHealth.zoneMinutesFromSamples(samples, '2026-11-05T12:00:00Z', '2026-11-05T12:11:00Z', 185, cfg);
+  assert.equal(z.vigorousMinutes, 2); // 60 s + 60 s, not 11 minutes
 });
 
 test('durations parse from "123s", "1.5s" and {seconds}', () => {
@@ -216,4 +252,47 @@ test('callback refuses a grant missing a scope', async () => {
   const res = await callback({ code: 'auth-code', state: signState('u') });
   assert.equal(reason(res).get('reason'), 'scopes');
   assert.equal((await User.findOne({ googleId: 'u' })).dataSource, 'google-fit');
+});
+
+test('exercise is filtered on civil start time; heart rate is read only for sessions without zones', async () => {
+  mockGoogle();
+  const user = await connectedUser();
+  await googleHealth.getWorkouts(user, '2026-11-01', '2026-11-09');
+  const ex = calls.find((c) => c.url.includes('/dataTypes/exercise/'));
+  assert.match(new URL(ex.url).searchParams.get("filter"), /exercise\.interval\.civil_start_time >= "2026-11-01T00:00:00" AND exercise\.interval\.civil_start_time < "2026-11-10T00:00:00"/);
+  const hrCalls = calls.filter((c) => c.url.includes('/dataTypes/heart-rate/'));
+  assert.equal(hrCalls.length, 1, 'only the recorded-shape walk lacks zone data');
+});
+
+test('a day the new source has no steps for keeps its old steps and label', async () => {
+  mockGoogle();
+  const user = await connectedUser();
+  const ymd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  await FitnessHistory.create({ userId: 'gh-user', date: ymd('2026-11-09'), steps: 7000, source: 'google-fit' });
+  await health.syncHealthHistory(user, { days: 1, now: new Date('2026-11-09T20:00:00Z') });
+  const row = await FitnessHistory.findOne({ userId: 'gh-user', date: ymd('2026-11-09') }).lean();
+  assert.equal(row.steps, 7000);
+  assert.equal(row.source, 'google-fit');
+});
+
+test('PUT /api/user/max-heart-rate sets, validates and clears the signed-in user\'s value', async () => {
+  await connectedUser();
+  const put = (body) => fetch(`${app.base}/api/user/max-heart-rate`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sign('gh-user')}` }, body: JSON.stringify(body),
+  });
+  assert.equal((await put({ maxHeartRate: 190 })).status, 200);
+  assert.equal((await User.findOne({ googleId: 'gh-user' })).maxHeartRate, 190);
+  assert.equal((await put({ maxHeartRate: 400 })).status, 400);
+  assert.equal((await put({ maxHeartRate: 'abc' })).status, 400);
+  assert.equal((await put({ maxHeartRate: null })).status, 200);
+  assert.equal((await User.findOne({ googleId: 'gh-user' })).maxHeartRate, undefined);
+  const noAuth = await fetch(`${app.base}/api/user/max-heart-rate`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{"maxHeartRate":190}' });
+  assert.equal(noAuth.status, 401);
+});
+
+test('history days are stored at APP_TIMEZONE midnight whatever the process timezone', () => {
+  assert.equal(health.ymdToLocalDate('2026-11-09').toISOString(), '2026-11-09T05:00:00.000Z'); // EST
+  assert.equal(health.ymdToLocalDate('2026-07-04').toISOString(), '2026-07-04T04:00:00.000Z'); // EDT
+  assert.equal(health.ymdToLocalDate('2026-11-01').toISOString(), '2026-11-01T04:00:00.000Z'); // DST ends that night
+  assert.equal(health.ymdToLocalDate('2026-03-08').toISOString(), '2026-03-08T05:00:00.000Z'); // DST starts that night
 });

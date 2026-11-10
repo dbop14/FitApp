@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { UserContext } from '../context/UserContext'
 import { unifiedDesignSystem } from '../config/unifiedDesignSystem'
 import Button from '../components/ui/Button'
-import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth, startGoogleHealthConnect, disconnectGoogleHealth } from '../utils/apiService'
+import { getDataSourceStatus, updateDataSource, initiateFitbitOAuth, startGoogleHealthConnect, disconnectGoogleHealth, updateMaxHeartRate } from '../utils/apiService'
 
 const GOOGLE_HEALTH_ERRORS = {
   ACCOUNT_NOT_LINKED: 'Your Fitbit login has not been moved to a Google account yet. Move it in the Fitbit app, then connect again.',
@@ -23,6 +23,8 @@ const DataSourceSettings = () => {
   const [fitbitConnected, setFitbitConnected] = useState(false)
   const [googleHealthEnabled, setGoogleHealthEnabled] = useState(false)
   const [googleHealthConnected, setGoogleHealthConnected] = useState(false)
+  const [maxHeartRate, setMaxHeartRate] = useState('')
+  const [defaultMaxHeartRate, setDefaultMaxHeartRate] = useState(185)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
   const [error, setError] = useState('')
@@ -75,6 +77,8 @@ const DataSourceSettings = () => {
       setFitbitConnected(status.fitbitConnected || false)
       setGoogleHealthEnabled(status.googleHealthEnabled || false)
       setGoogleHealthConnected(status.googleHealthConnected || false)
+      setMaxHeartRate(status.maxHeartRate ? String(status.maxHeartRate) : '')
+      if (status.defaultMaxHeartRate) setDefaultMaxHeartRate(status.defaultMaxHeartRate)
     } catch (err) {
       console.error('Failed to load data source status:', err)
       setError('Failed to load data source status')
@@ -142,6 +146,21 @@ const DataSourceSettings = () => {
       setSuccess('Google Health disconnected')
     } catch (err) {
       setError(err.message || 'Could not disconnect Google Health')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSaveMaxHeartRate = async () => {
+    setIsLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      const result = await updateMaxHeartRate(maxHeartRate.trim() === '' ? null : Number(maxHeartRate))
+      setMaxHeartRate(result.maxHeartRate ? String(result.maxHeartRate) : '')
+      setSuccess(result.maxHeartRate ? `Max heart rate set to ${result.maxHeartRate}` : `Max heart rate reset to the default (${result.defaultMaxHeartRate})`)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setIsLoading(false)
     }
@@ -260,6 +279,37 @@ const DataSourceSettings = () => {
                       </div>
                     )}
                   </div>
+                  {googleHealthConnected && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <label htmlFor="max-hr" className="block text-sm font-medium text-gray-800">
+                        Max heart rate
+                      </label>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Used to work out Effort Points when your workouts don't include heart-rate zones. Leave blank to use {defaultMaxHeartRate} bpm. A rough guide is 220 minus your age.
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          id="max-hr"
+                          type="number"
+                          inputMode="numeric"
+                          min="120"
+                          max="230"
+                          placeholder={String(defaultMaxHeartRate)}
+                          value={maxHeartRate}
+                          onChange={(e) => setMaxHeartRate(e.target.value)}
+                          className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        />
+                        <span className="text-sm text-gray-600">bpm</span>
+                        <button
+                          onClick={handleSaveMaxHeartRate}
+                          disabled={isLoading}
+                          className="ml-auto text-blue-600 hover:text-blue-700 text-sm font-medium disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -25,7 +25,8 @@ const UserSchema = new mongoose.Schema({
   googleHealthRefreshToken: String,
   googleHealthTokenExpiry: Number,
   googleHealthConnectedAt: Date,
-  googleHealthLastError: String // e.g. 'invalid_grant' when the user must reconnect
+  googleHealthLastError: String, // e.g. 'invalid_grant' when the user must reconnect
+  maxHeartRate: Number // Effort Points fallback; unset means config DEFAULT_MAX_HR
 });
 
 module.exports = mongoose.model('User', UserSchema); 

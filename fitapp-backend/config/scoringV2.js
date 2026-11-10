@@ -21,6 +21,19 @@ module.exports = Object.freeze({
   MODERATE_EFFORT_PER_MIN: 1,
   VIGOROUS_EFFORT_PER_MIN: 2,
 
+  // Max-heart-rate fallback, used when a workout has no zone breakdown (e.g.
+  // Whoop or Apple Watch data reaching Google Health through Apple Health).
+  // Each heart-rate sample's time counts as moderate at >= MODERATE_PCT_MAX_HR
+  // of the user's max HR and vigorous at >= VIGOROUS_PCT_MAX_HR (ACSM bands).
+  // A gap between samples longer than HR_SAMPLE_MAX_GAP_SECONDS counts only up
+  // to that limit. DEFAULT_MAX_HR applies until the user sets their own.
+  MODERATE_PCT_MAX_HR: 0.64,
+  VIGOROUS_PCT_MAX_HR: 0.77,
+  HR_SAMPLE_MAX_GAP_SECONDS: 60,
+  DEFAULT_MAX_HR: 185,
+  MIN_MAX_HR: 120,
+  MAX_MAX_HR: 230,
+
   // Strength: STRENGTH_POINTS per session of STRENGTH_MIN_MINUTES or more,
   // counting at most STRENGTH_MAX_PER_DAY a day and STRENGTH_MAX_PER_WEEK a week.
   STRENGTH_POINTS: 4,

@@ -1006,6 +1006,28 @@ router.put('/datasource', async (req, res) => {
   }
 });
 
+// PUT /api/user/max-heart-rate { maxHeartRate } - the signed-in user's max HR,
+// used for Effort Points when a workout has no heart-rate zone breakdown.
+// null clears it (back to the default).
+router.put('/max-heart-rate', async (req, res) => {
+  const SCORING_V2 = require('../config/scoringV2');
+  const raw = req.body?.maxHeartRate;
+  const value = raw === null || raw === '' ? null : Number(raw);
+  if (value !== null && !(Number.isInteger(value) && value >= SCORING_V2.MIN_MAX_HR && value <= SCORING_V2.MAX_MAX_HR)) {
+    return res.status(400).json({ error: `Max heart rate must be a whole number from ${SCORING_V2.MIN_MAX_HR} to ${SCORING_V2.MAX_MAX_HR}` });
+  }
+  try {
+    const user = await User.findOne({ googleId: req.user.googleId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.maxHeartRate = value === null ? undefined : value;
+    await user.save();
+    res.json({ maxHeartRate: user.maxHeartRate || null, defaultMaxHeartRate: SCORING_V2.DEFAULT_MAX_HR });
+  } catch (err) {
+    console.error('❌ Failed to update max heart rate:', err.message);
+    res.status(500).json({ error: 'Failed to update max heart rate' });
+  }
+});
+
 // GET /api/user/datasource?googleId=... - get user's data source preference and connection status
 router.get('/datasource', async (req, res) => {
   const { googleId } = req.query;
@@ -1031,7 +1053,9 @@ router.get('/datasource', async (req, res) => {
       googleHealthConnected: !!user.googleHealthRefreshToken,
       googleHealthConnectedAt: user.googleHealthConnectedAt || null,
       oauthType: user.oauthType || null,
-      needsReconnect: health.needsReconnect(user)
+      needsReconnect: health.needsReconnect(user),
+      maxHeartRate: user.maxHeartRate || null,
+      defaultMaxHeartRate: require('../config/scoringV2').DEFAULT_MAX_HR
     });
   } catch (err) {
     console.error('❌ Failed to get data source status:', err);

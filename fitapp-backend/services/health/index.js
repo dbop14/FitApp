@@ -14,10 +14,25 @@ const todayYmd = (now = new Date()) => new Intl.DateTimeFormat('en-CA', {
   timeZone: APP_TIMEZONE(), year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(now);
 
-// Local midnight, matching FitnessHistory.normalizeDate.
+// Offset of APP_TIMEZONE from UTC at instant t, in ms.
+function zoneOffsetMs(t) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIMEZONE(), hourCycle: 'h23',
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+  }).formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - t;
+}
+
+// Midnight of `ymd` in APP_TIMEZONE. This is what FitnessHistory.normalizeDate
+// stores when the process runs with TZ=APP_TIMEZONE (index.js sets it), but it
+// does not depend on the process timezone, so a script that forgets TZ cannot
+// create a second row for the same day.
 function ymdToLocalDate(ymd) {
   const [y, m, d] = ymd.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  const utcMidnight = Date.UTC(y, m - 1, d);
+  let t = utcMidnight - zoneOffsetMs(utcMidnight);
+  t = utcMidnight - zoneOffsetMs(t); // settle across a DST change
+  return new Date(t);
 }
 
 // Which source a user is on: 'google-health' | 'whoop' | 'fitbit' | 'google-fit'.
@@ -82,7 +97,10 @@ async function writeRows(userId, rows, source) {
   for (const r of rows) {
     const date = ymdToLocalDate(r.date);
     const existing = await FitnessHistory.findOne({ userId, date }).select('source weight').lean();
-    const set = { source, updatedAt: new Date() };
+    // Relabel a day only when this source actually reported steps for it, so a
+    // day it has no data for keeps the old source's numbers and label.
+    const set = { updatedAt: new Date() };
+    if (r.steps !== undefined || !existing) set.source = source;
     for (const f of ['steps', 'effortPoints', 'moderateMinutes', 'vigorousMinutes', 'strengthSessions']) {
       if (r[f] !== undefined) set[f] = r[f];
     }
@@ -135,4 +153,5 @@ module.exports = {
   buildDailyRows,
   writeRows,
   todayYmd,
+  ymdToLocalDate,
 };

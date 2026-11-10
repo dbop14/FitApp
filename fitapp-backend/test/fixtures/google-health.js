@@ -1,6 +1,17 @@
-// Google Health API v4 responses, built from the documented schema
-// (developers.google.com/health/reference/rest/v4). Replace with recorded
-// responses once a real account is connected; keep the same export names.
+// Google Health API v4 responses. Shapes were checked against a real dev
+// account on 2026-11-10 (steps dailyRollUp, weight and exercise lists, and
+// heart-rate samples). Values and IDs here are made up: no real user's health
+// data is stored in the repo.
+//
+// What the real account showed:
+// - dailyRollUp omits days with no data; countSum is a string.
+// - weight/exercise/heart-rate lists come newest first; points carry
+//   dataSource { recordingMethod, application.packageName, platform }.
+// - Workouts synced from Apple Health (e.g. Whoop) have no civilStartTime, no
+//   heartRateZoneDurations and no activeZoneMinutes: only startUtcOffset,
+//   averageHeartRateBeatsPerMinute (string) and activeDuration. Effort Points
+//   for those come from heart-rate samples and the user's max heart rate.
+// - Exercise can only be filtered on exercise.interval.civil_start_time.
 
 const steps = {
   rollupDataPoints: [
@@ -12,7 +23,7 @@ const steps = {
 
 const weight = {
   dataPoints: [
-    { name: 'users/me/dataTypes/weight/dataPoints/2', weight: { sampleTime: { physicalTime: '2026-11-08T12:30:00Z' }, weightGrams: 88450 } },
+    { name: 'users/me/dataTypes/weight/dataPoints/2', dataSource: { recordingMethod: 'MANUAL', application: { packageName: 'com.apple.Health' }, platform: 'HEALTH_KIT' }, weight: { sampleTime: { physicalTime: '2026-11-08T12:30:00Z' }, weightGrams: 88450 } },
     { name: 'users/me/dataTypes/weight/dataPoints/1', weight: { sampleTime: { physicalTime: '2026-11-08T03:30:00Z' }, weightGrams: 88900 } }, // 22:30 Nov 7 in New York
   ],
 };
@@ -46,6 +57,21 @@ const exercise = {
         metricsSummary: { heartRateZoneDurations: { moderateTime: '480s' } },
       },
     },
+    { // Recorded shape: walk synced from Whoop through Apple Health. 18:07-18:55 New York.
+      // Heart-rate samples below give 20 moderate + 10 vigorous minutes at max HR 185.
+      name: 'users/1234567890/dataTypes/exercise/dataPoints/111',
+      dataSource: { recordingMethod: 'UNKNOWN', application: { packageName: 'com.whoop.iphone' }, platform: 'HEALTH_KIT' },
+      exercise: {
+        interval: { startTime: '2026-11-05T23:07:00.428Z', startUtcOffset: '-18000s', endTime: '2026-11-05T23:54:59.537Z', endUtcOffset: '-18000s' },
+        exerciseType: 'WALKING',
+        metricsSummary: { caloriesKcal: 420, averageHeartRateBeatsPerMinute: '134' },
+        exerciseMetadata: {},
+        displayName: 'Walk',
+        activeDuration: '2879.109s',
+        updateTime: '2026-11-10T16:38:52.171025Z',
+        createTime: '2026-11-10T16:38:52.171025Z',
+      },
+    },
     { // 15-minute strength session: too short to count as strength (20+), still earns effort
       name: 'users/me/dataTypes/exercise/dataPoints/d',
       exercise: {
@@ -58,4 +84,17 @@ const exercise = {
   ],
 };
 
-module.exports = { steps, weight, exercise };
+// Heart-rate samples every 10 s during the recorded-shape walk: 18 min at 100 bpm
+// (below moderate), 20 min at 130 (moderate), 10 min at 150 (vigorous) for max HR 185.
+const heartRatePoints = [];
+for (let i = 0; i < 48 * 6; i++) {
+  const t = new Date(Date.parse('2026-11-05T23:07:00Z') + i * 10000);
+  const bpm = i < 18 * 6 ? 100 : i < 38 * 6 ? 130 : 150;
+  heartRatePoints.push({
+    dataSource: { recordingMethod: 'UNKNOWN', application: { packageName: 'com.whoop.iphone' }, platform: 'HEALTH_KIT' },
+    heartRate: { sampleTime: { physicalTime: t.toISOString(), utcOffset: '-18000s' }, beatsPerMinute: String(bpm) },
+  });
+}
+const heartRate = { dataPoints: heartRatePoints.reverse() }; // newest first, like the API
+
+module.exports = { steps, weight, exercise, heartRate };

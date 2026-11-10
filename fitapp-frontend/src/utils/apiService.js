@@ -90,3 +90,15 @@ export const disconnectGoogleHealth = async () => {
   const response = await fetchWithAuth(`${getApiUrl()}/api/auth/google-health/disconnect`, { method: 'POST' });
   return response.json();
 };
+
+// Max heart rate for Effort Points when a workout has no zone breakdown. null resets to the default.
+export const updateMaxHeartRate = async (maxHeartRate) => {
+  const response = await fetch(`${getApiUrl()}/api/user/max-heart-rate`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('fitapp_jwt_token')}` },
+    body: JSON.stringify({ maxHeartRate }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error || 'Could not save max heart rate');
+  return json;
+};
