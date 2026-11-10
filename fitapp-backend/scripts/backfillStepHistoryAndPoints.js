@@ -522,8 +522,8 @@ async function backfillStepHistoryAndPoints() {
       } catch (err) {
         console.error(`❌ ${dataSource} backfill failed for user ${user.googleId}: ${err.message}`);
       }
-    } else if (dataSource === 'google-health' || dataSource === 'whoop') {
-      // Source switched off (GOOGLE_HEALTH_ENABLED / WHOOP_ENABLED) or not connected; nothing to pull.
+    } else if (['google-health', 'whoop', 'none'].includes(dataSource)) {
+      // No source yet, or source switched off / not connected; nothing to pull.
     } else if (dataSource === 'fitbit') {
       await syncFitbitHistoryForUser(user, 30);
     } else {

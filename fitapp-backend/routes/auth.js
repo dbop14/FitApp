@@ -29,15 +29,12 @@ router.get('/auth/google', (req, res) => {
     return res.status(500).json({ error: 'OAuth not configured. Please check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.' });
   }
   
-  const scopes = [
-    'https://www.googleapis.com/auth/fitness.activity.read',
-    'https://www.googleapis.com/auth/fitness.body.read',
-    'profile',
-    'email'
-  ];
+  // Sign-in only: name, email and picture. Health data comes from Google Health
+  // or WHOOP, connected separately in Data Source Settings. (Google Fit is retired
+  // as a source; existing Google Fit users keep the grant they already gave.)
+  const scopes = ['openid', 'profile', 'email'];
   const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline', // CRITICAL: Gets refresh token
-    prompt: 'consent', // Force consent to get refresh token
+    prompt: 'select_account',
     scope: scopes
   });
   console.log('🔐 Redirecting to Google OAuth consent screen');
@@ -106,18 +103,21 @@ router.get('/auth/google/callback', async (req, res) => {
     const { data: profile } = await oauth2.userinfo.get();
 
     console.log(`✅ Got user profile: ${redactEmail(profile.email)} (${profile.id})`);
-    console.log(`🔑 Has refresh token: ${!!tokens.refresh_token}`);
+    const grantedScopes = String(tokens.scope || '');
+    const grantsGoogleFit = grantedScopes.includes('fitness.activity.read');
 
     // Check if user already exists to preserve custom profile data
     const existingUser = await User.findOne({ googleId: profile.id });
     
-    // Build update data - always update tokens and email
-    const updateData = {
-      email: profile.email,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token, // This is the key for 30-day sync!
-      tokenExpiry: tokens.expiry_date
-    };
+    // Build update data. accessToken/refreshToken are the Google Fit grant: only
+    // replace them with a grant that includes Google Fit, so signing in again does
+    // not cut off an existing Google Fit user's sync.
+    const updateData = { email: profile.email };
+    if (grantsGoogleFit) {
+      updateData.accessToken = tokens.access_token;
+      if (tokens.refresh_token) updateData.refreshToken = tokens.refresh_token;
+      updateData.tokenExpiry = tokens.expiry_date;
+    }
     
     // Preserve custom name and picture if they exist
     // Custom pictures are data URLs (start with "data:image")
@@ -127,6 +127,7 @@ router.get('/auth/google/callback', async (req, res) => {
     // This preserves any custom name the user has set
     if (!existingUser) {
       updateData.name = profile.name;
+      updateData.dataSource = 'none'; // connects Google Health or WHOOP next
     } else {
       // Preserve existing name (may be custom)
       updateData.name = existingUser.name || profile.name;
@@ -215,39 +216,9 @@ function getFrontendUrl(req) {
 }
 
 // 1. Start Fitbit OAuth flow
+// Fitbit's legacy API shut down on 2026-10-30; new Fitbit connections are not offered.
 router.get('/auth/fitbit', (req, res) => {
-  if (!FITBIT_CLIENT_ID || !FITBIT_CLIENT_SECRET) {
-    console.error('❌ Fitbit OAuth credentials not configured');
-    return res.status(500).json({ error: 'Fitbit OAuth not configured. Please check FITBIT_CLIENT_ID and FITBIT_CLIENT_SECRET environment variables.' });
-  }
-  
-  // Get googleId from query parameter (user must be logged in with Google first)
-  const { googleId } = req.query;
-  if (!googleId) {
-    return res.status(400).json({ error: 'Missing googleId. User must be logged in with Google first.' });
-  }
-  
-  // Required scopes for Fitbit
-  // Best practice: Only request scopes that are needed
-  // 'activity' - for steps and activity data
-  // 'weight' - for weight data
-  // 'profile' - for basic user profile information
-  const scopes = ['activity', 'weight', 'profile'];
-  const scopeString = scopes.join(' ');
-  
-  // Generate state parameter to include googleId for callback
-  const state = Buffer.from(JSON.stringify({ googleId })).toString('base64');
-  
-  // Fitbit OAuth 2.0 authorization URL
-  const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
-    `response_type=code&` +
-    `client_id=${FITBIT_CLIENT_ID}&` +
-    `redirect_uri=${encodeURIComponent(FITBIT_REDIRECT_URI)}&` +
-    `scope=${encodeURIComponent(scopeString)}&` +
-    `state=${encodeURIComponent(state)}`;
-  
-  console.log('🔐 Redirecting to Fitbit OAuth consent screen');
-  res.redirect(authUrl);
+  res.redirect(`${getFrontendUrl(req)}/data-source-settings?error=${encodeURIComponent('Fitbit is no longer available. Connect Google Health instead.')}`);
 });
 
 // 2. Handle Fitbit OAuth callback
@@ -494,7 +465,7 @@ router.post('/auth/google-health/disconnect', authenticateJWT, async (req, res) 
   user.googleHealthLastError = undefined;
   // Locked: stay on Google Health (disconnected) so no other source fills in.
   if (user.dataSource === 'google-health' && !locked) {
-    user.dataSource = 'google-fit';
+    user.dataSource = user.whoopRefreshToken ? 'whoop' : 'none';
     user.oauthType = undefined;
   }
   await user.save();
@@ -596,7 +567,7 @@ router.post('/auth/whoop/disconnect', authenticateJWT, async (req, res) => {
   user.whoopUserId = undefined;
   // Locked: stay on WHOOP (disconnected) so no other source fills in.
   if (user.dataSource === 'whoop' && !locked) {
-    user.dataSource = user.googleHealthRefreshToken ? 'google-health' : 'google-fit';
+    user.dataSource = user.googleHealthRefreshToken ? 'google-health' : 'none';
   }
   await user.save();
   res.json({ dataSource: user.dataSource });

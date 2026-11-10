@@ -91,7 +91,7 @@ const Settings = () => {
                 <div>
                   <h3 className="font-semibold text-gray-800">Data Source</h3>
                   <p className="text-sm text-gray-600">
-                    {user?.dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'}
+                    {({ fitbit: 'Fitbit', 'google-fit': 'Google Fit', 'google-health': 'Google Health', whoop: 'WHOOP', none: 'Not connected' })[user?.dataSource] || 'Google Fit'}
                   </p>
                 </div>
               </div>

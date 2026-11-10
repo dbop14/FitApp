@@ -99,7 +99,7 @@ test('locked users cannot switch source, except legacy sources moving to Google 
 
   assert.equal((await put('google-health')).status, 200, 'Google Fit may move to Google Health');
   assert.equal((await ChallengeParticipant.findOne({ userId: 'u1' })).lockedSource, 'google-health', 'lock moved');
-  assert.equal((await put('google-fit')).status, 409, 'and cannot move back');
+  assert.equal((await put('google-fit')).status, 400, 'and cannot move back: Google Fit is no longer selectable');
 });
 
 test('PUT /datasource only changes the signed-in user', async () => {
@@ -177,4 +177,58 @@ test('finalize pass locks days 48h+ after they end, and only for running v2 chal
   assert.equal(r.finalized, 1);
   assert.equal((await FitnessHistory.findOne({ userId: 'u1', date: daysFromToday(-3) })).finalized, true);
   assert.notEqual((await FitnessHistory.findOne({ userId: 'u1', date: daysFromToday(-2) })).finalized, true);
+});
+
+// --- Google Fit and Fitbit retired as choices ---------------------------------------
+
+test('Google Fit and Fitbit can no longer be chosen; Google Health and WHOOP can', async () => {
+  await User.create({ googleId: 'u1', name: 'A', dataSource: 'none', googleHealthRefreshToken: 'r', whoopRefreshToken: 'w', accessToken: 'gf' });
+  const put = (dataSource) => fetch(`${app.base}/api/user/datasource`, { method: 'PUT', headers: auth('u1'), body: JSON.stringify({ googleId: 'u1', dataSource }) });
+  const gf = await put('google-fit');
+  assert.equal(gf.status, 400);
+  assert.match((await gf.json()).error, /Google Fit is no longer available/);
+  assert.equal((await put('fitbit')).status, 400);
+  assert.equal((await put('whoop')).status, 200);
+});
+
+test('a user with no source may connect either new source once when locked', async () => {
+  await User.create({ googleId: 'u1', name: 'A', dataSource: 'none' });
+  await join(await challenge('v2'), 'u1');
+  assert.equal((await ChallengeParticipant.findOne({ userId: 'u1' })).lockedSource, 'none');
+  assert.equal((await sourceLock.checkSwitch('u1', 'whoop')).ok, true);
+  assert.equal((await sourceLock.checkSwitch('u1', 'google-health')).ok, true);
+  await sourceLock.moveLocks('u1', 'whoop');
+  assert.equal((await sourceLock.checkSwitch('u1', 'google-health')).ok, false, 'then locked to WHOOP');
+});
+
+test('no-source users: no browser steps, no Google Fit fallback, prompted to connect', async () => {
+  mockGoogle();
+  await User.create({ googleId: 'u1', name: 'A', dataSource: 'none', accessToken: 'stale' });
+  const post = await fetch(`${app.base}/api/user/userdata`, { method: 'POST', headers: auth('u1'), body: JSON.stringify({ googleId: 'u1', steps: 5000 }) });
+  assert.equal(post.status, 409);
+  const data = await (await fetch(`${app.base}/api/user/userdata?googleId=u1`, { headers: auth('u1') })).json();
+  assert.equal(data.dataSource, 'none');
+  assert.equal(data.needsReconnect, true);
+  assert.equal(googleCalls.length, 0, 'no Google Fit calls');
+  const ds = await (await fetch(`${app.base}/api/user/datasource?googleId=u1`, { headers: auth('u1') })).json();
+  assert.equal(ds.shouldSwitchSource, true);
+});
+
+test('existing Google Fit users keep browser-pushed steps and are told to switch', async () => {
+  await User.create({ googleId: 'u1', name: 'A', dataSource: 'google-fit' });
+  const ds = await (await fetch(`${app.base}/api/user/datasource?googleId=u1`, { headers: auth('u1') })).json();
+  assert.equal(ds.shouldSwitchSource, true);
+  assert.equal(ds.needsReconnect, false);
+  const post = await fetch(`${app.base}/api/user/userdata`, { method: 'POST', headers: auth('u1'), body: JSON.stringify({ googleId: 'u1', steps: 5000 }) });
+  assert.notEqual(post.status, 409);
+});
+
+test('sign-in asks only for name, email and picture; Fitbit connect is gone', async () => {
+  const signIn = await fetch(`${app.base}/api/auth/google`, { redirect: 'manual' });
+  assert.equal(signIn.status, 302);
+  const scope = new URL(signIn.headers.get('location')).searchParams.get('scope');
+  assert.deepEqual(scope.split(' ').sort(), ['email', 'openid', 'profile']);
+  const fitbit = await fetch(`${app.base}/api/auth/fitbit?googleId=u1`, { redirect: 'manual' });
+  assert.equal(fitbit.status, 302);
+  assert.match(fitbit.headers.get('location'), /data-source-settings\?error=Fitbit/);
 });

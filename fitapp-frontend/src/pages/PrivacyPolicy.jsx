@@ -42,19 +42,30 @@ const PrivacyPolicy = () => {
           </ul>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6 mb-3">2.2 Fitness Data</h3>
-          <p>With your explicit permission, we access and store the following fitness data from Google Fit:</p>
+          <p>Signing in to FitApp only shares your name, email address and profile picture. With your explicit permission, given separately in Data Source Settings, we read and store the following fitness data from the one data source you connect:</p>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Step Count:</strong> Daily step count data</li>
-            <li><strong>Weight:</strong> Body weight measurements (if available in your Google Fit account)</li>
-            <li><strong>Fitness History:</strong> Historical daily records of your steps and weight</li>
+            <li><strong>Step Count:</strong> Daily step counts</li>
+            <li><strong>Workouts:</strong> Workout type, start and end time, and time spent in heart-rate zones (or heart-rate readings during the workout), used to work out Effort Points</li>
+            <li><strong>Weight:</strong> Body weight measurements from Google Health (WHOOP weight is not used)</li>
+            <li><strong>Fitness History:</strong> Daily records of the above</li>
+          </ul>
+          <p className="mt-4">We never request or store sleep or recovery data.</p>
+          <p className="mt-4">Google Health is accessed with these read-only scopes:</p>
+          <ul className="list-disc pl-6 space-y-2 bg-gray-50 p-4 rounded">
+            <li><code className="bg-gray-200 px-2 py-1 rounded">https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly</code> - Steps and workouts</li>
+            <li><code className="bg-gray-200 px-2 py-1 rounded">https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly</code> - Weight and heart rate</li>
+          </ul>
+          <p className="mt-4">WHOOP is accessed with these scopes:</p>
+          <ul className="list-disc pl-6 space-y-2 bg-gray-50 p-4 rounded">
+            <li><code className="bg-gray-200 px-2 py-1 rounded">read:cycles</code> - Daily step counts</li>
+            <li><code className="bg-gray-200 px-2 py-1 rounded">read:workout</code> - Workouts and heart-rate zones</li>
+            <li><code className="bg-gray-200 px-2 py-1 rounded">read:body_measurement</code>, <code className="bg-gray-200 px-2 py-1 rounded">read:profile</code> - Account details</li>
+            <li><code className="bg-gray-200 px-2 py-1 rounded">offline</code> - Keeps the connection working without signing in again</li>
           </ul>
           <p className="mt-4">
-            This data is accessed through the Google Fit API using the following scopes:
+            Members who connected Google Fit before it was retired keep syncing steps and weight through the Google Fit scopes they already granted
+            (<code className="bg-gray-200 px-2 py-1 rounded">fitness.activity.read</code>, <code className="bg-gray-200 px-2 py-1 rounded">fitness.body.read</code>) until they switch to Google Health or WHOOP.
           </p>
-          <ul className="list-disc pl-6 space-y-2 bg-gray-50 p-4 rounded">
-            <li><code className="bg-gray-200 px-2 py-1 rounded">https://www.googleapis.com/auth/fitness.activity.read</code> - To read your activity data (steps)</li>
-            <li><code className="bg-gray-200 px-2 py-1 rounded">https://www.googleapis.com/auth/fitness.body.read</code> - To read your body measurements (weight)</li>
-          </ul>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6 mb-3">2.3 Authentication Tokens</h3>
           <p>To maintain your connection with Google Fit, we securely store:</p>

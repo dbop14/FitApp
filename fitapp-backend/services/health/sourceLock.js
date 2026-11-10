@@ -11,9 +11,11 @@ const Challenge = require('../../models/Challenge');
 const { getHealthSourceName } = require('./index');
 const { toYmd } = require('../scoring/recountV2');
 
-const UPGRADES = { fitbit: ['google-health'], 'google-fit': ['google-health'] };
+// Legacy sources may move once to Google Health. Someone with no source yet may
+// connect either new source once.
+const UPGRADES = { fitbit: ['google-health'], 'google-fit': ['google-health'], none: ['google-health', 'whoop'] };
 
-const LABELS = { 'google-health': 'Google Health', 'google-fit': 'Google Fit', fitbit: 'Fitbit', whoop: 'WHOOP' };
+const LABELS = { 'google-health': 'Google Health', 'google-fit': 'Google Fit', fitbit: 'Fitbit', whoop: 'WHOOP', none: 'no source' };
 const sourceLabel = (s) => LABELS[s] || s;
 
 // v2 challenges this user is locked into that have not ended (including ones not started yet).

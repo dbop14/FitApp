@@ -396,6 +396,12 @@ export const UserProvider = ({ children }) => {
   // Request Google Fit permissions when needed
   const requestGoogleFitPermissions = () => {
     return new Promise((resolve, reject) => {
+      // Google Fit is legacy: only users already on it may be asked for it.
+      const currentSource = user?.dataSource || JSON.parse(localStorage.getItem('fitapp_user') || '{}')?.dataSource
+      if (currentSource && currentSource !== 'google-fit') {
+        reject(new Error('Google Fit is not this user\'s data source'))
+        return
+      }
       // Check if user already has valid permissions
       if (hasValidGoogleFitPermissions()) {
         const token = localStorage.getItem('fitapp_access_token')

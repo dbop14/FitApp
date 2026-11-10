@@ -54,15 +54,23 @@ function isLegacySource(user) {
   return ['google-fit', 'fitbit'].includes(getHealthSourceName(user));
 }
 
-// Server-synced sources: steps never come from the browser for these users.
+// Server-synced sources (and 'none'): steps never come from the browser for these users.
 function isServerSource(user) {
-  return ['google-health', 'whoop'].includes(user?.dataSource);
+  return ['google-health', 'whoop', 'none'].includes(user?.dataSource);
+}
+
+// Sources a user may choose today. Google Fit and Fitbit are legacy only.
+const SELECTABLE_SOURCES = ['google-health', 'whoop'];
+
+// Still on a legacy source: should move to Google Health or WHOOP.
+function shouldSwitchSource(user) {
+  return ['google-fit', 'fitbit', 'none'].includes(getHealthSourceName(user));
 }
 
 // Legacy Fitbit endpoints were decommissioned on 2026-10-30 (HTTP 410).
 function needsReconnect(user) {
   const name = getHealthSourceName(user);
-  if (name === 'fitbit') return true;
+  if (name === 'fitbit' || name === 'none') return true;
   if (name === 'google-health' && (user.googleHealthLastError === 'invalid_grant' || !user.googleHealthRefreshToken)) return true;
   if (name === 'whoop' && (user.whoopLastError === 'invalid_grant' || !user.whoopRefreshToken)) return true;
   return false;
@@ -157,6 +165,8 @@ module.exports = {
   getHealthSourceName,
   isLegacySource,
   isServerSource,
+  shouldSwitchSource,
+  SELECTABLE_SOURCES,
   needsReconnect,
   syncHealthHistory,
   buildDailyRows,

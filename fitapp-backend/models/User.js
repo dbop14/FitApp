@@ -11,7 +11,10 @@ const UserSchema = new mongoose.Schema({
   accessToken: String,
   refreshToken: String,
   tokenExpiry: Number,
-  dataSource: { type: String, enum: ['google-fit', 'fitbit', 'google-health', 'whoop'], default: 'google-fit' },
+  // 'google-fit' and 'fitbit' are legacy: kept for existing users, no longer selectable.
+  // 'none' = signed up after Google Fit was retired and has not connected a source yet.
+  // The default stays 'google-fit' so older records without the field keep their meaning.
+  dataSource: { type: String, enum: ['google-fit', 'fitbit', 'google-health', 'whoop', 'none'], default: 'google-fit' },
   fitbitAccessToken: String,
   fitbitRefreshToken: String,
   fitbitTokenExpiry: Number,

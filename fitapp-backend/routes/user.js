@@ -24,7 +24,7 @@ router.post('/userdata', async (req, res) => {
   // Server-synced sources are the authority for steps; ignore browser-pushed Google Fit data.
   if (steps !== undefined) {
     const owner = await User.findOne({ googleId }).select('dataSource oauthType').lean();
-    if (owner && ['google-health', 'whoop'].includes(owner.dataSource)) {
+    if (owner && ['google-health', 'whoop', 'none', 'fitbit'].includes(owner.dataSource)) {
       return res.status(409).json({ error: `Steps for this user come from ${owner.dataSource}`, ignored: true });
     }
   }
@@ -979,8 +979,11 @@ router.put('/datasource', async (req, res) => {
     return res.status(403).json({ error: 'You can only change your own data source' });
   }
   
-  if (!dataSource || !['google-fit', 'fitbit', 'google-health', 'whoop'].includes(dataSource)) {
-    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-fit", "fitbit", "google-health" or "whoop"' });
+  if (['google-fit', 'fitbit'].includes(dataSource)) {
+    return res.status(400).json({ error: `${dataSource === 'fitbit' ? 'Fitbit' : 'Google Fit'} is no longer available. Connect Google Health or WHOOP.` });
+  }
+  if (!dataSource || !['google-health', 'whoop'].includes(dataSource)) {
+    return res.status(400).json({ error: 'Invalid dataSource. Must be "google-health" or "whoop"' });
   }
   
   try {
@@ -1089,6 +1092,7 @@ router.get('/datasource', async (req, res) => {
       sourceLocks: await require('../services/health/sourceLock').getActiveLocks(user.googleId),
       oauthType: user.oauthType || null,
       needsReconnect: health.needsReconnect(user),
+      shouldSwitchSource: health.shouldSwitchSource(user),
       maxHeartRate: user.maxHeartRate || null,
       defaultMaxHeartRate: require('../config/scoringV2').DEFAULT_MAX_HR
     });
